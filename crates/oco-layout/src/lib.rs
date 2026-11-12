@@ -17,7 +17,9 @@ mod paragraph;
 pub mod svg;
 pub mod text;
 
-use oco_docx::{Block, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section, SectionStart};
+use oco_docx::{
+    Block, BreakKind, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section, SectionStart,
+};
 use serde::Serialize;
 
 pub use fonts::{FontDb, FontId, Model};
@@ -108,12 +110,74 @@ pub struct PlacedLine {
     pub text: String,
 }
 
+/// A place in the document's content: a paragraph, by its index in
+/// [`oco_docx::Document::paragraphs`], and how many pieces of its
+/// [`content`] come before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+pub struct Position {
+    pub paragraph: usize,
+    pub offset: usize,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Page {
     pub width: f32,
     pub height: f32,
     pub items: Vec<Item>,
+    /// Lines that have text, for comparing positions against a reference.
     pub lines: Vec<PlacedLine>,
+    /// Where in the document the page begins. `None` when it begins with
+    /// something other than a paragraph of body text, such as a table row.
+    pub start: Option<Position>,
+}
+
+/// The result of laying a document out.
+#[derive(Debug, Clone, Default)]
+pub struct Layout {
+    pub pages: Vec<Page>,
+    /// Fonts the document asks for that are neither installed nor have a
+    /// designated replacement. Text in them was set in a fallback font, so
+    /// its line breaks are not to be trusted.
+    pub missing_fonts: Vec<String>,
+}
+
+/// One piece of a paragraph's content, as [`content`] reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Content {
+    /// A character of text, or a symbol.
+    Char(char),
+    Tab,
+    Break(BreakKind),
+    /// Word's record that a page began at this point when it last laid the
+    /// document out. It takes up no place of its own.
+    PageBreakHint,
+}
+
+/// Walks the content of a paragraph that takes part in layout, in order.
+/// Deleted and hidden text is left out, as it is from the pages.
+///
+/// Every piece but a [`Content::PageBreakHint`] is one unit of
+/// [`Position::offset`], so a caller that counts them can say where in the
+/// paragraph a line or a page of the layout begins.
+pub fn content(docx: &Docx, paragraph: &oco_docx::Paragraph, mut visit: impl FnMut(Content)) {
+    let resolver = docx.resolver();
+    for run in &paragraph.runs {
+        if run.revision.as_ref().is_some_and(|r| r.kind.removes_content()) {
+            continue;
+        }
+        if resolver.run(paragraph.props.style_id.as_deref(), &run.props).vanish == Some(true) {
+            continue;
+        }
+        for piece in &run.content {
+            match piece {
+                RunContent::Text(text) => text.chars().for_each(|ch| visit(Content::Char(ch))),
+                RunContent::Symbol { character, .. } => visit(Content::Char(*character)),
+                RunContent::Tab => visit(Content::Tab),
+                RunContent::Break(kind) => visit(Content::Break(*kind)),
+                RunContent::PageBreakHint => visit(Content::PageBreakHint),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -145,6 +209,8 @@ struct Unit {
     bottom_rule: Option<(f32, f32, Rgb, f32, f32)>,
     /// The section that ends after this unit.
     ends_section: Option<Section>,
+    /// Index of the paragraph this is, in document order; `None` for a table row.
+    paragraph: Option<usize>,
 }
 
 struct Builder<'a> {
@@ -153,6 +219,9 @@ struct Builder<'a> {
     resolver: Resolver<'a>,
     counters: Counters,
     options: Options,
+    /// Paragraphs laid out so far, which numbers them as `Document::paragraphs` does.
+    paragraphs: usize,
+    missing_fonts: Vec<String>,
 }
 
 fn context(docx: &Docx, section: &Section, width: f32, model: Model) -> paragraph::Context {
@@ -219,6 +288,13 @@ impl Builder<'_> {
             paragraph::Paragraph { props: &props, runs, mark: self.resolver.run(style, &source.mark_props), label };
         let ctx = context(self.docx, section, width, self.options.model);
         let laid = paragraph::layout(&input, self.fonts, &ctx);
+        for name in laid.missing_fonts {
+            if !self.missing_fonts.contains(&name) {
+                self.missing_fonts.push(name);
+            }
+        }
+        let index = self.paragraphs;
+        self.paragraphs += 1;
 
         let bottom_rule = props.borders.bottom.as_ref().filter(|b| b.is_visible()).map(|border| {
             let color = match border.color {
@@ -243,6 +319,7 @@ impl Builder<'_> {
             style: props.style_id.clone(),
             bottom_rule,
             ends_section: source.section_break.clone(),
+            paragraph: Some(index),
         }
     }
 
@@ -306,6 +383,7 @@ impl Builder<'_> {
                 style: None,
                 bottom_rule: None,
                 ends_section: None,
+                paragraph: None,
             });
         }
     }
@@ -320,7 +398,7 @@ impl Builder<'_> {
     }
 }
 
-pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Vec<Page> {
+pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     // Section properties sit on the last paragraph of each section, so the
     // page setup of a paragraph is that of the next section break at or
     // after it. Collect them in order first.
@@ -328,8 +406,15 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Vec<Page> {
         docx.document.paragraphs().iter().filter_map(|p| p.section_break.as_ref()).collect();
     setups.push(&docx.document.section);
 
-    let mut builder =
-        Builder { docx, fonts, resolver: docx.resolver(), counters: Counters::default(), options: *options };
+    let mut builder = Builder {
+        docx,
+        fonts,
+        resolver: docx.resolver(),
+        counters: Counters::default(),
+        options: *options,
+        paragraphs: 0,
+        missing_fonts: Vec::new(),
+    };
     let mut units = Vec::new();
     // Line breaks depend on the text width, which this prototype takes from
     // the first section throughout.
@@ -347,6 +432,8 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Vec<Page> {
     pages.push(new_page(setups[0]));
     let mut y = setups[0].margin_top as f32 * TWIP;
     let mut page_is_empty = true;
+    // How many of the pages have had their first line placed.
+    let mut started = 0;
     // Whether the current page began with an automatic break (space before
     // the first paragraph is then dropped) rather than at the document's start.
     let mut after_break = false;
@@ -440,7 +527,13 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Vec<Page> {
                 y = top;
                 after_break = true;
             }
+            let number_of_pages = pages.len();
             let page = pages.last_mut().expect("a page is always open");
+            // The first line to land on a page is where the page begins.
+            if started < number_of_pages {
+                started = number_of_pages;
+                page.start = unit.paragraph.map(|paragraph| Position { paragraph, offset: line.offset });
+            }
             for item in &line.items {
                 let mut item = item.clone();
                 item.translate(left + unit.left, y);
@@ -492,5 +585,5 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Vec<Page> {
             }
         }
     }
-    pages
+    Layout { pages, missing_fonts: builder.missing_fonts }
 }

@@ -16,27 +16,15 @@ LibreOffice wherever Word does, most visibly in the page counts.
     python3 tools/zh/compare.py [--png]
 """
 
-import difflib
 import json
-import re
-import statistics
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OCO = ROOT / "target/release/oco"
-SKIP = re.compile(r"\s")
 
-
-def lines_of(directory: Path):
-    pages = json.loads((directory / "lines.json").read_text())
-    return [(index, line) for index, page in enumerate(pages) for line in page["lines"]], len(pages)
-
-
-def render(docx: Path, out: Path, model: str) -> None:
-    subprocess.run([str(OCO), "render", str(docx), "--out", str(out), "--model", model],
-                   check=True, capture_output=True, cwd=ROOT)
+sys.path.insert(0, str(ROOT / "tools"))
+from common.layout_lines import compare, our_lines  # noqa: E402
 
 
 def main() -> None:
@@ -46,35 +34,20 @@ def main() -> None:
     totals = [0, 0]
     for docx in documents:
         name = docx.stem
-        reference_dir = ROOT / "out/ref" / name
-        if not (reference_dir / "lines.json").exists():
+        reference_file = ROOT / "out/ref" / name / "lines.json"
+        if not reference_file.exists():
             print(f"{name:28s} no reference; run tools/zh/reference.py")
             continue
-        render(docx, ROOT / "out/ours" / name, "word")
-        render(docx, ROOT / "out/ours-libreoffice" / name, "libreoffice")
-        reference, reference_pages = lines_of(reference_dir)
-        ours, our_pages = lines_of(ROOT / "out/ours-libreoffice" / name)
-        _, word_pages = lines_of(ROOT / "out/ours" / name)
-
-        # A closing mark hung in the margin is missing from the text of
-        # LibreOffice's PDF, so trailing marks are left out of the comparison.
-        # Dot leaders are text in the PDF and a drawn rule in ours.
-        key = lambda entry: re.sub(r"\.{4,}", "", SKIP.sub("", entry[1]["text"])).rstrip("，。、；：？！）”’》】")
-        a, b = [key(e) for e in ours], [key(e) for e in reference]
-        same, dx, dy = 0, [], []
-        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
-            if tag != "equal":
-                continue
-            for i, j in zip(range(i1, i2), range(j1, j2)):
-                same += 1
-                (page_a, line_a), (page_b, line_b) = ours[i], reference[j]
-                dx.append(abs(line_a["x0"] - line_b["x0"]))
-                if page_a == page_b:
-                    dy.append(abs(line_a["baseline"] - line_b["baseline"]))
-        totals[0] += same
-        totals[1] += len(b)
-        median = lambda values: f"{statistics.median(values):5.1f}" if values else "    -"
-        print(f"{name:28s} {reference_pages:5d} {our_pages:4d} {word_pages:5d}   {len(b):5d} {100 * same / len(b):9.1f}%   {median(dx)} {median(dy)}")
+        reference = json.loads(reference_file.read_text(encoding="utf-8"))
+        word_pages = len(our_lines(docx, ROOT / "out/ours" / name, "word"))
+        result = compare(our_lines(docx, ROOT / "out/ours-libreoffice" / name, "libreoffice"), reference)
+        totals[0] += result["same"]
+        totals[1] += result["lines"]
+        distance = lambda value: "    -" if value is None else f"{value:5.1f}"
+        print(
+            f"{name:28s} {result['pages'][0]:5d} {result['pages'][1]:4d} {word_pages:5d}   {result['lines']:5d} "
+            f"{100 * result['same'] / result['lines']:9.1f}%   {distance(result['dx'])} {distance(result['dy'])}"
+        )
     print(f"\nline breaks identical to LibreOffice's: {totals[0]} of {totals[1]} ({100 * totals[0] / totals[1]:.1f}%)")
 
     if "--png" in sys.argv:

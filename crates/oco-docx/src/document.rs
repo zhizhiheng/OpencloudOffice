@@ -64,6 +64,10 @@ pub enum RunContent {
         font: Option<String>,
         character: char,
     },
+    /// `w:lastRenderedPageBreak`: not content, but Word's record that a page
+    /// began at this point when it last laid the document out. It is ground
+    /// truth for pagination that comes with the file.
+    PageBreakHint,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -125,6 +129,7 @@ impl Run {
                 RunContent::Tab => "\t".to_owned(),
                 RunContent::Break(_) => "\n".to_owned(),
                 RunContent::Symbol { character, .. } => character.to_string(),
+                RunContent::PageBreakHint => String::new(),
             })
             .collect()
     }
@@ -178,7 +183,6 @@ fn is_ignorable(name: &str) -> bool {
             | "proofErr"
             | "permStart"
             | "permEnd"
-            | "lastRenderedPageBreak"
             | "moveFromRangeStart"
             | "moveFromRangeEnd"
             | "moveToRangeStart"
@@ -363,7 +367,10 @@ fn parse_paragraph(node: Node, coverage: &mut Coverage) -> Paragraph {
 /// Elements that belong inside a run. Word also honours them when they sit
 /// directly in a paragraph, as some generators write them.
 fn is_run_content(name: &str) -> bool {
-    matches!(name, "t" | "delText" | "tab" | "br" | "cr" | "sym" | "noBreakHyphen" | "softHyphen")
+    matches!(
+        name,
+        "t" | "delText" | "tab" | "br" | "cr" | "sym" | "noBreakHyphen" | "softHyphen" | "lastRenderedPageBreak"
+    )
 }
 
 fn parse_inlines(parent: Node, revision: Option<&Revision>, runs: &mut Vec<Run>, coverage: &mut Coverage) {
@@ -481,6 +488,7 @@ fn read_run_content(node: Node, name: &str, content: &mut Vec<RunContent>, cover
         "tab" => content.push(RunContent::Tab),
         "cr" => content.push(RunContent::Break(BreakKind::Line)),
         "br" => content.push(RunContent::Break(break_kind(node))),
+        "lastRenderedPageBreak" => content.push(RunContent::PageBreakHint),
         "noBreakHyphen" => push_text(content, "\u{2011}"),
         "softHyphen" => push_text(content, "\u{00AD}"),
         // A character addressed by code point in a named (usually symbol)

@@ -5,7 +5,7 @@ use std::io::{Cursor, Write};
 
 use oco_docx::{
     Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, RevisionKind, RunContent, RunProps,
-    Underline, VertAlign,
+    Statistics, Underline, VertAlign,
 };
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -232,6 +232,69 @@ fn reads_run_content_and_whitespace() {
             RunContent::Text("\u{2011}".into()),
         ]
     );
+}
+
+#[test]
+fn keeps_words_record_of_where_pages_began() {
+    let body = r#"
+        <w:p>
+          <w:r><w:t>one</w:t></w:r>
+          <w:r><w:lastRenderedPageBreak/><w:t>two</w:t></w:r>
+        </w:p>"#;
+    let docx = docx(body, "");
+    let paragraph = docx.document.paragraphs()[0];
+    assert_eq!(paragraph.runs[1].content, [RunContent::PageBreakHint, RunContent::Text("two".into())]);
+    // It marks a place and is not content.
+    assert_eq!(paragraph.text(), "onetwo");
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
+fn reads_the_statistics_the_saving_application_recorded() {
+    let package = |app: Option<&str>| {
+        let mut parts = vec![
+            (
+                "_rels/.rels",
+                format!(
+                    r#"<Relationships xmlns="{PKG_RELS}"><Relationship Id="rId1" Type="{DOC_RELS}/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="{DOC_RELS}/extended-properties" Target="docProps/app.xml"/></Relationships>"#
+                ),
+            ),
+            ("word/document.xml", format!("<w:document {W}><w:body><w:p/></w:body></w:document>")),
+        ];
+        if let Some(app) = app {
+            parts.push((
+                "docProps/app.xml",
+                format!(
+                    r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">{app}</Properties>"#
+                ),
+            ));
+        }
+        Docx::from_bytes(&zip(&parts)).unwrap()
+    };
+
+    let word = package(Some(
+        "<Application>Microsoft Office Word</Application><Pages>3</Pages><Words>410</Words>\
+         <Characters>2337</Characters><Lines>19</Lines><Paragraphs>5</Paragraphs>\
+         <CharactersWithSpaces>2742</CharactersWithSpaces><AppVersion>16.0000</AppVersion>",
+    ));
+    assert!(word.recorded.from_word());
+    assert_eq!(word.recorded.pages, Some(3));
+    assert_eq!(word.recorded.words, Some(410));
+    assert_eq!(word.recorded.characters, Some(2337));
+    assert_eq!(word.recorded.characters_with_spaces, Some(2742));
+    assert_eq!(word.recorded.lines, Some(19));
+    assert_eq!(word.recorded.paragraphs, Some(5));
+
+    // Other applications write the same part; their figures are not Word's.
+    let other = package(Some("<Application>LibreOffice/24.2</Application><Pages>3</Pages>"));
+    assert_eq!(other.recorded.pages, Some(3));
+    assert!(!other.recorded.from_word());
+
+    // The part is optional, and a damaged one costs nothing but the figures.
+    for docx in [package(None), package(Some("<Pages>3"))] {
+        assert_eq!(docx.recorded, Statistics::default());
+        assert!(docx.warnings.is_empty(), "{:?}", docx.warnings);
+    }
 }
 
 #[test]

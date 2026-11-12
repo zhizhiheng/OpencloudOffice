@@ -68,7 +68,7 @@ pub fn run(arguments: &Arguments) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let pages = oco_layout::layout(&docx, &fonts, &Options { model: arguments.model });
+    let pages = oco_layout::layout(&docx, &fonts, &Options { model: arguments.model }).pages;
     if let Err(error) = write(&arguments.out, &pages, &fonts) {
         eprintln!("oco: {}: {error}", arguments.out.display());
         return ExitCode::FAILURE;

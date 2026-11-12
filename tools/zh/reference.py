@@ -23,47 +23,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pdfplumber
-
 ROOT = Path(__file__).resolve().parent.parent.parent
 OUT = ROOT / "out/ref"
 
-
-def text_lines(pdf_path):
-    """Groups characters into lines by baseline."""
-    pages = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            rows = {}
-            for ch in page.chars:
-                # pdfplumber's `bottom` of a character box is not its baseline;
-                # the text matrix origin is. Round to merge sub-point jitter.
-                baseline = round(float(page.height) - ch["matrix"][5], 1)
-                rows.setdefault(baseline, []).append(ch)
-            # Superscripts, subscripts and raised text have baselines of their
-            # own. Fold each such fragment into the line it sits beside: the
-            # nearest row within half its height that holds more characters.
-            height = {b: max(c["size"] for c in chars) for b, chars in rows.items()}
-            for baseline in sorted(rows, key=lambda b: len(rows[b])):
-                near = [b for b in rows if b != baseline and abs(b - baseline) < 0.6 * height[b] and len(rows[b]) > len(rows[baseline])]
-                if near:
-                    host = min(near, key=lambda b: abs(b - baseline))
-                    rows[host].extend(rows.pop(baseline))
-            lines = []
-            for baseline in sorted(rows):
-                chars = sorted(rows[baseline], key=lambda c: c["x0"])
-                text = "".join(c["text"] for c in chars)
-                if not text.strip():
-                    continue
-                lines.append({
-                    "baseline": baseline,
-                    "x0": round(chars[0]["x0"], 2),
-                    "x1": round(chars[-1]["x1"], 2),
-                    "size": round(max(c["size"] for c in chars), 2),
-                    "text": text,
-                })
-            pages.append({"width": float(page.width), "height": float(page.height), "lines": lines})
-    return pages
+sys.path.insert(0, str(ROOT / "tools"))
+from common.layout_lines import pdf_lines  # noqa: E402
 
 
 def render(docx: Path) -> None:
@@ -80,7 +44,7 @@ def render(docx: Path) -> None:
     pdf = target / "document.pdf"
     (target / f"{docx.stem}.pdf").rename(pdf)
     subprocess.run(["pdftoppm", "-png", "-r", "110", str(pdf), str(target / "page")], check=True)
-    pages = text_lines(pdf)
+    pages = pdf_lines(pdf)
     (target / "lines.json").write_text(json.dumps(pages, ensure_ascii=False, indent=1))
     print(f"{docx.name}: {len(pages)} pages, {sum(len(p['lines']) for p in pages)} lines")
 

@@ -17,6 +17,7 @@ pub mod opc;
 mod props;
 mod resolve;
 mod section;
+mod statistics;
 mod styles;
 mod theme;
 mod values;
@@ -35,6 +36,7 @@ pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering
 pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
 pub use resolve::Resolver;
 pub use section::{DocGrid, GridKind, Section, SectionStart};
+pub use statistics::Statistics;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use theme::{Settings, ThemeFontLang, ThemeFonts};
 pub use values::{Color, Emphasis, Highlight, Underline, VertAlign};
@@ -49,6 +51,9 @@ pub struct Docx {
     pub theme: Option<ThemeFonts>,
     pub numbering: Numbering,
     pub settings: Settings,
+    /// Page, line and character counts recorded by the application that
+    /// last saved the document.
+    pub recorded: Statistics,
     /// Markup that was encountered but is not modelled yet.
     pub coverage: Coverage,
     /// Problems that did not prevent opening, such as an unreadable styles
@@ -80,12 +85,12 @@ impl Docx {
 
         // The main part is found through the package relationships; its name
         // is conventional, not fixed. Tolerate packages that omit them.
-        let main = package
-            .relationships(None)?
-            .into_iter()
+        let package_relationships = package.relationships(None)?;
+        let main = package_relationships
+            .iter()
             // Word takes the last one when a package wrongly has several.
             .rfind(|r| !r.external && r.rel_type.ends_with("/officeDocument"))
-            .map(|r| r.target)
+            .map(|r| r.target.clone())
             .or_else(|| package.has_part("word/document.xml").then(|| "word/document.xml".to_owned()));
         let Some(main) = main else {
             let is_odf = package.has_part("mimetype") && package.has_part("content.xml");
@@ -157,7 +162,16 @@ impl Docx {
             })
             .unwrap_or_default();
 
-        Ok(Docx { document, styles, theme, numbering, settings, coverage, warnings })
+        // Statistics are a convenience; a missing or damaged part is no cause for a warning.
+        let recorded = package_relationships
+            .iter()
+            .find(|r| !r.external && r.rel_type.ends_with("/extended-properties"))
+            .map_or("docProps/app.xml", |r| r.target.as_str())
+            .to_owned();
+        let recorded =
+            package.read_xml(&recorded).ok().flatten().and_then(|xml| Statistics::parse(&xml).ok()).unwrap_or_default();
+
+        Ok(Docx { document, styles, theme, numbering, settings, recorded, coverage, warnings })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {

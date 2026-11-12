@@ -12,7 +12,7 @@ differently from Word. This is real Word behaviour as ground truth, obtained
 without running Word.
 
     cargo build --release
-    python3 tools/corpus/word_pairs.py corpus [--verbose]
+    python3 tools/corpus/word_pairs.py corpus [--verbose] [--json pairs.json]
 """
 
 import argparse
@@ -71,6 +71,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("roots", nargs="+")
     parser.add_argument("--verbose", action="store_true", help="list every differing paragraph")
+    parser.add_argument("--json", metavar="FILE", help="also write the outcome of each pair, by the probe's path")
     args = parser.parse_args()
     if not OCO.exists():
         sys.exit(f"{OCO} not found; run `cargo build --release` first")
@@ -82,6 +83,7 @@ def main():
             if probe.exists():
                 pairs.append((probe, saved))
 
+    outcomes = {}
     outcome = Counter()
     by_group = defaultdict(Counter)
     by_property = Counter()
@@ -109,6 +111,7 @@ def main():
                         details.append(f"{probe}\n    paragraph {i + 1} {a_text[i][:50]!r}: {name} ours {x!r}, Word {y!r}")
                 by_property.update(found.keys())
                 kind = "formatting differs" if found else "agrees"
+        outcomes[probe.as_posix()] = kind
         outcome[kind] += 1
         by_group[group][kind] += 1
 
@@ -124,6 +127,8 @@ def main():
             print(f"  {count:4d}  {name}")
     if args.verbose:
         print("\n" + "\n".join(details))
+    if args.json:
+        Path(args.json).write_text(json.dumps({"pairs": outcomes}, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":

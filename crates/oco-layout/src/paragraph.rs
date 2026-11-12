@@ -66,6 +66,8 @@ pub struct Line {
     pub x1: f32,
     /// The line ends with an explicit page break.
     pub page_break_after: bool,
+    /// How many pieces of the paragraph's [`crate::content`] come before this line.
+    pub offset: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -73,6 +75,9 @@ pub struct Laid {
     pub lines: Vec<Line>,
     pub space_before: f32,
     pub space_after: f32,
+    /// Fonts the paragraph asks for that are neither installed nor have a
+    /// designated replacement.
+    pub missing_fonts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +168,7 @@ struct Builder<'a> {
     atoms: Vec<Atom>,
     /// The last letter seen was Chinese rather than Western.
     after_cjk: bool,
+    missing_fonts: Vec<String>,
 }
 
 impl Builder<'_> {
@@ -237,6 +243,11 @@ impl Builder<'_> {
             // Chinese text the system's default, which is 宋体.
             let wanted = wanted.or(Some(if slot == Slot::EastAsia { "宋体" } else { "Times New Roman" }));
             let Some(choice) = builder.fonts.choose(wanted, bold, italic, probe, builder.context.model) else { return };
+            if !choice.known_family {
+                if let Some(name) = wanted.filter(|name| !builder.missing_fonts.iter().any(|known| known == name)) {
+                    builder.missing_fonts.push(name.to_owned());
+                }
+            }
             let font = builder.fonts.get(choice.font);
             let size = base * factor * if small { 0.8 } else { 1.0 };
             let glyph = font.glyph(probe).unwrap_or(0);
@@ -274,6 +285,7 @@ impl Builder<'_> {
                 RunContent::Break(BreakKind::Line) => push(self, '\n', Kind::LineBreak, None),
                 RunContent::Break(_) => push(self, '\n', Kind::PageBreak, None),
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
+                RunContent::PageBreakHint => {}
             }
         }
     }
@@ -362,7 +374,8 @@ fn next_stop(x: f32, stops: &[TabStop], hanging_at: Option<f32>, default: f32) -
 
 pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
     let props = paragraph.props;
-    let mut builder = Builder { fonts, context, styles: Vec::new(), atoms: Vec::new(), after_cjk: false };
+    let mut builder =
+        Builder { fonts, context, styles: Vec::new(), atoms: Vec::new(), after_cjk: false, missing_fonts: Vec::new() };
 
     if let Some(label) = &paragraph.label {
         let mut text = label.text.clone();
@@ -382,7 +395,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     }
     let auto_space = props.auto_space_de != Some(false);
     builder.adjust_neighbours(auto_space);
-    let Builder { styles, mut atoms, .. } = builder;
+    let Builder { styles, mut atoms, missing_fonts, .. } = builder;
 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
@@ -676,6 +689,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         };
 
         let mut line = Line { height, baseline, needed, page_break_after: br.page_break, ..Line::default() };
+        line.offset = atoms[..br.start].iter().filter(|a| !a.label).count();
         let mut x = origin + offset;
         // A right-aligned or centred label is set against the line's origin.
         if number == 0 {
@@ -887,6 +901,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         _ => twips.unwrap_or(0) as f32 * TWIP,
     };
     Laid {
+        missing_fonts,
         lines,
         space_before: space(props.spacing.before_lines, props.spacing.before, props.spacing.before_auto),
         space_after: space(props.spacing.after_lines, props.spacing.after, props.spacing.after_auto),

@@ -10,7 +10,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 
 use oco_docx::Docx;
-use oco_layout::{layout, FontDb, Model, Options, Page};
+use oco_layout::{content, layout, Content, FontDb, Model, Options, Page, Position};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -100,7 +100,7 @@ fn fonts(needed: &[(&str, char)]) -> Option<FontDb> {
 }
 
 fn pages(source: &Source, fonts: &FontDb, model: Model) -> Vec<Page> {
-    layout(&docx(source), fonts, &Options { model })
+    layout(&docx(source), fonts, &Options { model }).pages
 }
 
 /// Baseline-to-baseline distances between consecutive lines of the first page.
@@ -351,4 +351,107 @@ fn headings_stay_with_the_paragraph_they_introduce() {
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].lines.len(), 50);
     assert_eq!(pages[1].lines[0].text, "Heading");
+}
+
+#[test]
+fn pages_say_where_in_the_content_they_begin() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let serif = font("Liberation Serif", 24);
+    // Hidden and deleted text takes no part in layout, so it is not counted;
+    // a tab and a break each count as one, like a character.
+    let body = format!(
+        r#"<w:p><w:r><w:rPr>{serif}</w:rPr><w:t>first</w:t></w:r></w:p>
+           <w:p>
+             <w:r><w:rPr>{serif}<w:vanish/></w:rPr><w:t>hidden</w:t></w:r>
+             <w:del w:id="1" w:author="a"><w:r><w:delText>gone</w:delText></w:r></w:del>
+             <w:r><w:rPr>{serif}</w:rPr><w:t>ab</w:t><w:tab/><w:t>c</w:t><w:br w:type="page"/>
+               <w:lastRenderedPageBreak/><w:t>second page</w:t></w:r>
+           </w:p>"#
+    );
+    let source = Source { body: &body, ..Source::default() };
+    let docx = docx(&source);
+    let result = layout(&docx, &fonts, &Options { model: Model::Word });
+    let starts: Vec<_> = result.pages.iter().map(|page| page.start).collect();
+    assert_eq!(
+        starts,
+        [Some(Position { paragraph: 0, offset: 0 }), Some(Position { paragraph: 1, offset: 5 })],
+        "the second page begins after `ab`, the tab, `c` and the break"
+    );
+
+    // The same count, made from the document, finds Word's own record of
+    // that page start at the same place.
+    let mut pieces = Vec::new();
+    content(&docx, docx.document.paragraphs()[1], |piece| pieces.push(piece));
+    assert_eq!(pieces.iter().position(|piece| *piece == Content::PageBreakHint), Some(5));
+    assert_eq!(
+        pieces[..5],
+        [
+            Content::Char('a'),
+            Content::Char('b'),
+            Content::Tab,
+            Content::Char('c'),
+            Content::Break(oco_docx::BreakKind::Page)
+        ]
+    );
+}
+
+#[test]
+fn a_page_that_begins_mid_paragraph_begins_at_a_line_start() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Enough text to run well past one page, in one paragraph without
+    // widow control so it may split anywhere.
+    let text = LOREM.repeat(40);
+    let body = paragraph(&font("Liberation Serif", 24), r#"<w:widowControl w:val="0"/>"#, &text);
+    let result = layout(&docx(&Source { body: &body, ..Source::default() }), &fonts, &Options { model: Model::Word });
+    assert!(result.pages.len() >= 2);
+    let start = result.pages[1].start.expect("the page begins with body text");
+    assert_eq!(start.paragraph, 0);
+    // The text on the second page is the paragraph's text from that offset on.
+    let rest: String = text.chars().skip(start.offset).collect();
+    let first_line = &result.pages[1].lines[0].text;
+    assert!(start.offset > 0 && rest.starts_with(first_line.trim_end()), "{first_line:?} at {}", start.offset);
+}
+
+#[test]
+fn a_list_label_is_not_part_of_the_content_a_page_start_counts() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let numbering = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/>
+        <w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>
+        <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#;
+    let body = format!(
+        r#"<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>
+           <w:r><w:rPr>{}</w:rPr><w:t>ab</w:t><w:br w:type="page"/><w:t>cd</w:t></w:r></w:p>"#,
+        font("Liberation Serif", 24)
+    );
+    let pages = pages(&Source { body: &body, numbering, ..Source::default() }, &fonts, Model::Word);
+    assert!(pages[0].lines[0].text.starts_with("1."), "{}", pages[0].lines[0].text);
+    assert_eq!(pages[1].start, Some(Position { paragraph: 0, offset: 3 }));
+}
+
+#[test]
+fn fonts_that_are_neither_installed_nor_replaced_are_reported() {
+    let Some(fonts) = fonts(&[("Liberation Sans", 'a')]) else { return };
+    let body = [
+        paragraph(&font("Liberation Sans", 24), "", "installed"),
+        // Arial has a designated replacement with the same widths.
+        paragraph(&font("Arial", 24), "", "replaced"),
+        paragraph(&font("No Such Font", 24), "", "missing"),
+    ]
+    .concat();
+    let result = layout(&docx(&Source { body: &body, ..Source::default() }), &fonts, &Options { model: Model::Word });
+    assert_eq!(result.missing_fonts, ["No Such Font"]);
+}
+
+#[test]
+fn a_face_name_is_read_as_a_family_and_a_style() {
+    let Some(fonts) = fonts(&[("Liberation Sans", 'a')]) else { return };
+    // Some documents ask for "Arial Bold" rather than Arial in bold.
+    for name in ["Liberation Sans Bold", "Arial Bold"] {
+        let choice = fonts.choose(Some(name), false, false, 'a', Model::Word).unwrap();
+        let font = fonts.get(choice.font);
+        assert_eq!(font.family(), "liberation sans", "{name}");
+        assert!(font.bold && !font.italic && choice.known_family, "{name}");
+    }
+    let choice = fonts.choose(Some("Arial Bold Italic"), false, false, 'a', Model::Word).unwrap();
+    assert!(fonts.get(choice.font).bold && fonts.get(choice.font).italic);
 }

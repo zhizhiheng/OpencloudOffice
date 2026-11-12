@@ -205,7 +205,7 @@ fn examine(path: &Path, fonts: Option<&FontDb>) -> FileReport {
 fn open_and_resolve(path: &Path, fonts: Option<&FontDb>) -> Result<Outcome, Error> {
     let docx = Docx::open(path)?;
     let laying_out = Instant::now();
-    let pages = fonts.map(|fonts| oco_layout::layout(&docx, fonts, &oco_layout::Options::default()).len());
+    let pages = fonts.map(|fonts| oco_layout::layout(&docx, fonts, &oco_layout::Options::default()).pages.len());
     let layout_micros = if pages.is_some() { laying_out.elapsed().as_micros() as u64 } else { 0 };
     let resolving = Instant::now();
     let resolver = docx.resolver();

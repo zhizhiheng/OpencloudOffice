@@ -1,0 +1,2965 @@
+{
+ "documents": {
+  "layout": {
+   "docx4j/docs/developer/Locale-Styles.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "docx4j/docs/developer/PDF list items.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-8-p-page-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-5-body-br-page-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/address-probe-r1-attached-merged.docx": {
+    "pages": [
+     8,
+     7
+    ],
+    "starts": [
+     6,
+     3
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/header-no-rels.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/headers_footers/different_first_page.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/headers_footers/odd_even.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/headers_footers/odd_even_different_first_page.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/headers_footers/sections_multiple.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-15-body-section-break-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-53-ppr-section-twice-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/core-ts/check18/accept-all.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/core-ts/check18/reject-all.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/editor/review/measure-word15.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/editor/review/measure-word2010.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-onoff-styles-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/underline-styles-word365.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "docx4j/docx4j-core-tests/src/test/resources/strict/strict-chart.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "docx4j/docx4j-samples-docx-diffx/sample-docs/test.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-samples-docx-diffx/sample-docs/test2.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "docx4j/docx4j-samples-docx-export-fo/sample-docs/word/Word2007-fonts.docx": {
+    "pages": [
+     6,
+     6
+    ],
+    "starts": [
+     5,
+     0
+    ]
+   },
+   "docx4j/docx4j-samples-docx4j/sample-docs/ArialUnicodeMS.docx": {
+    "pages": [
+     3,
+     6
+    ],
+    "starts": [
+     5,
+     2
+    ]
+   },
+   "docx4j/docx4j-samples-docx4j/sample-docs/Word2007-fonts.docx": {
+    "pages": [
+     6,
+     6
+    ],
+    "starts": [
+     5,
+     0
+    ]
+   },
+   "docx4j/docx4j-samples-docx4j/sample-docs/databinding/WordAddIn_walkthrough.docx": {
+    "pages": [
+     11,
+     6
+    ],
+    "starts": [
+     10,
+     1
+    ]
+   },
+   "docx4j/docx4j-samples-docx4j/sample-docs/strict/strict-chart.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/PieChartDataLabels.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/TableOnPage3.docx": {
+    "pages": [
+     5,
+     5
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/data-label-borders.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/testMultipleChart.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/testMultiplechartembeddings.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/chart2/qa/extras/data/docx/testchartoleobjectembeddings.docx": {
+    "pages": [
+     81,
+     91
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/data/ooxml/pass/fdo79129.docx": {
+    "pages": [
+     7,
+     6
+    ],
+    "starts": [
+     6,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/data/ooxml/pass/fdo80514.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/data/ooxml/pass/fdo80580.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/data/ooxml/pass/fdo81380.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/data/ooxml/pass/tdf161139_orrick-org-min3.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/doc/data/copy-bookmarks.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/doc/data/floating-table-dummy-text.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/doc/data/header-footer-delete.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/fdo64238_a.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     3,
+     3
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/fdo64238_b.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     3,
+     3
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/fdo65655.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/fdo66145.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/tdf127778.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/tdf166205_first_page_header_footer_visible.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/header_footer/data/tdf57155.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/endnote-cont-separator.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-2cols.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-3pages.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-footer-2rows.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-in-text-section.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-model-position-for-view-point-correction.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-multi-col.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-object-formatter.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-rowsplit.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-tab-join-legacy.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-table-row-keep.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-then-table.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-vertoffset.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable-wrap-on-all-pages.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/floattable.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/ignore-top-margin-page-style-change.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/ignore-top-margin-table.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/layout/data/inline-endnote-section-delete.docx": {
+    "pages": [
+     4,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/objectpositioning/data/do-not-capture-draw-objs-on-page-draw-wrap-none.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/text/data/content-control-header.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/core/text/data/floattable-anchor-height.docx": {
+    "pages": [
+     4,
+     1
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/core/unocore/data/tdf108272-1-minimal.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/shape-anchored-in-follow.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/tdf122878.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/tdf128959.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/tdf134277.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/tdf152983-1-min.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/layout/data/tdf170846_1.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/StyleRef-DE.docx": {
+    "pages": [
+     5,
+     5
+    ],
+    "starts": [
+     4,
+     4
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/TCTagMisMatch.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/columnbreak.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo44689_start_page_0.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo44689_start_page_7.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo68418.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo73541.docx": {
+    "pages": [
+     5,
+     5
+    ],
+    "starts": [
+     4,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo74153.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo74566.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo77812.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo77890.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo78420.docx": {
+    "pages": [
+     23,
+     23
+    ],
+    "starts": [
+     19,
+     14
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo78651.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo78882.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo78907.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo79668.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo81946.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/fdo83048.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/firstheadernofooter.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/footer-body-distance.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/multi-column-separator-with-line.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/n652364.docx": {
+    "pages": [
+     1,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/n750255.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/n778828.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/plausable-border.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/rhbz988516.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/sdt-ignored-footer.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/section_break_after_table.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/special_styles.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf104394_lostTextbox.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf104420_lostParagraph.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf112118.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf118701.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     3,
+     3
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf119054.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf119952_negativeMargins.docx": {
+    "pages": [
+     6,
+     7
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf120511_eatenSection.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf121659_loseColumnBrNextToShape.docx": {
+    "pages": [
+     1,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf121663.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf121666_lostPage.docx": {
+    "pages": [
+     3,
+     4
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf123054.docx": {
+    "pages": [
+     7,
+     7
+    ],
+    "starts": [
+     4,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf123636_newlinePageBreak2.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf125657.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf127339.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf128156.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf129888dml.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf130120.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf130814.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf135906.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf138027_pageBreakAfterShape.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf140182_extraPagebreak.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf141550.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf145716_nonHTMLspacing.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf148057_columnBreak.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf152636_lostPageBreak2.docx": {
+    "pages": [
+     2,
+     4
+    ],
+    "starts": [
+     3,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_anchoredAfterPgBreak.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_anchoredAfterPgBreak2.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_anchoredAfterPgBreak3.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_anchoredAfterPgBreak6.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_inlineAfterPgBreak.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_inlineAfterPgBreak2.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf153613_textboxAfterPgBreak3.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf154703_framePrWrapSpacing.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf155707.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf156484.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf158349_SDTstreamStateStack.docx": {
+    "pages": [
+     3,
+     6
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf160518_allowHyphenationAtTrackBottom.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf160518_useWord2013TrackBottomHyphenation.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf160827.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf162541_notLayoutInCell_paraLeft.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf163178_columnbreakInTable.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf165047_consolidatedTopMargin.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf165047_contextualSpacingTopMargin.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf166510_sectPr_bottomSpacing.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf166553_paraStyleAfterBreak.docx": {
+    "pages": [
+     1,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf167527_title_letters_cut_from_below.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf167657_sectPr_bottomSpacing.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf170119_bottomSpacing.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf78902.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf89377_tableWithBreakBeforeParaStyle.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf90789.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf90810short.docx": {
+    "pages": [
+     5,
+     4
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/tdf94043.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     6,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/testCrashWhileSave.docx": {
+    "pages": [
+     3,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/testPgMargin.docx": {
+    "pages": [
+     1,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/test_line_spacing.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/unbalanced-columns.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/unwanted-section-break.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlexport/data/watermark-shapetype.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/fdo87488.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/n751077.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf114217.docx": {
+    "pages": [
+     2,
+     3
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf121664.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf134902.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf48658_transparentOLEheader.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf75573_lostTable.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/tdf75573_page1frame.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ooxmlimport/data/unbalanced-columns-compat.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/uiwriter/data/AsCharTxBxTest.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/uiwriter/data/floattable-nosection-7in.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/uiwriter/data/tdf112342.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/extras/uiwriter/data/tdf120336.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/uiwriter/data/tdf156560.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/extras/ww8export/data/tdf121111_fillStyleNone.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/uitest/data/TestHiddenHeadersFooters.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "libreoffice/sw/qa/uitest/data/tdf142785.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/NoFirstPageHeadFooter.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-break-before.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-header-overlap.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-header.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-nested.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-wrap-on-all-pages.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D Column-O12-Word-Charts.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/paperSrc-Paper Source Information.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/pgNumType-Page Numbering Settings-fmt-thaiNumbers.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/sectPr-Previous Section Properties-rsidSelect-004B4C75.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment049.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/header.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/lastRenderedPageBreak+run.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/TextRun/lastRenderedPageBreak.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-complex.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     3,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-simple1.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/columns/columns1.docx": {
+    "pages": [
+     19,
+     20
+    ],
+    "starts": [
+     27,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/columns/columns2.docx": {
+    "pages": [
+     18,
+     50
+    ],
+    "starts": [
+     51,
+     2
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complexity - part 1.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complexity - part 2.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complexity.docx": {
+    "pages": [
+     10,
+     10
+    ],
+    "starts": [
+     9,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header even.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/mixed features/MSDN - EULA.docx": {
+    "pages": [
+     14,
+     15
+    ],
+    "starts": [
+     12,
+     4
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/mixed languages/Unit1Translation.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/A4.docx": {
+    "pages": [
+     1,
+     6
+    ],
+    "starts": [
+     5,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/Indent_Spacing.docx": {
+    "pages": [
+     1,
+     2
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/landScape.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/pageBorders.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout with break in the end/Columns-Right.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout with break in the end/PageColor-lightgreen.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/text direction/text direction-2.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/text direction/textdirection-1.docx": {
+    "pages": [
+     3,
+     1
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/paragraph/Paragraph.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/paragraph/paragraph-line space.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/paragraph/sectionBreak.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/run/lastRenderedPageBreak.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/section break/paraWithSect.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/section break/sectionBreak.docx": {
+    "pages": [
+     1,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/smart art/SmartArt1.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/1.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/2.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/style.docx": {
+    "pages": [
+     5,
+     4
+    ],
+    "starts": [
+     4,
+     0
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/style2.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/style3.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Notes.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   },
+   "poi/test-data/document/60293.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/DiffFirstPageHeadFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/FancyFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/Headers.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "poi/test-data/document/NoHeadFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/PageSpecificHeadFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/SampleDoc.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/SimpleHeadThreeColFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/ThreeColFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/document/ThreeColHead.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     0,
+     0
+    ]
+   },
+   "poi/test-data/document/ThreeColHeadFoot.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "poi/test-data/integration/stress008.docx": {
+    "pages": [
+     1,
+     115
+    ],
+    "starts": [
+     117,
+     4
+    ]
+   },
+   "poi/test-data/integration/stress016.docx": {
+    "pages": [
+     5,
+     5
+    ],
+    "starts": [
+     2,
+     0
+    ]
+   },
+   "poi/test-data/integration/stress018.docx": {
+    "pages": [
+     37,
+     36
+    ],
+    "starts": [
+     27,
+     6
+    ]
+   },
+   "python-docx/features/steps/test_files/doc-add-section.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     2
+    ]
+   },
+   "python-docx/features/steps/test_files/doc-odd-even-hdrs.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "python-docx/features/steps/test_files/hdr-header-footer.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "python-docx/features/steps/test_files/sct-inner-content.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     1
+    ]
+   },
+   "python-docx/tests/test_files/sct-inner-content.docx": {
+    "pages": [
+     3,
+     3
+    ],
+    "starts": [
+     2,
+     1
+    ]
+   },
+   "tika/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_endnote_table.docx": {
+    "pages": [
+     21,
+     21
+    ],
+    "starts": [
+     20,
+     20
+    ]
+   },
+   "tika/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_formattingFlipUnderlineOrder.docx": {
+    "pages": [
+     4,
+     4
+    ],
+    "starts": [
+     3,
+     3
+    ]
+   },
+   "tika/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testWORD_override_list_numbering.docx": {
+    "pages": [
+     2,
+     2
+    ],
+    "starts": [
+     1,
+     1
+    ]
+   },
+   "tika/tika-server/tika-server-standard/src/test/resources/test-documents/2pic.docx": {
+    "pages": [
+     2,
+     1
+    ],
+    "starts": [
+     1,
+     0
+    ]
+   }
+  },
+  "lines": {},
+  "reading": {
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-1-p-alone.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-2-p-between-runs.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-3-t-mixed.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-4-t-nested.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-5-hyperlink.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-6-cell.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-7-footer.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-8-p-page.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-1-run-properties.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-2-instrtext-field.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-3-instrtext-bare-header.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-4-body-br.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-5-body-br-page.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/clause-numbers/cn-1-labels.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/clause-numbers/cn-2-insert.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-00-control.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-01-no-core.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-02-no-app.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-03-no-custom.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-04-no-properties.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-absent-properties/fp-05-properties-missing.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-dates/date-forms-r1.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase1/field-probe-r1.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase2/expr-probe-r1.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/listnum-probe-r2.docx": "formatting differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/numwords-probe-r1.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/phase3-probe-r1.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/docprop-case/docprop-case.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-block-nofallback.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-cell-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-mixed.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-row-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-run.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-sdt-block-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-sdt-cell-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-sdt-row-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-sdt-run-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-tc-block-newest-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-txbx-block.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-txbx-run.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-txbx-sdt-block.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-fun/mc-txbx-tc-block.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-01-main-unknown.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-02-main-known.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-03-main-several.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-04-main-lower-known.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-06-main-declared-unknown.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-07-main-leading-space.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-10-header.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-11-footnotes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-12-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-13-settings.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-ignorable/ui-14-all-parts-known.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-10-hdr-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-11-ftr-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-12-footnotes-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-13-endnotes-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-14-comments-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-15-styles-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-16-numbering-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-17-settings-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-18-hdr-root-unknown-choice.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-20-two-docs-background-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-21-two-docs-background-second.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-50-unknown-in-taken.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-51-unknown-in-not-taken.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-70-bare-body-in-branch.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/c79-71-empty-branch-taken.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-01-madeup-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-10-two-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-11-p-sectpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-12-tbl.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-13-sdt.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-15-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-16-empty.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-17-nested.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-18-p-properties.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-22-ignorable-p.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-30-sdtcontent-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-32-p-root.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-40-branch-madeup-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mr-50-madeup-p-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/mu-12-foo-holding-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-10-hdr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-11-ftr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-30-styles.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-31-madeup.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-32-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/or-50-mc-hdr-choice.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-10-madeup-ac.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-20-sdtcontent-empty.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-30-branch-sdt.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-32-branch-document-then-hdr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rq-33-branch-hdr-then-document.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-20-mc-root-choice.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-21-mc-root-fallback.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-22-mc-root-fallback-only.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-23-mc-root-two-documents.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-24-mc-root-nothing-selected.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-26-mc-root-two-in-fallback.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/mc-root/rw-27-mc-root-two-in-choice-sizes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/case-variant-exact-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/case-variant-exact-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/control-one-main.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-central-reversed.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-content-types.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-document.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-part-rels.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-same-bytes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/one-main-rel-document-override-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/one-main-rel-other-override-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-00-control-plain.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-01-control-rich.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-02-plain-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-03-rich-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-04-plain-no-namespace.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-05-plain-root-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-06-plain-children-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-07-plain-one-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-08-rich-no-part.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/rn-09-package-rels-wrong.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-document-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-names-swapped.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-other-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-types-other-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-zip-other-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-document-first.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-other-first.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-30-sdtcontent-run.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-31-sdtcontent-row.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-32-sdtcontent-cell.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-33-txbx-wps.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-40-ppr-nested-rpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-41-ppr-numpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-42-ppr-pprchange.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-01-footer-first-only.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-02-footer-later-only.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-03-footer-both.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-04-three-first-and-third.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-05-three-second-and-third.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-06-first-both-later-header.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-07-first-header-later-footer.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-08-footer-default-then-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-09-header-default-then-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-10-two-bodies-footers.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/ft-11-two-bodies-headers.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-20-body-only-child.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-21-body-middle-no-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-22-body-middle-with-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-23-body-last-with-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/nd-24-body-three-deep.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-10-pgsz-in-one-sectpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-11-pgmar-in-one-sectpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-12-cols-in-one-sectpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-20-numpr-in-one-ppr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/op-21-rpr-in-one-ppr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-01-control-sdt.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-02-control-txbx.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-10-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-11-sdtContent.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-12-txbxContent.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-20-pPr-values.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-21-pPr-merge.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-22-rPr-values.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-23-rPr-merge.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-30-jc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-31-b-on-off.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-32-b-off-on.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-33-sz.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-40-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rc-41-tblPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-10-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-11-sdtContent.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-12-txbxContent.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-13-txbxContent-four.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-15-body-section-break.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-16-body-second-no-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-17-body-third-no-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-20-pPr-values.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-21-pPr-merge.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-22-rPr-values.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-23-rPr-merge.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-30-jc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-31-b-on-off-on.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-32-b-off-on-off.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-33-sz.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-40-sectPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-41-tblPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-50-mc-root-three-in-choice.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/rt-51-mc-root-three-in-fallback.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-00-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-01-pgsz-orient-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-02-pgsz-orient-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-03-pgsz-orient-middle.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-04-pgsz-code-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-05-pgsz-orient-only-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-06-pgsz-width-only-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-07-pgsz-portrait-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-10-pgmar-top-only-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-11-pgmar-gutter-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-20-cols-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-21-cols-attributes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-22-titlepg-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-23-pgborders-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-24-lnnumtype-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-25-pgnumtype-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-26-valign-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-27-type-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-28-docgrid-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-29-bidi-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-30-pgsz-absent-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-31-pgmar-absent-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-32-last-empty.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-33-cols-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-40-header-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-41-header-last.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-42-header-both.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-50-bodies-cols-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-51-bodies-orient-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-52-branch-orient-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-53-ppr-section-twice.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-60-tblpr-children.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-61-tblpr-attributes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-70-ind-in-one-ppr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-71-ind-across-ppr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-72-spacing-in-one-ppr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-73-rfonts-in-one-rpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-74-rfonts-across-rpr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-80-vanish-on-off.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/repeated/sm-81-vanish-off-on.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/core-ts/check36/36a-w15-undeclared.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/revisions/core-ts/check36/36c-w16du-undeclared.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-auto-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-background-f00.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-background-hex.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-background-navy.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-background-red.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-case.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-elsewhere-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-elsewhere.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-hex.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-names-css.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-names-highlight.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-pattern.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-table-grey.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/colour-table-other.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/emphasis-marks.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/highlight-char-styles.docx": "formatting differs",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/onoff-TRUE.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/onoff-empty.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/onoff-space.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/onoff-valid.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/onoff-yes.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-b-case.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-b-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-enum-missing.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-enum-other.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-enum-styles.docx": "formatting differs",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-toggles-1.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-toggles-2.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-case.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-onoff-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-other.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/props-u-valid.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/strike-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/runprops/word365/underline-styles.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-app.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-commentsExtended.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-core.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-custom.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-document-rels.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-intact.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-numbering-order.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-numbering-unneeded.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-numbering.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-package-rels.docx": "probe unreadable",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-settings.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-styles-invalid.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-styles-late.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/broken-part-styles.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/broken-part/store-not-read.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/text-extraction/dpp/dpp-forks.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76a-ignorable-in-sdtPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76b-ignorable-in-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76c-ignorable-in-r.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76d-ignorable-in-tc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76f-madeup-in-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76g-madeup-in-pPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76h-ignorable-attribute.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76i-not-ignorable-attribute.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76j-madeup-attribute.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76k-ignorable-holding-a-run.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76l-ignorable-in-b.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76m-ignorable-in-t.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76n-ignorable-with-text-in-t.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t-madeup-holding-a-run.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t1-madeup-holding-p-in-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t10-madeup-in-block-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t11-madeup-in-run-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t12-madeup-in-row-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t13-madeup-in-cell-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t14-madeup-in-hyperlink.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t15-madeup-in-ins.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t16-madeup-in-hdr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t17-madeup-in-comment.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t18-hosts-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t19-madeup-in-fldSimple.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t2-madeup-holding-p-in-tc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t20-madeup-in-smartTag.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t21-madeup-in-block-customXml.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t22-madeup-in-run-customXml.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t23-madeup-in-row-customXml.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t24-madeup-in-cell-customXml.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t25-madeup-in-footnote.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t26-more-hosts-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t27-madeup-holding-a-run-in-pPr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t29-madeup-in-ftr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t3-madeup-holding-t-in-r.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t30-madeup-in-endnote.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t31-madeup-in-del.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t32-madeup-in-moveFrom.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t33-madeup-in-moveTo.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t34-last-hosts-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t35-madeup-in-madeup-in-tc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t36-madeup-in-madeup-in-hyperlink.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t37-two-runs-in-pPr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t38-run-and-property-in-pPr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t39-run-in-pPr-no-other-run.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t4-madeup-holding-tr-in-tbl.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t40-run-in-pPrChange.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t41-text-in-madeup.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t42-break-in-madeup.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t43-paragraph-in-madeup-in-p.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t44-madeup-in-choice.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t45-madeup-in-fallback.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t5-madeup-holding-jc-in-pPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t50-run-in-sectPr.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t51-second-name-in-p.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t52-round-8-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t56-two-held-paragraphs.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t58-held-paragraph-centred.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t6-madeup-holding-b-in-rPr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t60-round-9-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t61-text-in-madeup-in-body.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t62-text-in-madeup-in-tc.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t63-text-in-madeup-in-r.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t64-text-in-madeup-in-hyperlink.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t65-text-in-madeup-in-ins.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t66-text-in-madeup-in-block-control.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t67-text-and-a-run-in-madeup.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t68-host-right-held-centred.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t69-host-right-held-plain.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t7-madeup-in-madeup.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t70-held-paragraph-two-deep.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t71-held-paragraph-in-hyperlink.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t8-madeup-with-no-ignorable.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76t9-madeup-holding-tc-in-tr.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76u-madeup-with-text-in-t.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76w-ignorable-holding-a-break-in-t.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/unknown-elements/76z-tab-in-t.docx": "agrees"
+  }
+ },
+ "environment": {
+  "corpus": {
+   "docx4j": "c0a66b6100bb49d93dd0de005f7cdfd3784897ed",
+   "libreoffice": "b9166e293d413e45ac213dcc1afb6d7cfebd8739",
+   "mammoth": "5171a9072f8b7343ab1c9ed3a15d6d372cb59b67",
+   "onlyoffice": "0a52fb76fa53fddf7d70da28878537cde3d29421",
+   "openxml-sdk": "431ab05cf160248cc3885a4a766026d4f8243792",
+   "pandoc": "3dde36a9ddd68b8677397d9c59c891d9b8763b89",
+   "poi": "a4e8640da7c3bb906efc6fa11914d1b80f3cc9dc",
+   "python-docx": "e45454602b53e8e572b179ccf1c91093ec9f4ed7",
+   "tika": "a40d54f6a6d9cf8ce485f10bb07011cd32ef5925"
+  },
+  "fonts": {
+   "Caladea-Bold.ttf": "ae3cb2dcbc925809",
+   "Caladea-BoldItalic.ttf": "ccabaa7b7e2fdf25",
+   "Caladea-Italic.ttf": "4359a8e24f748b64",
+   "Caladea-Regular.ttf": "f1e899278b7b4491",
+   "Carlito-Bold.ttf": "bb5d20f79b82599e",
+   "Carlito-BoldItalic.ttf": "b32928186c119599",
+   "Carlito-Italic.ttf": "0b019225e58d702b",
+   "Carlito-Regular.ttf": "f6418f708baede97",
+   "DejaVuSans-Bold.ttf": "5c1247acef7f2b85",
+   "DejaVuSans.ttf": "ae7b7855e115a596",
+   "DejaVuSansMono-Bold.ttf": "3a3c502eeff669a2",
+   "DejaVuSansMono-BoldOblique.ttf": "a5251173370e3076",
+   "DejaVuSansMono-Oblique.ttf": "3d7955616e69721f",
+   "DejaVuSansMono.ttf": "c805f9436dbc2686",
+   "DejaVuSerif-Bold.ttf": "847b33e13925f19f",
+   "DejaVuSerif.ttf": "8f2c103bfa3fd5de",
+   "LXGWWenKai-Regular.ttf": "2d73eea94ad80899",
+   "LiberationMono-Bold.ttf": "626655e94dd82f3f",
+   "LiberationMono-BoldItalic.ttf": "15eb161953e3ecc7",
+   "LiberationMono-Italic.ttf": "a71b2c25c89da05c",
+   "LiberationMono-Regular.ttf": "395fa5ab8d40c8eb",
+   "LiberationSans-Bold.ttf": "3973aa5054fb467d",
+   "LiberationSans-BoldItalic.ttf": "c80fa7f2ffa0e01d",
+   "LiberationSans-Italic.ttf": "830c5fa600505fb4",
+   "LiberationSans-Regular.ttf": "4659bc0c58c5028d",
+   "LiberationSerif-Bold.ttf": "9e66c25e20868756",
+   "LiberationSerif-BoldItalic.ttf": "379010e87421a883",
+   "LiberationSerif-Italic.ttf": "eaeaf7f2b12544ec",
+   "LiberationSerif-Regular.ttf": "705903ae1382f015",
+   "SourceHanSansCN-Bold.otf": "62383707c086a32f",
+   "SourceHanSansCN-Regular.otf": "e2bc8a2e7f37474b",
+   "SourceHanSerifCN-Bold.otf": "4ee555ae58b3d22f",
+   "SourceHanSerifCN-Regular.otf": "3754ea669c530e24"
+  }
+ },
+ "layout": {
+  "all": {
+   "documents": 3272,
+   "forced_page_starts": 410,
+   "forced_page_starts_equal": 386,
+   "multipage": 655,
+   "multipage_pages_equal": 407,
+   "multipage_pages_within_one": 554,
+   "page_starts": 2041,
+   "page_starts_equal": 246,
+   "page_starts_same_paragraph": 411
+  },
+  "covered": {
+   "documents": 601,
+   "forced_page_starts": 37,
+   "forced_page_starts_equal": 37,
+   "multipage": 66,
+   "multipage_pages_equal": 60,
+   "multipage_pages_within_one": 66,
+   "page_starts": 54,
+   "page_starts_equal": 26,
+   "page_starts_same_paragraph": 39
+  },
+  "fresh": {
+   "documents": 1943,
+   "forced_page_starts": 113,
+   "forced_page_starts_equal": 103,
+   "multipage": 229,
+   "multipage_pages_equal": 161,
+   "multipage_pages_within_one": 213,
+   "page_starts": 467,
+   "page_starts_equal": 85,
+   "page_starts_same_paragraph": 143
+  },
+  "plain": {
+   "documents": 950,
+   "forced_page_starts": 44,
+   "forced_page_starts_equal": 44,
+   "multipage": 85,
+   "multipage_pages_equal": 78,
+   "multipage_pages_within_one": 85,
+   "page_starts": 83,
+   "page_starts_equal": 36,
+   "page_starts_same_paragraph": 50
+  }
+ },
+ "lines": {
+  "documents": 0,
+  "lines": 0,
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "pages_equal": 0,
+  "same": 0
+ },
+ "reading": {
+  "agree": 306,
+  "pairs": 370
+ }
+}

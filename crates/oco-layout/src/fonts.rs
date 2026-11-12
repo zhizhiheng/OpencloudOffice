@@ -212,6 +212,10 @@ pub struct Choice {
     pub fake_italic: bool,
     pub line_box: LineBox,
     pub half_width_latin: bool,
+    /// The font asked for, or its designated replacement, was available.
+    /// When false the text is set in an unrelated fallback font, so its
+    /// widths, and with them the line breaks, cannot be expected to match.
+    pub known_family: bool,
 }
 
 #[derive(Default)]
@@ -275,7 +279,26 @@ impl FontDb {
     /// Chooses the font to draw `ch` with when the document asks for
     /// `family` (`None` if it names no font for this kind of character).
     pub fn choose(&self, family: Option<&str>, bold: bool, italic: bool, ch: char, model: Model) -> Option<Choice> {
-        let wanted = family.map(|f| f.split(';').next().unwrap_or(f).trim().to_lowercase());
+        let mut wanted = family.map(|f| f.split(';').next().unwrap_or(f).trim().to_lowercase());
+        // Some documents name a face rather than a family ("Arial Bold").
+        // When no such family exists, read the style off the end of the name.
+        let (mut bold, mut italic) = (bold, italic);
+        if let Some(name) = wanted.as_mut().filter(|name| !self.by_family.contains_key(name.as_str())) {
+            for (suffix, is_bold, is_italic) in [
+                (" bold italic", true, true),
+                (" bold", true, false),
+                (" italic", false, true),
+                (" oblique", false, true),
+                (" regular", false, false),
+            ] {
+                if let Some(base) = name.strip_suffix(suffix).filter(|base| !base.is_empty()) {
+                    *name = base.to_owned();
+                    bold |= is_bold;
+                    italic |= is_italic;
+                    break;
+                }
+            }
+        }
         let cjk = crate::text::is_cjk(ch);
         let mut original = None;
         let mut candidates: Vec<&str> = Vec::new();
@@ -335,8 +358,15 @@ impl FontDb {
                 }
             }
         };
+        let known_family = wanted.as_deref().is_none_or(|w| {
+            self.by_family.contains_key(w)
+                || SUBSTITUTES.iter().any(|(names, replacements, _)| {
+                    names.contains(&w) && replacements.iter().any(|r| self.by_family.contains_key(*r))
+                })
+        });
         Some(Choice {
             font,
+            known_family,
             fake_bold: bold && !actual.bold,
             fake_italic: italic && !actual.italic,
             line_box,
