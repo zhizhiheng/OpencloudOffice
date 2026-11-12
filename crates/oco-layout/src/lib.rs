@@ -214,6 +214,109 @@ struct Unit {
     ends_section: Option<Section>,
     /// Index of the paragraph this is, in document order; `None` for a table row.
     paragraph: Option<usize>,
+    /// The unit is a table row; `lines` is then empty.
+    row: Option<Row>,
+}
+
+/// A table row ready to be placed. Its cells are columns of lines side by
+/// side, and where the row meets the bottom of a page each cell breaks
+/// between two of its lines.
+struct Row {
+    cells: Vec<RowCell>,
+    /// Where each cell begins and the last one ends, from the text margin.
+    edges: Vec<f32>,
+    /// The least the row is tall (`w:trHeight`).
+    min_height: f32,
+    /// The row is exactly this tall, whatever is in it.
+    exact_height: Option<f32>,
+    cant_split: bool,
+    /// Blank above and below the content of the cells.
+    padding: (f32, f32),
+    /// Width of the rules between and around the cells; 0 for none. The
+    /// rule above a row takes up room of its own (measured in Word: a row
+    /// of a table with half-point borders begins half a point lower than
+    /// its content alone would).
+    border: f32,
+    /// The last row of its table, which has the table's bottom rule under
+    /// it; that rule takes up room too.
+    last: bool,
+}
+
+struct RowCell {
+    lines: Vec<CellLine>,
+    /// Space after the cell's last paragraph, which the row's height includes.
+    tail: f32,
+}
+
+struct CellLine {
+    line: paragraph::Line,
+    /// Blank above the line: the space between two paragraphs.
+    gap: f32,
+    /// Where the line's origin is, from the text margin.
+    x: f32,
+}
+
+impl RowCell {
+    /// Height of the cell's content from line `from` on.
+    fn rest(&self, from: usize) -> f32 {
+        let lines: f32 = self.lines[from.min(self.lines.len())..].iter().map(|l| l.gap + l.line.height).sum();
+        lines + if from < self.lines.len() { self.tail } else { 0.0 }
+    }
+}
+
+impl Row {
+    fn height(&self) -> f32 {
+        let content = self.cells.iter().map(|cell| cell.rest(0)).fold(0.0, f32::max);
+        self.part_height(content, true)
+    }
+
+    /// Height of the row, or of what is left of it, given the height of the
+    /// content still to place.
+    fn part_height(&self, content: f32, first_part: bool) -> f32 {
+        let natural = self.border + content + self.padding.0 + self.padding.1;
+        let least = if first_part { self.min_height } else { 0.0 };
+        self.exact_height.unwrap_or(natural.max(least)) + if self.last { self.border } else { 0.0 }
+    }
+
+    /// The row as one line that cannot break, for a table inside a cell.
+    fn into_line(self) -> paragraph::Line {
+        let height = self.height();
+        let mut line = paragraph::Line { height, needed: height, ..paragraph::Line::default() };
+        let mut texts = Vec::new();
+        for cell in self.cells {
+            let mut y = self.border + self.padding.0;
+            for mut part in cell.lines {
+                y += part.gap;
+                for item in &mut part.line.items {
+                    item.translate(part.x, y);
+                }
+                if !part.line.text.trim().is_empty() {
+                    if texts.is_empty() {
+                        (line.baseline, line.x0) = (y + part.line.baseline, part.x + part.line.x0);
+                    }
+                    line.x1 = line.x1.max(part.x + part.line.x1);
+                    texts.push(part.line.text);
+                }
+                line.items.append(&mut part.line.items);
+                y += part.line.height;
+            }
+        }
+        if self.border > 0.0 {
+            line.items.extend(boxes(&self.edges, 0.0, height, self.border));
+        }
+        line.text = texts.join(" ");
+        line
+    }
+}
+
+/// The rules around the cells of a row, or of the part of one on a page.
+fn boxes(edges: &[f32], top: f32, bottom: f32, width: f32) -> Vec<Item> {
+    let rule = |x1, y1, x2, y2| Item::Rule { x1, y1, x2, y2, width, color: [0, 0, 0], dash: [0.0, 0.0] };
+    let (Some(left), Some(right)) = (edges.first(), edges.last()) else { return Vec::new() };
+    let mut items: Vec<Item> = edges.iter().map(|x| rule(*x, top, *x, bottom)).collect();
+    items.push(rule(*left, top, *right, top));
+    items.push(rule(*left, bottom, *right, bottom));
+    items
 }
 
 struct Builder<'a> {
@@ -225,6 +328,8 @@ struct Builder<'a> {
     /// Paragraphs laid out so far, which numbers them as `Document::paragraphs` does.
     paragraphs: usize,
     missing_fonts: Vec<String>,
+    /// The styles of the table being laid out, base first; empty outside tables.
+    table_styles: Vec<&'a oco_docx::Style>,
 }
 
 fn context(docx: &Docx, section: &Section, width: f32, model: Model) -> paragraph::Context {
@@ -275,7 +380,7 @@ fn portable_bullet(text: &str, props: &mut RunProps) -> String {
 
 impl Builder<'_> {
     fn paragraph(&mut self, source: &oco_docx::Paragraph, section: &Section, width: f32) -> Unit {
-        let props: ParaProps = self.resolver.paragraph(&source.props);
+        let props: ParaProps = self.resolver.paragraph_in(&source.props, &self.table_styles);
         let style = source.props.style_id.as_deref();
         let label = self.resolver.list_level(&props).and_then(|(num_id, ilvl, level)| {
             let label = self.counters.next(&self.docx.numbering, num_id, ilvl)?;
@@ -288,10 +393,10 @@ impl Builder<'_> {
             .iter()
             // Shown as the document reads with every tracked change accepted.
             .filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content()))
-            .map(|run| (self.resolver.run(style, &run.props), run.content.as_slice()))
+            .map(|run| (self.resolver.run_in(style, &run.props, &self.table_styles), run.content.as_slice()))
             .collect();
-        let input =
-            paragraph::Paragraph { props: &props, runs, mark: self.resolver.run(style, &source.mark_props), label };
+        let mark = self.resolver.run_in(style, &source.mark_props, &self.table_styles);
+        let input = paragraph::Paragraph { props: &props, runs, mark, label };
         let ctx = context(self.docx, section, width, self.options.model);
         let laid = paragraph::layout(&input, self.fonts, &ctx);
         for name in laid.missing_fonts {
@@ -326,58 +431,89 @@ impl Builder<'_> {
             bottom_rule,
             ends_section: source.section_break.clone(),
             paragraph: Some(index),
+            row: None,
         }
     }
 
-    /// A table as a plain grid: equal columns, each row as tall as its
-    /// tallest cell, every cell boxed. A placeholder until table properties
-    /// are modelled; it keeps the content readable and in place.
+    /// A table: one unit for each row. Columns are as wide as the table's
+    /// grid says (or, without one, as the cells say, or equal); they are not
+    /// fitted to their content as Word fits the columns of an auto-fit table.
     fn table(&mut self, table: &oco_docx::Table, section: &Section, width: f32, units: &mut Vec<Unit>) {
-        const PADDING: f32 = 5.4;
+        let props = self.resolver.table(&table.props);
+        let styles = self.resolver.table_styles(table.props.style_id.as_deref());
+        let outer = std::mem::replace(&mut self.table_styles, styles);
+        let points = |twips: Option<i32>| twips.unwrap_or(0) as f32 * TWIP;
+        let margins = props.cell_margins;
+        let border = props.borders.unwrap_or(0).max(0) as f32 / 8.0;
+
         let columns = table.rows.iter().map(|row| row.cells.len()).max().unwrap_or(1).max(1);
-        let column = width / columns as f32;
-        for row in &table.rows {
-            let mut items = Vec::new();
-            let mut text = Vec::new();
-            let mut height = 0.0f32;
-            for (index, cell) in row.cells.iter().enumerate() {
+        let grid: Vec<f32> = table.grid.iter().map(|w| *w as f32 * TWIP).collect();
+        let stated = |row: &oco_docx::TableRow| row.cells.iter().map(|c| points(c.props.width)).sum::<f32>();
+        let table_width = if grid.iter().sum::<f32>() > 0.0 {
+            grid.iter().sum()
+        } else {
+            table.rows.iter().map(stated).fold(0.0, f32::max).max(0.0)
+        };
+        let table_width = if table_width > 0.0 { table_width } else { width };
+        let mut origin = points(props.indent)
+            + match props.align.as_deref() {
+                Some("center") => (width - table_width) / 2.0,
+                Some("right" | "end") => width - table_width,
+                _ => 0.0,
+            };
+        // Before Word 2013 a table was moved out so that its text, not its
+        // edge, stood at the margin.
+        if self.docx.settings.compatibility_mode < 15 {
+            origin -= points(margins.left);
+        }
+
+        for (number, row) in table.rows.iter().enumerate() {
+            let mut cells = Vec::with_capacity(row.cells.len());
+            let mut edges = vec![origin];
+            let (mut x, mut column) = (origin, 0usize);
+            for cell in &row.cells {
+                let span = cell.props.grid_span as usize;
+                let from_grid: f32 = grid.iter().skip(column).take(span).sum();
+                let cell_width = if from_grid > 0.0 {
+                    from_grid
+                } else if cell.props.width.is_some() {
+                    points(cell.props.width)
+                } else {
+                    table_width / columns as f32
+                };
+                let (left, right) = (
+                    points(cell.props.margins.left.or(margins.left)),
+                    points(cell.props.margins.right.or(margins.right)),
+                );
+                // The cell's margin is measured from the middle of its border,
+                // and the text never stands on the border itself.
+                let inset = (border / 2.0).max(border - left);
                 let mut inner = Vec::new();
-                self.blocks(&cell.blocks, section, column - 2.0 * PADDING, &mut inner);
-                let mut y = 0.0;
-                let mut previous_after = 0.0f32;
+                self.blocks(&cell.blocks, section, (cell_width - left - right).max(1.0), &mut inner);
+
+                let mut lines = Vec::new();
+                let (mut previous_after, mut first) = (0.0f32, true);
                 for unit in inner {
-                    y += unit.before.max(previous_after);
+                    let mut gap = if first { unit.before } else { unit.before.max(previous_after) };
+                    first = false;
                     previous_after = unit.after;
-                    for mut line in unit.lines {
-                        let dx = index as f32 * column + PADDING + unit.left;
-                        for item in &mut line.items {
-                            item.translate(dx, y);
-                        }
-                        text.push((line.text, dx + line.x0, dx + line.x1, y + line.baseline));
-                        items.append(&mut line.items);
-                        y += line.height;
+                    let own = match unit.row {
+                        Some(nested) => vec![nested.into_line()],
+                        None => unit.lines,
+                    };
+                    for line in own {
+                        lines.push(CellLine { line, gap, x: x + left + inset });
+                        gap = 0.0;
                     }
                 }
-                height = height.max(y);
+                cells.push(RowCell { lines, tail: previous_after });
+                x += cell_width;
+                column += span;
+                edges.push(x);
             }
-            let black = [0, 0, 0];
-            let rule = |x1, y1, x2, y2| Item::Rule { x1, y1, x2, y2, width: 0.5, color: black, dash: [0.0, 0.0] };
-            for edge in 0..=row.cells.len() {
-                let x = edge as f32 * column;
-                items.push(rule(x, 0.0, x, height));
-            }
-            let right = row.cells.len() as f32 * column;
-            items.push(rule(0.0, 0.0, right, 0.0));
-            items.push(rule(0.0, height, right, height));
-            // The whole row travels as one unbreakable line.
-            let mut line =
-                paragraph::Line { height, baseline: 0.0, needed: height, items, ..paragraph::Line::default() };
-            line.text = text.iter().map(|(t, ..)| t.as_str()).collect::<Vec<_>>().join(" | ");
-            line.x0 = text.iter().map(|(_, x0, ..)| *x0).fold(f32::MAX, f32::min).min(right);
-            line.x1 = right;
-            line.baseline = text.first().map_or(0.0, |(.., baseline)| *baseline);
+            let height = points(row.props.height);
             units.push(Unit {
-                lines: vec![line],
+                lines: Vec::new(),
                 before: 0.0,
                 after: 0.0,
                 left: 0.0,
@@ -390,8 +526,19 @@ impl Builder<'_> {
                 bottom_rule: None,
                 ends_section: None,
                 paragraph: None,
+                row: Some(Row {
+                    cells,
+                    edges,
+                    min_height: height,
+                    exact_height: row.props.exact_height.then_some(height).filter(|h| *h > 0.0),
+                    cant_split: row.props.cant_split,
+                    padding: (points(margins.top), points(margins.bottom)),
+                    border,
+                    last: number + 1 == table.rows.len(),
+                }),
             });
         }
+        self.table_styles = outer;
     }
 
     fn blocks(&mut self, blocks: &[Block], section: &Section, width: f32, units: &mut Vec<Unit>) {
@@ -420,6 +567,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         options: *options,
         paragraphs: 0,
         missing_fonts: Vec::new(),
+        table_styles: Vec::new(),
     };
     let mut units = Vec::new();
     // Line breaks depend on the text width, which this prototype takes from
@@ -524,6 +672,100 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             after_break = true;
         }
         y += gap(page_is_empty, after_break);
+        if let Some(row) = &unit.row {
+            // Where each cell has got to: the next of its lines to place.
+            let mut cursors = vec![0usize; row.cells.len()];
+            loop {
+                let first_part = cursors.iter().all(|cursor| *cursor == 0);
+                let content =
+                    row.cells.iter().zip(&cursors).map(|(cell, cursor)| cell.rest(*cursor)).fold(0.0, f32::max);
+                let height = row.part_height(content, first_part);
+                // How many more lines of each cell the page has room for.
+                let room = bottom - y - row.border - row.padding.0;
+                let takes: Vec<usize> = row
+                    .cells
+                    .iter()
+                    .zip(&cursors)
+                    .map(|(cell, cursor)| {
+                        let mut used = 0.0;
+                        cell.lines[*cursor..]
+                            .iter()
+                            .take_while(|part| {
+                                used += part.gap + part.line.height;
+                                used <= room + 0.01
+                            })
+                            .count()
+                    })
+                    .collect();
+                let fits = y + height <= bottom + 0.01;
+                // A row breaks only where every cell that has something left
+                // gets at least a line onto this page.
+                let splits = !row.cant_split
+                    && row.exact_height.is_none()
+                    && takes.iter().any(|take| *take > 0)
+                    && row
+                        .cells
+                        .iter()
+                        .zip(&cursors)
+                        .zip(&takes)
+                        .all(|((cell, cursor), take)| *cursor >= cell.lines.len() || *take > 0);
+                if !fits && !splits && !page_is_empty {
+                    pages.push(new_page(section));
+                    y = top;
+                    page_is_empty = true;
+                    after_break = true;
+                    continue;
+                }
+                let whole = fits || !splits;
+                let number_of_pages = pages.len();
+                let page = pages.last_mut().expect("a page is always open");
+                if started < number_of_pages {
+                    started = number_of_pages;
+                    page.start = None;
+                }
+                for ((cell, cursor), take) in row.cells.iter().zip(&mut cursors).zip(&takes) {
+                    let end = if whole { cell.lines.len() } else { *cursor + *take };
+                    let mut line_y = y + row.border + row.padding.0;
+                    for part in &cell.lines[*cursor..end] {
+                        line_y += part.gap;
+                        for item in &part.line.items {
+                            let mut item = item.clone();
+                            item.translate(left + part.x, line_y);
+                            page.items.push(item);
+                        }
+                        if !part.line.text.trim().is_empty() {
+                            page.lines.push(PlacedLine {
+                                baseline: line_y + part.line.baseline,
+                                x0: left + part.x + part.line.x0,
+                                x1: left + part.x + part.line.x1,
+                                text: part.line.text.clone(),
+                            });
+                        }
+                        line_y += part.line.height;
+                    }
+                    *cursor = end;
+                }
+                let part_bottom = if whole { y + height } else { bottom };
+                if row.border > 0.0 {
+                    for mut item in boxes(&row.edges, y, part_bottom, row.border) {
+                        item.translate(left, 0.0);
+                        page.items.push(item);
+                    }
+                }
+                page_is_empty = false;
+                if whole {
+                    y = part_bottom;
+                    break;
+                }
+                pages.push(new_page(section));
+                y = top;
+                page_is_empty = true;
+                after_break = true;
+            }
+            previous_after = 0.0;
+            previous_style = None;
+            continue;
+        }
 
         let count = unit.lines.len();
         for (number, line) in unit.lines.iter().enumerate() {

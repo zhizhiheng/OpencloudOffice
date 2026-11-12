@@ -19,6 +19,7 @@ mod resolve;
 mod section;
 mod statistics;
 mod styles;
+mod table;
 mod theme;
 mod values;
 mod xml;
@@ -38,6 +39,7 @@ pub use resolve::Resolver;
 pub use section::{DocGrid, GridKind, Section, SectionStart};
 pub use statistics::Statistics;
 pub use styles::{Style, StyleKind, StyleSheet};
+pub use table::{CellMargins, CellProps, RowProps, TableProps, VerticalMerge};
 pub use theme::{Settings, ThemeFontLang, ThemeFonts};
 pub use values::{Color, Emphasis, Highlight, Underline, VertAlign};
 

@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::coverage::Coverage;
 use crate::props::{ParaProps, RunProps};
+use crate::table::TableProps;
 use crate::xml::{elements, val, w_attr, w_child, w_name};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -27,6 +28,8 @@ pub struct Style {
     pub is_default: bool,
     pub para: ParaProps,
     pub run: RunProps,
+    /// `w:tblPr` of a table style.
+    pub table: TableProps,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -40,6 +43,7 @@ pub struct StyleSheet {
     order: Vec<String>,
     default_paragraph_style: Option<String>,
     default_character_style: Option<String>,
+    default_table_style: Option<String>,
 }
 
 impl StyleSheet {
@@ -84,6 +88,7 @@ impl StyleSheet {
             is_default: matches!(w_attr(node, "default"), Some("1" | "true" | "on")),
             para: ParaProps::default(),
             run: RunProps::default(),
+            table: TableProps::default(),
         };
         for child in elements(node) {
             match w_name(child) {
@@ -91,8 +96,10 @@ impl StyleSheet {
                 Some("basedOn") => style.based_on = val(child).map(str::to_owned),
                 Some("pPr") => style.para = ParaProps::parse(child, coverage),
                 Some("rPr") => style.run = RunProps::parse(child, coverage),
-                // Table formatting is not modelled yet; report it.
-                Some("tblPr" | "trPr" | "tcPr" | "tblStylePr") => coverage.miss(Some("w:style"), child),
+                Some("tblPr") => style.table = TableProps::parse(child, coverage),
+                // Row, cell and conditional formatting of table styles is
+                // not modelled yet; report it.
+                Some("trPr" | "tcPr" | "tblStylePr") => coverage.miss(Some("w:style"), child),
                 // Everything else is UI metadata (next, link, uiPriority, qFormat, ...).
                 _ => {}
             }
@@ -101,6 +108,7 @@ impl StyleSheet {
             match kind {
                 StyleKind::Paragraph => self.default_paragraph_style = Some(style.id.clone()),
                 StyleKind::Character => self.default_character_style = Some(style.id.clone()),
+                StyleKind::Table => self.default_table_style = Some(style.id.clone()),
                 _ => {}
             }
         }
@@ -134,6 +142,7 @@ impl StyleSheet {
         let default = match kind {
             StyleKind::Paragraph => self.default_paragraph_style.as_deref(),
             StyleKind::Character => self.default_character_style.as_deref(),
+            StyleKind::Table => self.default_table_style.as_deref(),
             _ => None,
         };
         let of_kind = |id: &str| self.styles.get(id).filter(|s| s.kind == kind);

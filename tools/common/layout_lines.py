@@ -113,6 +113,28 @@ def key(text):
     return re.sub(r"[.\-_·…]{4,}", "", re.sub(r"\s", "", text)).rstrip(TRAILING_MARKS)
 
 
+def across(page):
+    """Joins the lines of a page that share a baseline, as the cells of a
+    table row do, into one line read from left to right. That is how they
+    come out of a PDF, where nothing says which cell a character is in."""
+    rows = []
+    for line in sorted(page["lines"], key=lambda l: (l["baseline"], l["x0"])):
+        if rows and abs(line["baseline"] - rows[-1][0]["baseline"]) < 0.06:
+            rows[-1].append(line)
+        else:
+            rows.append([line])
+    lines = []
+    for row in rows:
+        row.sort(key=lambda l: l["x0"])
+        lines.append({
+            "baseline": row[0]["baseline"],
+            "x0": row[0]["x0"],
+            "x1": max(l["x1"] for l in row),
+            "text": " ".join(l["text"] for l in row),
+        })
+    return {**page, "lines": lines}
+
+
 def first_body_line(page, body):
     """Index of the first line of `page` that is not in its header: the first
     below the top of the body area, or the very first when none is."""
@@ -138,6 +160,7 @@ def compare(ours, reference):
     between their left ends, `dy` between their baselines when they are on
     the same page.
     """
+    ours = [across(page) for page in ours]
     flat = lambda pages: [(number, index, line) for number, page in enumerate(pages) for index, line in enumerate(page["lines"])]
     a, b = flat(ours), flat(reference)
     bodies = [page.get("body") for page in ours]

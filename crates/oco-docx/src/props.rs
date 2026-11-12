@@ -125,6 +125,11 @@ pub struct Border {
 }
 
 impl Border {
+    /// One edge of a set of borders, such as `w:top` inside `w:tblBorders`.
+    pub(crate) fn parse_edge(node: Node) -> Self {
+        Self::parse(node)
+    }
+
     fn parse(node: Node) -> Self {
         Border {
             style: val(node).unwrap_or("single").to_owned(),

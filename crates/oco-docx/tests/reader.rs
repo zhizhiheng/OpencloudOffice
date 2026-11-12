@@ -4,8 +4,8 @@
 use std::io::{Cursor, Write};
 
 use oco_docx::{
-    Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, RevisionKind, RunContent, RunProps,
-    Statistics, Underline, VertAlign,
+    Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, ParaProps, RevisionKind, RunContent,
+    RunProps, Statistics, Underline, VertAlign, VerticalMerge,
 };
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -323,7 +323,103 @@ fn descends_into_wrappers_and_reports_what_it_skips() {
     assert!(matches!(&docx.document.body[1], Block::Table(t) if t.rows.len() == 1 && t.rows[0].cells.len() == 1));
 
     let skipped: Vec<_> = docx.coverage.ranked().into_iter().collect();
-    assert_eq!(skipped, [("w:r/w:drawing", 1), ("w:tbl/w:tblPr", 1), ("w:tc/w:tcPr", 1)]);
+    assert_eq!(skipped, [("w:r/w:drawing", 1)]);
+}
+
+#[test]
+fn reads_what_decides_where_a_tables_text_goes() {
+    let body = r#"
+        <w:tbl>
+          <w:tblPr>
+            <w:tblStyle w:val="Grid"/><w:tblW w:w="5000" w:type="dxa"/><w:tblInd w:w="108" w:type="dxa"/>
+            <w:jc w:val="center"/><w:tblLayout w:type="fixed"/>
+            <w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="70" w:type="dxa"/></w:tblCellMar>
+            <w:tblBorders><w:top w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="12"/><w:left w:val="nil" w:sz="96"/></w:tblBorders>
+            <w:tblLook w:val="04A0"/><w:tblOverlap w:val="never"/>
+          </w:tblPr>
+          <w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid>
+          <w:tr>
+            <w:trPr><w:trHeight w:val="400" w:hRule="exact"/><w:cantSplit/><w:tblHeader/></w:trPr>
+            <w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/><w:gridSpan w:val="2"/><w:vMerge w:val="restart"/>
+              <w:tcMar><w:top w:w="20" w:type="dxa"/></w:tcMar></w:tcPr><w:p/></w:tc>
+          </w:tr>
+          <w:tr>
+            <w:tc><w:tcPr><w:tcW w:w="50" w:type="pct"/><w:vMerge/></w:tcPr><w:p/></w:tc>
+            <w:tc><w:p/></w:tc>
+          </w:tr>
+        </w:tbl>"#;
+    let docx = docx(body, "");
+    let Block::Table(table) = &docx.document.body[0] else { panic!("a table") };
+    assert_eq!(table.grid, [2000, 3000]);
+    let props = &table.props;
+    assert_eq!((props.style_id.as_deref(), props.width, props.indent), (Some("Grid"), Some(5000), Some(108)));
+    assert_eq!((props.align.as_deref(), props.fixed_layout), (Some("center"), Some(true)));
+    assert_eq!((props.cell_margins.left, props.cell_margins.right, props.cell_margins.top), (Some(60), Some(70), None));
+    // The widest border that is drawn, in eighths of a point.
+    assert_eq!(props.borders, Some(12));
+
+    let (first, second) = (&table.rows[0], &table.rows[1]);
+    assert_eq!((first.props.height, first.props.exact_height), (Some(400), true));
+    assert!(first.props.cant_split && first.props.header);
+    assert_eq!((second.props.height, second.props.cant_split), (None, false));
+    let spanning = &first.cells[0].props;
+    assert_eq!((spanning.width, spanning.grid_span, spanning.merge), (Some(5000), 2, Some(VerticalMerge::Restart)));
+    assert_eq!(spanning.margins.top, Some(20));
+    // A width that is a percentage is not a length; a bare vMerge continues.
+    assert_eq!((second.cells[0].props.width, second.cells[0].props.merge), (None, Some(VerticalMerge::Continue)));
+    assert_eq!((second.cells[1].props.grid_span, second.cells[1].props.merge), (1, None));
+    // What is not read is said.
+    assert_eq!(docx.coverage.ranked().into_iter().collect::<Vec<_>>(), [("w:tblPr/w:tblOverlap", 1)]);
+}
+
+#[test]
+fn normal_table_is_built_in_and_table_styles_format_paragraphs() {
+    // As measured in Word (docx4j's probe `styles-table-default`): the style
+    // named Normal Table has Word's own cell margins whatever the file gives
+    // it; a style that does not lead back to it has none.
+    let styles = r#"
+        <w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276"/></w:pPr></w:pPrDefault></w:docDefaults>
+        <w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>
+        <w:style w:type="paragraph" w:styleId="Tight"><w:pPr><w:spacing w:after="40"/></w:pPr></w:style>
+        <w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/>
+          <w:tblPr><w:tblCellMar><w:left w:w="300" w:type="dxa"/><w:right w:w="300" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
+        <w:style w:type="table" w:styleId="Grid"><w:basedOn w:val="TableNormal"/>
+          <w:pPr><w:spacing w:after="0" w:line="240"/></w:pPr>
+          <w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/></w:tblBorders></w:tblPr></w:style>
+        <w:style w:type="table" w:styleId="Alone"><w:tblPr><w:tblInd w:w="0" w:type="dxa"/></w:tblPr></w:style>"#;
+    let table = |props: &str| format!("<w:tbl><w:tblPr>{props}</w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>");
+    let body = [
+        table(""),
+        table(r#"<w:tblStyle w:val="Grid"/>"#),
+        table(r#"<w:tblStyle w:val="Alone"/>"#),
+        table(r#"<w:tblStyle w:val="Grid"/><w:tblCellMar><w:left w:w="20" w:type="dxa"/></w:tblCellMar>"#),
+    ]
+    .concat();
+    let docx = docx(&body, styles);
+    let resolver = docx.resolver();
+    let resolved: Vec<_> = docx
+        .document
+        .body
+        .iter()
+        .map(|block| match block {
+            Block::Table(table) => resolver.table(&table.props),
+            Block::Paragraph(_) => panic!("only tables"),
+        })
+        .collect();
+    let margins: Vec<_> = resolved.iter().map(|t| (t.cell_margins.left, t.cell_margins.right)).collect();
+    assert_eq!(margins, [(Some(108), Some(108)), (Some(108), Some(108)), (Some(0), Some(0)), (Some(20), Some(108))]);
+    assert_eq!(resolved.iter().map(|t| t.borders).collect::<Vec<_>>(), [None, Some(4), None, Some(4)]);
+
+    // A table style's paragraph formatting sits between the document
+    // defaults and the paragraph's own style.
+    let in_grid = resolver.table_styles(Some("Grid"));
+    let plain = resolver.paragraph_in(&ParaProps::default(), &in_grid);
+    assert_eq!((plain.spacing.after, plain.spacing.line), (Some(0), Some(240)));
+    let tight = ParaProps { style_id: Some("Tight".into()), ..ParaProps::default() };
+    let styled = resolver.paragraph_in(&tight, &in_grid);
+    assert_eq!((styled.spacing.after, styled.spacing.line), (Some(40), Some(240)));
+    let outside = resolver.paragraph(&ParaProps::default());
+    assert_eq!((outside.spacing.after, outside.spacing.line), (Some(200), Some(276)));
 }
 
 #[test]

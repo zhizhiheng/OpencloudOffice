@@ -12,6 +12,7 @@
 use crate::numbering::{Level, Numbering};
 use crate::props::{FontRef, Indent, NumRef, ParaProps, RunProps};
 use crate::styles::{Style, StyleKind, StyleSheet};
+use crate::table::{CellMargins, TableProps};
 use crate::theme::{ThemeFontLang, ThemeFonts};
 
 pub struct Resolver<'a> {
@@ -29,8 +30,54 @@ impl<'a> Resolver<'a> {
     /// `Some` only for a paragraph that really is a list item, with both the
     /// list and the level filled in.
     pub fn paragraph(&self, direct: &ParaProps) -> ParaProps {
+        self.paragraph_in(direct, &[])
+    }
+
+    /// The styles a table named `id` takes its formatting from, base first.
+    /// A table that names none uses the default table style.
+    pub fn table_styles(&self, id: Option<&str>) -> Vec<&'a Style> {
+        self.styles.chain(id, StyleKind::Table)
+    }
+
+    /// Effective properties of a table: its styles', then its own.
+    ///
+    /// The style named `Normal Table` is built into Word: whatever the file
+    /// says of it, its cells have margins of 0.075 inch left and right and
+    /// none above and below. A table that names no style has that style,
+    /// and so has one whose style is based on it. A table whose styles state
+    /// no margins and do not lead back to it has none. (Measured in Word:
+    /// docx4j's probe `styles-table-default`.)
+    pub fn table(&self, direct: &TableProps) -> TableProps {
+        const BUILT_IN: CellMargins = CellMargins { top: Some(0), left: Some(108), bottom: Some(0), right: Some(108) };
+        let chain = self.table_styles(direct.style_id.as_deref());
+        let mut out = TableProps::default();
+        if chain.is_empty() && direct.style_id.is_none() {
+            out.cell_margins = BUILT_IN;
+        }
+        for style in chain {
+            let mut props = style.table.clone();
+            if style.name.as_deref().is_some_and(|name| name.eq_ignore_ascii_case("Normal Table")) {
+                props.cell_margins = BUILT_IN;
+            }
+            out.apply(&props);
+        }
+        out.apply(direct);
+        let margins = &mut out.cell_margins;
+        (margins.left, margins.right) = (margins.left.or(Some(0)), margins.right.or(Some(0)));
+        (margins.top, margins.bottom) = (margins.top.or(Some(0)), margins.bottom.or(Some(0)));
+        out
+    }
+
+    /// As [`Resolver::paragraph`], for a paragraph inside a table whose
+    /// styles are `table` (see [`Resolver::table_styles`]). A table style's
+    /// paragraph formatting comes after the document defaults and before the
+    /// paragraph's own style.
+    pub fn paragraph_in(&self, direct: &ParaProps, table: &[&Style]) -> ParaProps {
         let chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Paragraph);
         let mut out = self.styles.default_para.clone();
+        for style in table {
+            out.apply(&style.para);
+        }
         for style in &chain {
             out.apply(&style.para);
         }
@@ -114,7 +161,13 @@ impl<'a> Resolver<'a> {
     /// Effective run formatting for a run with `direct` properties inside a
     /// paragraph that uses `paragraph_style`.
     pub fn run(&self, paragraph_style: Option<&str>, direct: &RunProps) -> RunProps {
+        self.run_in(paragraph_style, direct, &[])
+    }
+
+    /// As [`Resolver::run`], for a run inside a table whose styles are `table`.
+    pub fn run_in(&self, paragraph_style: Option<&str>, direct: &RunProps, table: &[&Style]) -> RunProps {
         let defaults = &self.styles.default_run;
+        let from_table = flatten(table);
         let from_paragraph = flatten(&self.styles.chain(paragraph_style, StyleKind::Paragraph));
         let character_chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Character);
         let mut from_character = flatten(&character_chain);
@@ -123,11 +176,12 @@ impl<'a> Resolver<'a> {
         from_character.highlight = None;
 
         let mut out = defaults.clone();
+        out.apply(&from_table);
         out.apply(&from_paragraph);
         out.apply(&from_character);
         out.apply(direct);
 
-        let levels = [&from_paragraph, &from_character];
+        let levels = [&from_table, &from_paragraph, &from_character];
         out.bold = toggle(|p| p.bold, defaults, &levels, direct);
         out.italic = toggle(|p| p.italic, defaults, &levels, direct);
         out.caps = toggle(|p| p.caps, defaults, &levels, direct);

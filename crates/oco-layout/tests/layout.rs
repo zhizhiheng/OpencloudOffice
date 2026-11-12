@@ -571,3 +571,81 @@ fn a_line_squeezes_its_punctuation_to_take_one_more_character() {
         assert_eq!(pages[0].lines[0].text.chars().count(), 20, "{}", pages[0].lines[0].text);
     }
 }
+
+/// A table with half-point borders whose cells hold the given paragraphs.
+fn table(grid: &[u32], row_props: &str, rows: &[&[&str]]) -> String {
+    let edges: String = ["top", "left", "bottom", "right", "insideH", "insideV"]
+        .map(|e| format!(r#"<w:{e} w:val="single" w:sz="4"/>"#))
+        .concat();
+    let columns: String = grid.iter().map(|w| format!(r#"<w:gridCol w:w="{w}"/>"#)).collect();
+    let rows: String = rows
+        .iter()
+        .map(|cells| {
+            let cells: String = cells.iter().map(|content| format!("<w:tc>{content}</w:tc>")).collect();
+            format!("<w:tr><w:trPr>{row_props}</w:trPr>{cells}</w:tr>")
+        })
+        .collect();
+    format!(
+        "<w:tbl><w:tblPr><w:tblBorders>{edges}</w:tblBorders></w:tblPr><w:tblGrid>{columns}</w:tblGrid>{rows}</w:tbl>"
+    )
+}
+
+#[test]
+fn table_text_stands_in_its_column_below_the_rule() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `table-fixed` and
+    // `table-indent-compat15`): text begins 5.4 pt, the built-in cell margin,
+    // and half the border in from the edge of its cell; the rule above a
+    // row takes up its own half point, and so does the one under the table.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let (a, b, c, d) = (cell("a"), cell("b"), cell("c"), cell("d"));
+    let body = table(&[2000, 3000], "", &[&[&a, &b], &[&c, &d]]) + &cell("after");
+    let page = &pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word)[0];
+    let at = |text: &str| page.lines.iter().find(|line| line.text == text).unwrap_or_else(|| panic!("{text}"));
+    assert!(close(at("a").x0, 72.0 + 5.4 + 0.25, 0.01), "{}", at("a").x0);
+    assert!(close(at("b").x0, 72.0 + 100.0 + 5.4 + 0.25, 0.01), "{}", at("b").x0);
+    // 11.2 pt is the ascent of the font with its leading; 13.8 pt its line.
+    assert!(close(at("a").baseline, 72.0 + 0.5 + 11.2, 0.03), "{}", at("a").baseline);
+    assert!(close(at("b").baseline, at("a").baseline, 0.001));
+    assert!(close(at("c").baseline - at("a").baseline, 13.8 + 0.5, 0.01));
+    assert!(close(at("after").baseline - at("c").baseline, 13.8 + 0.5, 0.01));
+}
+
+#[test]
+fn a_row_breaks_between_lines_at_the_foot_of_a_page_unless_told_not_to() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Lines of exactly 20 pt: the page of 697.9 pt holds 34. Thirty of them
+    // come first; a one-row table of ten follows.
+    let line =
+        |text: &str| paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:line="400" w:lineRule="exact"/>"#, text);
+    let filler: String = (0..30).map(|n| line(&format!("filler {n}"))).collect();
+    let cell: String = (0..10).map(|n| line(&format!("cell {n}"))).collect();
+    let on_pages = |row_props: &str| {
+        let body = filler.clone() + &table(&[4000], row_props, &[&[&cell]]);
+        let pages = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word);
+        pages.iter().map(|page| page.lines.iter().filter(|l| l.text.starts_with("cell")).count()).collect::<Vec<_>>()
+    };
+    // Four lines fit under the filler, less the half point of the rule: the
+    // row breaks after its fourth line. (As Word breaks the rows of docx4j's
+    // probe `table-rowsplit`, all 448 lines of which fall where Word has them.)
+    assert_eq!(on_pages(""), [4, 6]);
+    assert_eq!(on_pages("<w:cantSplit/>"), [0, 10]);
+    // A row of exact height does not break either.
+    assert_eq!(on_pages(r#"<w:trHeight w:val="4000" w:hRule="exact"/>"#), [0, 10]);
+}
+
+#[test]
+fn an_empty_paragraph_is_a_line_of_its_own_font() {
+    let Some(fonts) = fonts(&[("Carlito", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `tables-banding-band-size` and
+    // `spacing-empty-heading`): where every default font is the same Western
+    // font, an empty paragraph is one line of that font, 13.44 pt for 11 pt
+    // Carlito, and not the taller line of a Chinese font brought in because
+    // the paragraph mark was taken for East Asian text.
+    let styles = r#"<w:docDefaults><w:rPrDefault><w:rPr>
+        <w:rFonts w:ascii="Carlito" w:hAnsi="Carlito" w:eastAsia="Carlito" w:cs="Carlito"/><w:sz w:val="22"/>
+        </w:rPr></w:rPrDefault></w:docDefaults>"#;
+    let body = "<w:p><w:r><w:t>above</w:t></w:r></w:p><w:p/><w:p/><w:p><w:r><w:t>below</w:t></w:r></w:p>";
+    let page = &pages(&Source { body, styles, ..Source::default() }, &fonts, Model::Word)[0];
+    assert!(close(page.lines[1].baseline - page.lines[0].baseline, 3.0 * 13.44, 0.03), "{:?}", pitches(page));
+}

@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::coverage::Coverage;
 use crate::props::{ParaProps, RunProps};
 use crate::section::Section;
+use crate::table::{CellProps, RowProps, TableProps};
 use crate::xml::{elements, mc_branch, preserves_space, text_of, w_attr, w_name};
 
 /// Tables nested deeper than this are dropped rather than risking the stack on
@@ -106,16 +107,21 @@ impl RevisionKind {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Table {
+    pub props: TableProps,
+    /// `w:tblGrid`: the width of each column, in twips.
+    pub grid: Vec<i32>,
     pub rows: Vec<TableRow>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct TableRow {
+    pub props: RowProps,
     pub cells: Vec<TableCell>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct TableCell {
+    pub props: CellProps,
     pub blocks: Vec<Block>,
 }
 
@@ -288,6 +294,8 @@ fn parse_block(child: Node, in_cell: bool, depth: usize, blocks: &mut Vec<Block>
         // Not modelled yet. Named so that they are not mistaken for wrappers.
         // The final section's properties; `read_body` reads them.
         Some("sectPr") if !in_cell => {}
+        // Read where the cell is.
+        Some("tcPr") if in_cell => {}
         Some("sectPr" | "tcPr" | "altChunk" | "customXmlPr") => coverage.miss(in_cell.then_some("w:tc"), child),
         Some(name) if is_ignorable(name) => {}
         _ => read_unknown(child, None, blocks, coverage, |found, seen| {
@@ -298,6 +306,13 @@ fn parse_block(child: Node, in_cell: bool, depth: usize, blocks: &mut Vec<Block>
 
 fn parse_table(node: Node, depth: usize, coverage: &mut Coverage) -> Table {
     let mut table = Table::default();
+    for child in elements(node) {
+        match w_name(child) {
+            Some("tblPr") => table.props = TableProps::parse(child, coverage),
+            Some("tblGrid") => table.grid = crate::table::parse_grid(child),
+            _ => {}
+        }
+    }
     parse_rows(node, depth, &mut table.rows, coverage);
     table
 }
@@ -306,6 +321,9 @@ fn parse_rows(parent: Node, depth: usize, rows: &mut Vec<TableRow>, coverage: &m
     for_each_child(parent, &mut |child| match w_name(child) {
         Some("tr") => {
             let mut row = TableRow::default();
+            if let Some(props) = elements(child).find(|n| w_name(*n) == Some("trPr")) {
+                row.props = RowProps::parse(props, coverage);
+            }
             parse_cells(child, depth, &mut row.cells, coverage);
             rows.push(row);
         }
@@ -316,7 +334,9 @@ fn parse_rows(parent: Node, depth: usize, rows: &mut Vec<TableRow>, coverage: &m
             }
         }),
         Some("customXml") => parse_rows(child, depth, rows, coverage),
-        Some("tblPr" | "tblGrid" | "tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tbl"), child),
+        // Read by `parse_table`.
+        Some("tblPr" | "tblGrid") => {}
+        Some("tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tbl"), child),
         Some(name) if is_ignorable(name) => {}
         _ => read_unknown(child, Some("w:tbl"), rows, coverage, |found, seen| {
             parse_rows(child, depth, found, seen);
@@ -328,6 +348,9 @@ fn parse_cells(parent: Node, depth: usize, cells: &mut Vec<TableCell>, coverage:
     for_each_child(parent, &mut |child| match w_name(child) {
         Some("tc") => {
             let mut cell = TableCell::default();
+            if let Some(props) = elements(child).find(|n| w_name(*n) == Some("tcPr")) {
+                cell.props = CellProps::parse(props, coverage);
+            }
             parse_blocks(child, depth, &mut cell.blocks, coverage);
             cells.push(cell);
         }
@@ -339,7 +362,9 @@ fn parse_cells(parent: Node, depth: usize, cells: &mut Vec<TableCell>, coverage:
             }
         }),
         Some("customXml") => parse_cells(child, depth, cells, coverage),
-        Some("trPr" | "tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tr"), child),
+        // Read where the row is.
+        Some("trPr") => {}
+        Some("tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tr"), child),
         Some(name) if is_ignorable(name) => {}
         _ => read_unknown(child, Some("w:tr"), cells, coverage, |found, seen| {
             parse_cells(child, depth, found, seen);

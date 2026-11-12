@@ -1,0 +1,206 @@
+//! Properties of tables, their rows and their cells.
+//!
+//! Only what decides where the text of a table goes is read: the widths of
+//! the columns, the margins inside cells, the heights of rows and whether
+//! they may split across pages, and how cells span and merge. Whether
+//! borders are drawn is read, but not their styles; shading, conditional
+//! formatting and floating are not.
+
+use roxmltree::Node;
+use serde::Serialize;
+
+use crate::coverage::Coverage;
+use crate::props::Border;
+use crate::xml::{elements, int, on_off, twips, val, w_attr, w_name};
+
+/// The blank between a cell's edges and its content, in twips.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct CellMargins {
+    pub top: Option<i32>,
+    pub left: Option<i32>,
+    pub bottom: Option<i32>,
+    pub right: Option<i32>,
+}
+
+impl CellMargins {
+    fn parse(node: Node) -> Self {
+        let mut margins = CellMargins::default();
+        for child in elements(node) {
+            // Only lengths: a margin cannot be a percentage.
+            let width = twips(w_attr(child, "w")).filter(|_| w_attr(child, "type") != Some("pct"));
+            match w_name(child) {
+                Some("top") => margins.top = width,
+                Some("left" | "start") => margins.left = width,
+                Some("bottom") => margins.bottom = width,
+                Some("right" | "end") => margins.right = width,
+                _ => {}
+            }
+        }
+        margins
+    }
+
+    fn apply(&mut self, over: &CellMargins) {
+        self.top = over.top.or(self.top);
+        self.left = over.left.or(self.left);
+        self.bottom = over.bottom.or(self.bottom);
+        self.right = over.right.or(self.right);
+    }
+}
+
+/// `w:tblPr`, of a table or of a table style.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct TableProps {
+    pub style_id: Option<String>,
+    /// `w:tblW` when it is a length, in twips.
+    pub width: Option<i32>,
+    /// `w:tblInd`: how far the table starts from the margin, in twips.
+    pub indent: Option<i32>,
+    /// `w:jc`: `left`, `center` or `right`.
+    pub align: Option<String>,
+    /// `w:tblLayout`: the column widths are as stated, not fitted to content.
+    pub fixed_layout: Option<bool>,
+    pub cell_margins: CellMargins,
+    /// The width of the table's borders in eighths of a point: that of the
+    /// widest edge of `w:tblBorders` that is drawn, and 0 when none is.
+    pub borders: Option<i32>,
+}
+
+/// The width of the widest line a set of borders (`w:tblBorders`) draws,
+/// in eighths of a point; 0 when it draws none.
+fn widest_border(node: Node) -> i32 {
+    elements(node).map(Border::parse_edge).filter(Border::is_visible).map(|edge| edge.size.max(0)).max().unwrap_or(0)
+}
+
+/// A length that is a number of twips, not a percentage or `auto`.
+fn length(node: Node) -> Option<i32> {
+    match w_attr(node, "type") {
+        Some("pct" | "auto" | "nil") => None,
+        _ => twips(w_attr(node, "w")),
+    }
+}
+
+impl TableProps {
+    pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
+        let mut props = TableProps::default();
+        for child in elements(node) {
+            match w_name(child) {
+                Some("tblStyle") => props.style_id = val(child).map(str::to_owned),
+                Some("tblW") => props.width = length(child).filter(|w| *w > 0),
+                Some("tblInd") => props.indent = length(child),
+                Some("jc") => props.align = val(child).map(str::to_owned),
+                Some("tblLayout") => props.fixed_layout = Some(w_attr(child, "type") == Some("fixed")),
+                Some("tblCellMar") => props.cell_margins = CellMargins::parse(child),
+                Some("tblBorders") => props.borders = Some(widest_border(child)),
+                // Which conditional formats of the style apply; none are read.
+                Some("tblLook" | "tblStyleRowBandSize" | "tblStyleColBandSize") => {}
+                // Accessibility text.
+                Some("tblCaption" | "tblDescription") => {}
+                _ => coverage.miss(Some("w:tblPr"), child),
+            }
+        }
+        props
+    }
+
+    /// Lays `over` on top of these properties: what it states wins.
+    pub fn apply(&mut self, over: &TableProps) {
+        self.style_id = over.style_id.clone().or(self.style_id.take());
+        self.width = over.width.or(self.width);
+        self.indent = over.indent.or(self.indent);
+        self.align = over.align.clone().or(self.align.take());
+        self.fixed_layout = over.fixed_layout.or(self.fixed_layout);
+        self.cell_margins.apply(&over.cell_margins);
+        self.borders = over.borders.or(self.borders);
+    }
+}
+
+/// `w:trPr`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct RowProps {
+    /// `w:trHeight` in twips: the least the row is tall, or exactly how tall.
+    pub height: Option<i32>,
+    /// The height is exact (`w:hRule="exact"`); content beyond it is cut off.
+    pub exact_height: bool,
+    /// `w:cantSplit`: the row stays whole on one page.
+    pub cant_split: bool,
+    /// `w:tblHeader`: the row repeats at the top of each page of the table.
+    pub header: bool,
+}
+
+impl RowProps {
+    pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
+        let mut props = RowProps::default();
+        for child in elements(node) {
+            match w_name(child) {
+                Some("trHeight") => {
+                    props.height = twips(val(child)).filter(|h| *h > 0);
+                    props.exact_height = w_attr(child, "hRule") == Some("exact");
+                }
+                Some("cantSplit") => props.cant_split = on_off(child),
+                Some("tblHeader") => props.header = on_off(child),
+                // Revision marks on the row itself.
+                Some("ins" | "del") => {}
+                _ => coverage.miss(Some("w:trPr"), child),
+            }
+        }
+        props
+    }
+}
+
+/// How a cell takes part in a vertical merge (`w:vMerge`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerticalMerge {
+    /// The first cell of the merged group, which holds its content.
+    Restart,
+    /// A cell below it, joined to the one above.
+    Continue,
+}
+
+/// `w:tcPr`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CellProps {
+    /// `w:tcW` when it is a length, in twips.
+    pub width: Option<i32>,
+    /// `w:gridSpan`: how many columns of the grid the cell covers.
+    pub grid_span: u32,
+    pub merge: Option<VerticalMerge>,
+    /// Margins of this cell alone, over the table's.
+    pub margins: CellMargins,
+}
+
+impl Default for CellProps {
+    fn default() -> Self {
+        CellProps { width: None, grid_span: 1, merge: None, margins: CellMargins::default() }
+    }
+}
+
+impl CellProps {
+    pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
+        let mut props = CellProps::default();
+        for child in elements(node) {
+            match w_name(child) {
+                Some("tcW") => props.width = length(child).filter(|w| *w > 0),
+                Some("gridSpan") => props.grid_span = int(val(child)).map_or(1, |n| n.clamp(1, 63) as u32),
+                Some("vMerge") => {
+                    props.merge = Some(match val(child) {
+                        Some("restart") => VerticalMerge::Restart,
+                        _ => VerticalMerge::Continue,
+                    });
+                }
+                Some("tcMar") => props.margins = CellMargins::parse(child),
+                // Drawn by the table as a whole for now.
+                Some("tcBorders") => {}
+                _ => coverage.miss(Some("w:tcPr"), child),
+            }
+        }
+        props
+    }
+}
+
+/// `w:tblGrid`: the widths of the table's columns, in twips.
+pub(crate) fn parse_grid(node: Node) -> Vec<i32> {
+    elements(node)
+        .filter(|child| w_name(*child) == Some("gridCol"))
+        .map(|column| twips(w_attr(column, "w")).unwrap_or(0).max(0))
+        .collect()
+}
