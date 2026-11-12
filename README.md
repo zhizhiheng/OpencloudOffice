@@ -6,7 +6,7 @@
 
 **当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文排成页面并输出 SVG，行高与 Word 实测一致）。表格、页眉页脚、图片尚未排版，也还不能编辑。
 
-还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。见 [docs/fidelity.md](docs/fidelity.md)。
+还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 68.6% 的行断行相同（只含正文、字体齐全的文档为 90.6%）。见 [docs/fidelity.md](docs/fidelity.md)。
 
 | 文档 | 内容 |
 |---|---|
@@ -57,9 +57,10 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 | `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试，`score` 对照 Word 的分页记录打分 |
 | `testdata/zh` | 10 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
 | `tools/zh` | 生成中文测试文档，与 LibreOffice 的排版结果对比 |
-| `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照 |
+| `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照；生成带 Word PDF 的探针文档集 |
 | `tools/fidelity` | 还原度记分表和基线 |
 | `tools/word` | 用 Word 批量导出 PDF（Windows），并与我们的排版逐行对照 |
+| `tools/wps` | 用 WPS 批量导出 PDF，作为第二参照 |
 | `tools/fonts` | 下载开源字体；参照渲染用的字体映射 |
 | `docs` | 见上表 |
 

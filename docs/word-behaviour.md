@@ -56,6 +56,8 @@
 | 文字元素内部嵌套的换行和文字元素会被读取，其他嵌套元素被丢弃 | 配对 | `reads_breaks_and_text_nested_inside_text` |
 | 主文档部件的根可以是兼容性标记、正文、段落或未知元素，Word 都能读出内容；分支里有多个文档时依次连接 | 配对 | `reads_main_parts_with_an_unusual_root` |
 | 包内有多个主文档关系时取最后一个 | 配对 | `the_last_main_document_relationship_wins` |
+| 由样式带来的编号：级别取样式自己写的（没写为第一级），不取"指向该样式"的那一级；每一级只属于一个样式，其余样式的段落没有编号也不计数，但仍取该级的缩进 | PDF | `a_list_level_numbers_the_paragraphs_of_one_style_only` |
+| 文档没有主题部件时，西文的主题字体引用取 Office 主题的字体：正文 Calibri，标题 Cambria | PDF | `theme_fonts_fall_back_to_the_office_theme_when_there_is_no_theme_part` |
 
 ## 已知但尚未实现
 
