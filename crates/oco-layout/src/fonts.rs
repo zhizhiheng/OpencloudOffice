@@ -200,6 +200,20 @@ const SUBSTITUTES: &[(&[&str], &[&str], Option<Original>)] = &[
     (&["cambria"], &["caladea"], None),
 ];
 
+/// Fonts that are not shipped and have no replacement of the same widths,
+/// but whose line is known. Their text is measured in another font and so
+/// breaks differently, and the font still counts as missing; but its lines
+/// are as tall as Word makes them, and so is an empty paragraph in it.
+///
+/// Aptos, the default of Word since 2023: 2500 units of a 2048-unit em from
+/// one baseline to the next, 1925 of them above the baseline. (Measured in
+/// Word, docx4j's probe `line-box-typo-metrics`: lines of 11 pt are 13.43 pt
+/// apart, and the first baseline of a page is 10.34 pt down.)
+const LINE_ONLY: &[(&[&str], LineBox)] = &[(
+    &["aptos", "aptos display", "aptos narrow", "aptos light", "aptos semibold", "aptos black", "aptos extrabold"],
+    LineBox { ascent: 1925.0 / 2048.0, descent: 575.0 / 2048.0 },
+)];
+
 const LATIN_FALLBACK: &[&str] = &["liberation serif", "dejavu serif"];
 const CJK_FALLBACK: &[&str] = &["source han serif cn", "source han sans cn", "lxgw wenkai", "wenquanyi zen hei"];
 
@@ -220,6 +234,9 @@ pub struct Choice {
     /// When false the text is set in an unrelated fallback font, so its
     /// widths, and with them the line breaks, cannot be expected to match.
     pub known_family: bool,
+    /// The font asked for is missing and another is drawn, but the line is
+    /// as tall as the missing font's would be: see `LINE_ONLY`.
+    pub line_known: bool,
 }
 
 #[derive(Default)]
@@ -352,10 +369,17 @@ impl FontDb {
         }
         .filter(|_| model == Model::Word);
         // The font's own box, and the box a line of it takes up.
+        let mut line_known = false;
         let (text_box, line_box) = match model {
             Model::LibreOffice => (actual.box_plain, actual.box_plain),
             Model::Word => {
-                let text_box = original.map_or(actual.box_word, |o| o.line_box);
+                let line_only = wanted
+                    .as_deref()
+                    .filter(|w| !self.by_family.contains_key(*w) && !actual.east_asian)
+                    .and_then(|w| LINE_ONLY.iter().find(|(names, _)| names.contains(&w)))
+                    .map(|(_, line)| *line);
+                line_known = original.is_none() && line_only.is_some();
+                let text_box = original.map_or(line_only.unwrap_or(actual.box_word), |o| o.line_box);
                 (text_box, if actual.east_asian { text_box.east_asian() } else { text_box })
             }
         };
@@ -373,6 +397,7 @@ impl FontDb {
             line_box,
             text_box,
             half_width_latin: original.is_some_and(|o| o.half_width_latin),
+            line_known,
         })
     }
 }

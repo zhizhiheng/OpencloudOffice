@@ -56,7 +56,7 @@ impl<'a> Resolver<'a> {
         }
         for style in chain {
             let mut props = style.table.clone();
-            if style.name.as_deref().is_some_and(|name| name.eq_ignore_ascii_case("Normal Table")) {
+            if built_in_table(style) {
                 props.cell_margins = BUILT_IN;
             }
             out.apply(&props);
@@ -75,7 +75,7 @@ impl<'a> Resolver<'a> {
     pub fn paragraph_in(&self, direct: &ParaProps, table: &[&Style]) -> ParaProps {
         let chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Paragraph);
         let mut out = self.styles.default_para.clone();
-        for style in table {
+        for style in table.iter().filter(|style| !built_in_table(style)) {
             out.apply(&style.para);
         }
         for style in &chain {
@@ -167,7 +167,8 @@ impl<'a> Resolver<'a> {
     /// As [`Resolver::run`], for a run inside a table whose styles are `table`.
     pub fn run_in(&self, paragraph_style: Option<&str>, direct: &RunProps, table: &[&Style]) -> RunProps {
         let defaults = &self.styles.default_run;
-        let from_table = flatten(table);
+        let own: Vec<&Style> = table.iter().copied().filter(|style| !built_in_table(style)).collect();
+        let from_table = flatten(&own);
         let from_paragraph = flatten(&self.styles.chain(paragraph_style, StyleKind::Paragraph));
         let character_chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Character);
         let mut from_character = flatten(&character_chain);
@@ -260,4 +261,14 @@ fn toggle(
         return get(defaults);
     }
     Some(specified.into_iter().fold(false, |state, on| state ^ on))
+}
+
+/// The style named Normal Table is Word's own. What a file gives it does
+/// not count: not its cell margins, and not the paragraph and character
+/// formatting it would pass on to the text of tables (measured in Word,
+/// docx4j's probes `tables-normal-table-text` and
+/// `tables-named-normal-table`; a default table style of another name
+/// does pass its formatting on).
+fn built_in_table(style: &Style) -> bool {
+    style.name.as_deref().is_some_and(|name| name.eq_ignore_ascii_case("Normal Table"))
 }

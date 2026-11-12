@@ -72,10 +72,15 @@ def pdf_lines(pdf_path):
                 text = "".join(c["text"] for c in chars)
                 if not text.strip():
                     continue
+                # A line begins and ends with what can be seen: an empty
+                # paragraph leaves a space of its own in Word's PDFs, and
+                # where Word sets one on a line of other text it is not
+                # where that text begins.
+                inked = [c for c in chars if c["text"].strip()]
                 lines.append({
                     "baseline": baseline,
-                    "x0": round(chars[0]["x0"], 2),
-                    "x1": round(chars[-1]["x1"], 2),
+                    "x0": round(inked[0]["x0"], 2),
+                    "x1": round(inked[-1]["x1"], 2),
                     "size": round(max(c["size"] for c in chars), 2),
                     "text": text,
                 })

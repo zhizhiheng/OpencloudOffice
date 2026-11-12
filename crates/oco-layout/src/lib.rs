@@ -858,10 +858,25 @@ impl Builder<'_> {
                 // The cell's margin is measured from the middle of its border,
                 // and the text never stands on the border itself.
                 let inset = (border / 2.0).max(border - left);
+                // A cell has to end with a paragraph. Where that paragraph
+                // is empty and comes right after a table, it is there for
+                // the file's sake only and takes no room. (Word, docx4j's
+                // probe `table-nested-trailing`: its mark is set on the last
+                // row of the table inside.)
+                let blocks = match cell.blocks.as_slice() {
+                    [before @ .., Block::Table(_), Block::Paragraph(last)]
+                        if last.runs.iter().all(|run| run.content.is_empty()) =>
+                    {
+                        &cell.blocks[..before.len() + 1]
+                    }
+                    all => all,
+                };
                 let mut inner = Vec::new();
                 self.depth += 1;
-                self.blocks(&cell.blocks, section, (cell_width - left - right).max(1.0), &mut inner);
+                self.blocks(blocks, section, (cell_width - left - right).max(1.0), &mut inner);
                 self.depth -= 1;
+                // The paragraph left out is a paragraph of the document all the same.
+                self.paragraphs += cell.blocks.len() - blocks.len();
 
                 let mut lines = Vec::new();
                 let (mut previous_after, mut first) = (0.0f32, true);

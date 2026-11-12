@@ -461,6 +461,39 @@ fn normal_table_is_built_in_and_table_styles_format_paragraphs() {
 }
 
 #[test]
+fn what_the_file_gives_normal_table_is_not_passed_on_to_text() {
+    // As measured in Word (docx4j's probes `tables-normal-table-text` and
+    // `tables-named-normal-table`): the paragraph and character formatting
+    // of the style named Normal Table reaches no text, whether the style is
+    // the default or not; that of a default table style by another name does.
+    let styles = |default_name: &str, other_name: &str| {
+        let format = r#"<w:pPr><w:spacing w:after="600"/></w:pPr><w:rPr><w:sz w:val="40"/></w:rPr>"#;
+        format!(
+            r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>
+               <w:style w:type="table" w:default="1" w:styleId="A"><w:name w:val="{default_name}"/>{format}</w:style>
+               <w:style w:type="table" w:styleId="B"><w:name w:val="{other_name}"/>{format}</w:style>
+               <w:style w:type="table" w:styleId="C"><w:name w:val="Based"/><w:basedOn w:val="A"/></w:style>"#
+        )
+    };
+    let got = |styles: &str, table: Option<&str>| {
+        let docx = docx("", styles);
+        let resolver = docx.resolver();
+        let chain = resolver.table_styles(table);
+        let paragraph = resolver.paragraph_in(&ParaProps::default(), &chain);
+        let run = resolver.run_in(None, &RunProps::default(), &chain);
+        (paragraph.spacing.after, run.size)
+    };
+    let (built_in, renamed) = (styles("Normal Table", "Other"), styles("My Default", "Normal Table"));
+    // No style named, one based on the default, and the default itself.
+    for table in [None, Some("C"), Some("A")] {
+        assert_eq!(got(&built_in, table), (None, None), "{table:?}");
+        assert_eq!(got(&renamed, table), (Some(600), Some(40)), "{table:?}");
+    }
+    assert_eq!(got(&built_in, Some("B")), (Some(600), Some(40)));
+    assert_eq!(got(&renamed, Some("B")), (None, None));
+}
+
+#[test]
 fn page_number_fields_are_told_from_the_results_stored_for_them() {
     let field = |kind: &str| format!(r#"<w:r><w:fldChar w:fldCharType="{kind}"/></w:r>"#);
     let code = |text: &str| format!(r#"<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>"#);

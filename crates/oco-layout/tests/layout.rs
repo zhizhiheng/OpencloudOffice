@@ -1252,3 +1252,74 @@ fn a_row_begins_after_the_columns_it_leaves_out() {
     assert!(close(starts(&page, "b") - starts(&page, "a"), 50.0, 0.01));
     assert!(close(starts(&page, "c"), starts(&page, "b"), 0.01), "{}", starts(&page, "c"));
 }
+
+#[test]
+fn the_empty_paragraph_that_ends_a_cell_after_a_table_takes_no_room() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-nested-trailing`): a cell
+    // has to end with a paragraph, and where that is empty and follows a
+    // table it is not given a line. With text in it, it is.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let below = |last: &str| {
+        let inner = table(&[2000], "", &[&[&cell("inner")]]);
+        let content = inner + last;
+        let body = table(&[4000], "", &[&[&content]]) + &cell("after");
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        let at = |text: &str| page.lines.iter().find(|l| l.text == text).unwrap().baseline;
+        at("after") - at("inner")
+    };
+    // The line, the rule under the inner table and the one under the outer.
+    assert!(close(below("<w:p/>"), 13.8 + 0.5 + 0.5, 0.02), "{}", below("<w:p/>"));
+    assert!(close(below(&cell("text")), 2.0 * 13.8 + 0.5 + 0.5, 0.02), "{}", below(&cell("text")));
+}
+
+#[test]
+fn aptos_has_its_own_line_though_the_font_is_missing() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `line-box-typo-metrics`): lines of
+    // 11 pt Aptos are 13.43 pt apart and the first baseline of a page is
+    // 10.34 pt down. The font is not shipped and nothing has its widths, so
+    // the text is measured in another and Aptos is still reported missing;
+    // but the lines, and an empty paragraph, are as tall as Word's.
+    let body = paragraph(&font("Aptos", 22), "", LOREM)
+        + &format!("<w:p><w:pPr><w:rPr>{}</w:rPr></w:pPr></w:p>", font("Aptos", 22))
+        + &paragraph(&font("Aptos", 22), "", "after");
+    let result = layout(&docx(&Source { body: &body, ..Source::default() }), &fonts, &Options { model: Model::Word });
+    let page = &result.pages[0];
+    assert!(close(page.lines[0].baseline, 72.0 + 10.34, 0.01), "{}", page.lines[0].baseline);
+    assert!(close(page.lines[1].baseline - page.lines[0].baseline, 13.43, 0.02), "{:?}", pitches(page));
+    let count = page.lines.len();
+    assert!(close(page.lines[count - 1].baseline - page.lines[count - 2].baseline, 2.0 * 13.43, 0.03));
+    assert_eq!(result.missing_fonts, ["Aptos"]);
+}
+
+#[test]
+fn a_list_label_counts_for_its_ascent_only() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `list-label-baseline`): a label of
+    // 16 pt on text of 11 pt makes its line taller above the baseline, by
+    // what its ascent is taller, and no deeper below it: the line after
+    // follows as it follows any other line of the text.
+    let numbering = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/>
+        <w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>
+        <w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif"/><w:sz w:val="LABEL"/></w:rPr></w:lvl></w:abstractNum>
+        <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#;
+    let steps = |label: u32| {
+        let numbering = numbering.replace("LABEL", &label.to_string());
+        let item = paragraph(
+            &font("Liberation Serif", 22),
+            r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>"#,
+            LOREM,
+        );
+        let body = paragraph(&font("Liberation Serif", 22), "", "above") + &item;
+        let page =
+            pages(&Source { body: &body, numbering: &numbering, ..Source::default() }, &fonts, Model::Word).remove(0);
+        pitches(&page)
+    };
+    // 11 pt Liberation Serif: 12.6 pt a line, 10.27 pt of it above the baseline.
+    let (same, big) = (steps(22), steps(32));
+    assert!(close(same[0], 12.6, 0.03) && close(same[1], 12.6, 0.03), "{same:?}");
+    // A 16 pt label is 14.93 pt above its baseline: 4.67 pt more.
+    assert!(close(big[0], 12.6 + 4.67, 0.05), "{big:?}");
+    assert!(close(big[1], 12.6, 0.03), "{big:?}");
+}

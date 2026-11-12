@@ -543,7 +543,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         };
         let western = named
             .and_then(|name| fonts.choose(Some(name), false, false, 'x', context.model))
-            .filter(|choice| choice.known_family && !fonts.get(choice.font).east_asian);
+            .filter(|choice| (choice.known_family || choice.line_known) && !fonts.get(choice.font).east_asian);
         western.or_else(|| {
             let sample = if named.is_some() { '中' } else { 'x' };
             fonts.choose(named.or(Some("宋体")), false, false, sample, context.model)
@@ -815,10 +815,19 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         };
 
         // Vertical: the tallest ascent and the deepest descent on the line.
+        // A list label counts for its ascent only, where there is text
+        // beside it. (Measured in Word, docx4j's probe `list-label-baseline`:
+        // a label of 16 pt on text of 11 pt raises the line by what its
+        // ascent is taller, and the line below it follows as closely as
+        // below any other line of the text.)
         let (mut ascent, mut descent) = (0.0f32, 0.0f32);
+        let beside_text =
+            context.model == Model::Word && range.iter().any(|a| a.kind == Kind::Char && !a.label && a.ch != ' ');
         for atom in range.iter().filter(|a| a.kind == Kind::Char || range.len() == 1) {
             ascent = ascent.max(atom.ascent);
-            descent = descent.max(atom.descent);
+            if !(atom.label && beside_text) {
+                descent = descent.max(atom.descent);
+            }
         }
         if ascent == 0.0 {
             (ascent, descent) = mark_box;
