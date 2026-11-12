@@ -4578,28 +4578,28 @@
       4,
       4
      ],
-     "placed": 20,
+     "placed": 34,
      "plain": true,
      "same": 44
     },
     "testdata/zh-open/04-report-headings.docx": {
      "dx": 0.0,
-     "dy": 111.74,
+     "dy": 0.07,
      "lines": 52,
      "missing_fonts": [],
      "page_starts": 3,
-     "page_starts_equal": 1,
+     "page_starts_equal": 3,
      "pages": [
       4,
       4
      ],
-     "placed": 3,
+     "placed": 42,
      "plain": true,
      "same": 42
     },
     "testdata/zh-open/05-official-notice.docx": {
      "dx": 0.04,
-     "dy": 2.02,
+     "dy": 0.09,
      "lines": 33,
      "missing_fonts": [],
      "page_starts": 1,
@@ -4608,28 +4608,28 @@
       2,
       2
      ],
-     "placed": 0,
+     "placed": 11,
      "plain": true,
      "same": 22
     },
     "testdata/zh-open/06-contract.docx": {
      "dx": 0.0,
-     "dy": 179.46,
+     "dy": 23.32,
      "lines": 37,
      "missing_fonts": [],
      "page_starts": 1,
      "page_starts_equal": 0,
      "pages": [
       2,
-      3
+      2
      ],
-     "placed": 1,
+     "placed": 11,
      "plain": true,
      "same": 29
     },
     "testdata/zh-open/07-regulation.docx": {
      "dx": 0.0,
-     "dy": 1.27,
+     "dy": 0.12,
      "lines": 26,
      "missing_fonts": [],
      "page_starts": 1,
@@ -4638,22 +4638,22 @@
       2,
       2
      ],
-     "placed": 1,
+     "placed": 21,
      "plain": true,
      "same": 26
     },
     "testdata/zh-open/08-thesis.docx": {
      "dx": 0.0,
-     "dy": 99.47,
+     "dy": 0.11,
      "lines": 45,
      "missing_fonts": [],
      "page_starts": 2,
-     "page_starts_equal": 1,
+     "page_starts_equal": 2,
      "pages": [
       3,
-      4
+      3
      ],
-     "placed": 1,
+     "placed": 23,
      "plain": true,
      "same": 34
     },
@@ -5195,27 +5195,27 @@
     "documents": 10,
     "lines": 540,
     "page_starts": 22,
-    "page_starts_equal": 8,
-    "pages_equal": 7,
-    "placed": 120,
+    "page_starts_equal": 11,
+    "pages_equal": 9,
+    "placed": 236,
     "same": 441
    },
    "covered": {
     "documents": 10,
     "lines": 540,
     "page_starts": 22,
-    "page_starts_equal": 8,
-    "pages_equal": 7,
-    "placed": 120,
+    "page_starts_equal": 11,
+    "pages_equal": 9,
+    "placed": 236,
     "same": 441
    },
    "plain": {
     "documents": 10,
     "lines": 540,
     "page_starts": 22,
-    "page_starts_equal": 8,
-    "pages_equal": 7,
-    "placed": 120,
+    "page_starts_equal": 11,
+    "pages_equal": 9,
+    "placed": 236,
     "same": 441
    }
   }

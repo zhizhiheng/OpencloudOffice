@@ -211,6 +211,10 @@ pub struct Choice {
     pub fake_bold: bool,
     pub fake_italic: bool,
     pub line_box: LineBox,
+    /// The font's own ascent and descent, before the enlargement Word gives
+    /// the lines of East Asian fonts. Where a line's height is fixed, this
+    /// is what places the text within it.
+    pub text_box: LineBox,
     pub half_width_latin: bool,
     /// The font asked for, or its designated replacement, was available.
     /// When false the text is set in an unrelated fallback font, so its
@@ -347,15 +351,12 @@ impl FontDb {
             None => None,
         }
         .filter(|_| model == Model::Word);
-        let line_box = match model {
-            Model::LibreOffice => actual.box_plain,
+        // The font's own box, and the box a line of it takes up.
+        let (text_box, line_box) = match model {
+            Model::LibreOffice => (actual.box_plain, actual.box_plain),
             Model::Word => {
-                let line_box = original.map_or(actual.box_word, |o| o.line_box);
-                if actual.east_asian {
-                    line_box.east_asian()
-                } else {
-                    line_box
-                }
+                let text_box = original.map_or(actual.box_word, |o| o.line_box);
+                (text_box, if actual.east_asian { text_box.east_asian() } else { text_box })
             }
         };
         let known_family = wanted.as_deref().is_none_or(|w| {
@@ -370,6 +371,7 @@ impl FontDb {
             fake_bold: bold && !actual.bold,
             fake_italic: italic && !actual.italic,
             line_box,
+            text_box,
             half_width_latin: original.is_some_and(|o| o.half_width_latin),
         })
     }

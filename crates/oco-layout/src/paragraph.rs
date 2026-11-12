@@ -455,6 +455,8 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     };
     let mark_box = mark_choice
         .map_or((mark_size, mark_size * 0.3), |c| (c.line_box.ascent * mark_size, c.line_box.descent * mark_size));
+    let mark_text_box = mark_choice
+        .map_or((mark_size, mark_size * 0.3), |c| (c.text_box.ascent * mark_size, c.text_box.descent * mark_size));
 
     // Character units follow the paragraph's own font size.
     let char_width =
@@ -729,8 +731,23 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         let single = ((ascent + descent) * 600.0 / 72.0).round() * 72.0 / 600.0;
         let (height, baseline, needed) = match (rule, line_value, grid) {
             ("exact", Some(line), _) => {
+                // The text sits in a line of fixed height by the proportions
+                // of the fonts themselves, not of the enlarged box that
+                // East Asian fonts get when a line takes its height from
+                // them (measured in WPS Office: 12 pt Chinese text in a
+                // 20 pt line; for other fonts the two are the same, as
+                // measured in Word).
                 let height = line * TWIP;
-                (height, height * ascent / (ascent + descent), height)
+                let (mut above, mut below) = (0.0f32, 0.0f32);
+                for atom in range.iter().filter(|a| a.kind == Kind::Char || range.len() == 1) {
+                    let (line_box, text_box) = (atom.choice.line_box, atom.choice.text_box);
+                    above = above.max(atom.ascent * text_box.ascent / line_box.ascent);
+                    below = below.max(atom.descent * text_box.descent / line_box.descent);
+                }
+                if above == 0.0 {
+                    (above, below) = mark_text_box;
+                }
+                (height, height * above / (above + below), height)
             }
             (_, _, Some(pitch)) => {
                 // On a grid a line takes as many grid rows as its text needs,
@@ -743,8 +760,20 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                         let height = base.max(((line * TWIP) / pitch - 0.001).ceil() * pitch);
                         (height, height - base + centred, height)
                     }
-                    // A multiple's extra leading goes below, as it does off the grid.
-                    (_, Some(line)) if line >= 240.0 => (base * line / 240.0, centred, base),
+                    // A multiple counts grid rows, not the rows the text
+                    // takes: one and a half lines is a row and a half,
+                    // or the text's own rows where that is more
+                    // (measured in WPS Office: 12 pt text that needs two
+                    // 15.6 pt rows is 31.2 pt apart at 1.5 lines, not
+                    // 46.8). The extra leading goes below, as off the grid.
+                    // LibreOffice multiplies the text's rows.
+                    (_, Some(line)) if line >= 240.0 => {
+                        let height = match context.model {
+                            Model::Word => base.max(pitch * line / 240.0),
+                            Model::LibreOffice => base * line / 240.0,
+                        };
+                        (height, centred, base)
+                    }
                     (_, Some(line)) => (base * line / 240.0, centred.min(base * line / 240.0), base * line / 240.0),
                     _ => (base, centred, base),
                 }

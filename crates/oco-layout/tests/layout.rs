@@ -241,6 +241,48 @@ fn a_document_grid_does_not_double_the_lines_of_substituted_fonts() {
 }
 
 #[test]
+fn on_a_grid_a_multiple_counts_grid_rows_not_the_rows_of_the_text() {
+    let Some(fonts) = fonts(&[("Source Han Serif CN", '中')]) else { return };
+    // As measured in WPS Office (testdata/zh-open/06-contract): 12 pt text
+    // that needs two rows of a 15.6 pt grid is 31.2 pt apart at one and a
+    // half lines, the two rows it needs anyway, and not three. 宋体 at
+    // 12 pt needs one row, and a row and a half is 23.4 pt.
+    let grid = r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1800" w:bottom="1440" w:left="1800"/><w:docGrid w:type="lines" w:linePitch="312"/>"#;
+    for (family, line, expected) in [
+        ("Source Han Serif CN", 240, 31.2),
+        ("Source Han Serif CN", 360, 31.2),
+        ("Source Han Serif CN", 720, 46.8),
+        ("宋体", 360, 23.4),
+        ("宋体", 480, 31.2),
+    ] {
+        let body = paragraph(&font(family, 24), &format!(r#"<w:spacing w:line="{line}" w:lineRule="auto"/>"#), HANZI);
+        let source = Source { body: &body, section: grid, ..Source::default() };
+        for pitch in pitches(&pages(&source, &fonts, Model::Word)[0]) {
+            assert!(close(pitch, expected, 0.01), "{family} at line={line}: {pitch}, expected {expected}");
+        }
+    }
+}
+
+#[test]
+fn text_sits_in_a_line_of_fixed_height_by_its_fonts_own_proportions() {
+    let Some(fonts) = fonts(&[("Source Han Serif CN", '中'), ("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS Office (testdata/zh-open/07-regulation): in a line
+    // of exactly 20 pt the baseline of 思源宋体 is at 1151/1437 of the
+    // height, the font's own ascent and descent, although a line that takes
+    // its height from the font is given 30% more room. For a Western font
+    // the two are the same (Liberation Serif: its ascent with the external
+    // leading above it, 1912 of 2355 units), which is what Word shows.
+    for (family, text, share) in
+        [("Source Han Serif CN", HANZI, 1151.0 / 1437.0), ("Liberation Serif", LOREM, 1912.0 / 2355.0)]
+    {
+        let body = paragraph(&font(family, 24), r#"<w:spacing w:line="400" w:lineRule="exact"/>"#, text);
+        let page = &pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word)[0];
+        assert!(close(page.lines[0].baseline, 72.0 + 20.0 * share, 0.02), "{family}: {}", page.lines[0].baseline);
+        assert!(close(pitches(page)[0], 20.0, 0.01));
+    }
+}
+
+#[test]
 fn space_between_paragraphs_is_the_larger_of_after_and_before() {
     let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
     // Measured from Word 365's PDF (docx4j golden `spacing-adjacent`): the
