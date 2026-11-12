@@ -53,6 +53,9 @@ pub struct TableProps {
     pub style_id: Option<String>,
     /// `w:tblW` when it is a length, in twips.
     pub width: Option<i32>,
+    /// `w:tblW` when it is a share of the room there is, in fiftieths of a
+    /// percent: 5000 is all of it.
+    pub width_share: Option<i32>,
     /// `w:tblInd`: how far the table starts from the margin, in twips.
     pub indent: Option<i32>,
     /// `w:jc`: `left`, `center` or `right`.
@@ -82,13 +85,30 @@ fn length(node: Node) -> Option<i32> {
     }
 }
 
+/// A width that is a share of what is available, in fiftieths of a percent.
+/// It is written as that number, or as a percentage with its sign.
+fn share(node: Node) -> Option<i32> {
+    if w_attr(node, "type") != Some("pct") {
+        return None;
+    }
+    let written = w_attr(node, "w")?.trim();
+    let share = match written.strip_suffix('%') {
+        Some(percent) => (percent.trim().parse::<f32>().ok()? * 50.0).round() as i32,
+        None => int(Some(written))?,
+    };
+    (share > 0).then_some(share)
+}
+
 impl TableProps {
     pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
         let mut props = TableProps::default();
         for child in elements(node) {
             match w_name(child) {
                 Some("tblStyle") => props.style_id = val(child).map(str::to_owned),
-                Some("tblW") => props.width = length(child).filter(|w| *w > 0),
+                Some("tblW") => {
+                    props.width = length(child).filter(|w| *w > 0);
+                    props.width_share = share(child);
+                }
                 Some("tblInd") => props.indent = length(child),
                 Some("jc") => props.align = val(child).map(str::to_owned),
                 Some("tblLayout") => props.fixed_layout = Some(w_attr(child, "type") == Some("fixed")),
@@ -112,7 +132,9 @@ impl TableProps {
     /// Lays `over` on top of these properties: what it states wins.
     pub fn apply(&mut self, over: &TableProps) {
         self.style_id = over.style_id.clone().or(self.style_id.take());
-        self.width = over.width.or(self.width);
+        if over.width.is_some() || over.width_share.is_some() {
+            (self.width, self.width_share) = (over.width, over.width_share);
+        }
         self.indent = over.indent.or(self.indent);
         self.align = over.align.clone().or(self.align.take());
         self.fixed_layout = over.fixed_layout.or(self.fixed_layout);
@@ -133,6 +155,14 @@ pub struct RowProps {
     pub cant_split: bool,
     /// `w:tblHeader`: the row repeats at the top of each page of the table.
     pub header: bool,
+    /// `w:gridBefore`, `w:gridAfter`: how many columns of the grid the row
+    /// leaves empty before its first cell and after its last.
+    pub grid_before: u32,
+    pub grid_after: u32,
+    /// `w:wBefore`, `w:wAfter`: how wide those columns are to be, in twips,
+    /// where the row says.
+    pub width_before: Option<i32>,
+    pub width_after: Option<i32>,
 }
 
 impl RowProps {
@@ -144,6 +174,10 @@ impl RowProps {
                     props.height = twips(val(child)).filter(|h| *h > 0);
                     props.exact_height = w_attr(child, "hRule") == Some("exact");
                 }
+                Some("gridBefore") => props.grid_before = int(val(child)).map_or(0, |n| n.clamp(0, 63) as u32),
+                Some("gridAfter") => props.grid_after = int(val(child)).map_or(0, |n| n.clamp(0, 63) as u32),
+                Some("wBefore") => props.width_before = length(child).filter(|w| *w > 0),
+                Some("wAfter") => props.width_after = length(child).filter(|w| *w > 0),
                 Some("cantSplit") => props.cant_split = on_off(child),
                 Some("tblHeader") => props.header = on_off(child),
                 // Revision marks on the row itself.
@@ -170,6 +204,8 @@ pub enum VerticalMerge {
 pub struct CellProps {
     /// `w:tcW` when it is a length, in twips.
     pub width: Option<i32>,
+    /// `w:tcW` when it is a share of the table's width, in fiftieths of a percent.
+    pub width_share: Option<i32>,
     /// `w:gridSpan`: how many columns of the grid the cell covers.
     pub grid_span: u32,
     pub merge: Option<VerticalMerge>,
@@ -179,7 +215,7 @@ pub struct CellProps {
 
 impl Default for CellProps {
     fn default() -> Self {
-        CellProps { width: None, grid_span: 1, merge: None, margins: CellMargins::default() }
+        CellProps { width: None, width_share: None, grid_span: 1, merge: None, margins: CellMargins::default() }
     }
 }
 
@@ -188,7 +224,10 @@ impl CellProps {
         let mut props = CellProps::default();
         for child in elements(node) {
             match w_name(child) {
-                Some("tcW") => props.width = length(child).filter(|w| *w > 0),
+                Some("tcW") => {
+                    props.width = length(child).filter(|w| *w > 0);
+                    props.width_share = share(child);
+                }
                 Some("gridSpan") => props.grid_span = int(val(child)).map_or(1, |n| n.clamp(1, 63) as u32),
                 Some("vMerge") => {
                     props.merge = Some(match val(child) {

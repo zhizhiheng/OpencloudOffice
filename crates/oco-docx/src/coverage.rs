@@ -25,6 +25,17 @@ impl Coverage {
         *self.unsupported.entry(key).or_default() += 1;
     }
 
+    /// How many pictures, shapes, embedded objects and formulas have been
+    /// passed over so far: things that take room on the page.
+    pub(crate) fn objects(&self) -> usize {
+        const OBJECTS: [&str; 5] = ["w:drawing", "w:pict", "w:object", "m:oMath", "mc:AlternateContent"];
+        self.unsupported
+            .iter()
+            .filter(|(name, _)| OBJECTS.iter().any(|object| name.ends_with(object)))
+            .map(|(_, count)| count)
+            .sum()
+    }
+
     /// Records something other than a single unmodelled element.
     pub(crate) fn note(&mut self, what: &str) {
         *self.unsupported.entry(what.to_owned()).or_default() += 1;

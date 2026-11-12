@@ -378,6 +378,39 @@ fn reads_what_decides_where_a_tables_text_goes() {
 }
 
 #[test]
+fn reads_what_an_auto_fit_table_is_fitted_by() {
+    let body = r#"
+        <w:tbl>
+          <w:tblPr><w:tblW w:w="2500" w:type="pct"/></w:tblPr>
+          <w:tblGrid><w:gridCol w:w="1000"/><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid>
+          <w:tr>
+            <w:trPr><w:gridBefore w:val="1"/><w:wBefore w:w="900" w:type="dxa"/><w:gridAfter w:val="1"/></w:trPr>
+            <w:tc><w:tcPr><w:tcW w:w="40%" w:type="pct"/></w:tcPr>
+              <w:p><w:r><w:t>text</w:t></w:r><w:r><w:drawing/></w:r></w:p></w:tc>
+          </w:tr>
+          <w:tr>
+            <w:tc><w:tcPr><w:tcW w:w="1500" w:type="pct"/></w:tcPr><w:p><w:r><w:t>text</w:t></w:r></w:p></w:tc>
+            <w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>
+          </w:tr>
+        </w:tbl>"#;
+    let docx = docx(body, "");
+    let Block::Table(table) = &docx.document.body[0] else { panic!("a table") };
+    // A width in fiftieths of a percent is a share of the room, not a length.
+    assert_eq!((table.props.width, table.props.width_share), (None, Some(2500)));
+    let (first, second) = (&table.rows[0], &table.rows[1]);
+    // The row leaves out a column at either end, and says how wide the first is.
+    assert_eq!((first.props.grid_before, first.props.grid_after), (1, 1));
+    assert_eq!((first.props.width_before, first.props.width_after), (Some(900), None));
+    // A percentage may be written with its sign.
+    assert_eq!((first.cells[0].props.width, first.cells[0].props.width_share), (None, Some(2000)));
+    assert_eq!(second.cells[0].props.width_share, Some(1500));
+    assert_eq!((second.cells[1].props.width, second.cells[1].props.width_share), (None, None));
+    // A picture is passed over, and the cell says that not all of it was read.
+    assert!(first.cells[0].unmeasured && !second.cells[0].unmeasured);
+    assert_eq!(docx.coverage.ranked().into_iter().collect::<Vec<_>>(), [("w:r/w:drawing", 1)]);
+}
+
+#[test]
 fn normal_table_is_built_in_and_table_styles_format_paragraphs() {
     // As measured in Word (docx4j's probe `styles-table-default`): the style
     // named Normal Table has Word's own cell margins whatever the file gives

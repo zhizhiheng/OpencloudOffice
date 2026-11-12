@@ -39,19 +39,29 @@ def pdf_lines(pdf_path):
                 rows.setdefault(baseline, []).append(ch)
             # Superscripts, subscripts and raised text have baselines of their
             # own. Fold each such fragment into the line it sits beside: the
-            # nearest row within half its height that holds more characters.
+            # nearest row within half its height that holds more characters
+            # and has some of them right next to the fragment. (Text in the
+            # next cell of a table, or in a table inside a cell, can be at
+            # nearly the same height in a smaller size, but it is a cell
+            # margin away.)
             #
-            # So can the figures in a line of Chinese: WPS sets the two fonts
-            # a fraction of a point apart. Rows that close are one line
-            # whichever holds more. (Rows further apart with as many
-            # characters each are left alone: they may be the cells of a
-            # table row in different sizes.)
+            # Rows a fraction of a point apart are one line whichever holds
+            # more and however far apart they stand: WPS sets the figures in
+            # a line of Chinese that little off the baseline of the rest.
             height = {b: max(c["size"] for c in chars) for b, chars in rows.items()}
+
+            def beside(fragment, host, reach):
+                left, right = min(c["x0"] for c in fragment), max(c["x1"] for c in fragment)
+                return any(max(c["x0"] - right, left - c["x1"]) < reach for c in host)
+
             for baseline in sorted(rows, key=lambda b: (len(rows[b]), b)):
                 near = [
                     b for b in rows
-                    if b != baseline and abs(b - baseline) < 0.6 * height[b]
-                    and (len(rows[b]) > len(rows[baseline]) or abs(b - baseline) < 0.25)
+                    if b != baseline and (
+                        abs(b - baseline) < 0.25
+                        or abs(b - baseline) < 0.6 * height[b] and len(rows[b]) > len(rows[baseline])
+                        and beside(rows[baseline], rows[b], 0.5 * height[b])
+                    )
                 ]
                 if near:
                     host = min(near, key=lambda b: abs(b - baseline))

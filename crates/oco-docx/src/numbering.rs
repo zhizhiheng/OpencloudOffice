@@ -222,7 +222,7 @@ pub struct Label {
 /// Running list counters for one story (the body, a header, a text box ...).
 ///
 /// Call [`Counters::next`] once per numbered paragraph, in document order.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Counters {
     /// Current number of each level, per abstract definition. All instances
     /// of one definition share these, so a second list built on the same

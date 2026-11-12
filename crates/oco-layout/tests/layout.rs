@@ -33,6 +33,8 @@ struct Source<'a> {
     /// Headers and footers: the relationship id each is named by, whether it
     /// is a `header` or a `footer`, and its content.
     stories: &'a [(&'a str, &'a str, &'a str)],
+    /// The application the document says saved it; none if empty.
+    saved_by: &'a str,
 }
 
 impl Default for Source<'_> {
@@ -44,6 +46,7 @@ impl Default for Source<'_> {
             section: r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>"#,
             settings: r#"<w:compat><w:compatSetting w:name="compatibilityMode" w:val="15"/></w:compat>"#,
             stories: &[],
+            saved_by: "",
         }
     }
 }
@@ -78,6 +81,13 @@ fn docx(source: &Source) -> Docx {
         ("word/numbering.xml".to_owned(), format!("<w:numbering {W}>{}</w:numbering>", source.numbering)),
         ("word/settings.xml".to_owned(), format!("<w:settings {W}>{}</w:settings>", source.settings)),
     ];
+    if !source.saved_by.is_empty() {
+        let properties = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+        parts.push((
+            "docProps/app.xml".to_owned(),
+            format!(r#"<Properties xmlns="{properties}"><Application>{}</Application></Properties>"#, source.saved_by),
+        ));
+    }
     for (id, kind, content) in source.stories {
         let root = if *kind == "header" { "hdr" } else { "ftr" };
         parts.push((format!("word/{id}.xml"), format!("<w:{root} {W}>{content}</w:{root}>")));
@@ -585,7 +595,8 @@ fn a_line_squeezes_its_punctuation_to_take_one_more_character() {
     }
 }
 
-/// A table with half-point borders whose cells hold the given paragraphs.
+/// A table of fixed layout with half-point borders, whose cells hold the
+/// given paragraphs.
 fn table(grid: &[u32], row_props: &str, rows: &[&[&str]]) -> String {
     let edges: String = ["top", "left", "bottom", "right", "insideH", "insideV"]
         .map(|e| format!(r#"<w:{e} w:val="single" w:sz="4"/>"#))
@@ -599,7 +610,7 @@ fn table(grid: &[u32], row_props: &str, rows: &[&[&str]]) -> String {
         })
         .collect();
     format!(
-        "<w:tbl><w:tblPr><w:tblBorders>{edges}</w:tblBorders></w:tblPr><w:tblGrid>{columns}</w:tblGrid>{rows}</w:tbl>"
+        r#"<w:tbl><w:tblPr><w:tblBorders>{edges}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>{columns}</w:tblGrid>{rows}</w:tbl>"#
     )
 }
 
@@ -904,4 +915,249 @@ fn the_border_under_a_header_is_part_of_its_height() {
     // Five lines of 13.8 pt from 35.4 pt down: 104.4 pt.
     assert!(close(top_of_body(""), 104.4, 0.02), "{}", top_of_body(""));
     assert!(close(top_of_body(rule), 104.4 + 1.75, 0.02), "{}", top_of_body(rule));
+}
+
+/// A table with half-point borders that is fitted to its content. Each cell
+/// is given by its properties (the content of `w:tcPr`) and its content.
+fn fitted(table_props: &str, grid: &[u32], rows: &[&[(&str, &str)]]) -> String {
+    let edges: String = ["top", "left", "bottom", "right", "insideH", "insideV"]
+        .map(|e| format!(r#"<w:{e} w:val="single" w:sz="4"/>"#))
+        .concat();
+    let columns: String = grid.iter().map(|w| format!(r#"<w:gridCol w:w="{w}"/>"#)).collect();
+    let rows: String = rows
+        .iter()
+        .map(|cells| {
+            let cells: String = cells
+                .iter()
+                .map(|(props, content)| format!("<w:tc><w:tcPr>{props}</w:tcPr>{content}</w:tc>"))
+                .collect();
+            format!("<w:tr>{cells}</w:tr>")
+        })
+        .collect();
+    format!(
+        "<w:tbl><w:tblPr>{table_props}<w:tblBorders>{edges}</w:tblBorders></w:tblPr><w:tblGrid>{columns}</w:tblGrid>{rows}</w:tbl>"
+    )
+}
+
+/// Where the line that starts with `text` begins.
+fn starts(page: &Page, text: &str) -> f32 {
+    page.lines.iter().find(|line| line.text.starts_with(text)).unwrap_or_else(|| panic!("no line {text:?}")).x0
+}
+
+const LONG: &str = "The quick brown fox jumps over the lazy dog while the farmer watches from the gate. Lorem ipsum \
+    dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+
+#[test]
+fn an_auto_fit_table_shares_its_room_by_what_its_columns_ask() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-width`, where the grid is
+    // three equal columns that Word does not follow). A column is at least
+    // its longest word and would like to be its longest paragraph, with the
+    // cell margins; each gets its least and the same fraction of the rest
+    // of what it would like. "short" keeps its 24 pt and 10.8 pt of margins;
+    // "medium length cell" breaks after "medium" or after "length"
+    // according to the room.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let lay = |width: &str| {
+        let (short, medium, long, a) = (cell("short"), cell("medium length cell"), cell(LONG), cell("a"));
+        let auto = r#"<w:tcW w:w="0" w:type="auto"/>"#;
+        let body = fitted(
+            width,
+            &[3000, 3000, 3000],
+            &[&[(auto, &short), (auto, &medium), (auto, &long)], &[(auto, &a), (auto, &a), (auto, &a)]],
+        );
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        (starts(&page, "short"), starts(&page, "medium"), starts(&page, "The quick"))
+    };
+    // Text begins 5.4 pt and half the border in from the middle of the rule.
+    let wanted = |found: (f32, f32, f32), third: f32| {
+        assert!(close(found.0, 77.66, 0.03) && close(found.1, 112.46, 0.03) && close(found.2, third, 0.1), "{found:?}");
+    };
+    // The table takes all the room: the width of the text less its border.
+    wanted(lay(r#"<w:tblW w:w="0" w:type="auto"/>"#), 178.49);
+    wanted(lay(r#"<w:tblW w:w="0" w:type="auto"/><w:tblLayout w:type="autofit"/>"#), 178.49);
+    // A stated width, and half the room.
+    wanted(lay(r#"<w:tblW w:w="5000" w:type="dxa"/>"#), 167.93);
+    wanted(lay(r#"<w:tblW w:w="2500" w:type="pct"/>"#), 166.58);
+}
+
+#[test]
+fn stated_cell_widths_decide_before_the_grid_and_before_content() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `table-grid-vs-tcw-compat15` and
+    // `table-autofit`).
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let width = |twips: u32| format!(r#"<w:tcW w:w="{twips}" w:type="dxa"/>"#);
+    let lay = |table: &str, cells: [&str; 3], texts: [&str; 3]| {
+        let (a, b, c) = (cell(texts[0]), cell(texts[1]), cell(texts[2]));
+        let body = fitted(table, &[2000, 3000, 4000], &[&[(cells[0], &a), (cells[1], &b), (cells[2], &c)]]);
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        // The left edges of the second and third columns, from the first's.
+        let at = |text: &str| starts(&page, &text[..5]) - starts(&page, &texts[0][..5]);
+        (at(texts[1]), at(texts[2]))
+    };
+    let nine = r#"<w:tblW w:w="9000" w:type="dxa"/>"#;
+    let wraps = [
+        "D c1 left edge here; this text wraps.",
+        "D c2 left edge here; this text wraps.",
+        "D c3 left edge here; this text wraps.",
+    ];
+    // The cells say 200, 150 and 100 pt; the grid says the reverse.
+    let (w4, w3, w2) = (width(4000), width(3000), width(2000));
+    let stated = lay(nine, [&w4, &w3, &w2], wraps);
+    assert!(close(stated.0, 200.0, 0.05) && close(stated.1, 350.0, 0.05), "{stated:?}");
+    // A column that states nothing has what the table has left, 100 pt,
+    // though its text on one line would be 180 pt: it gives way before
+    // the columns that state their widths do.
+    let rest = lay(nine, ["", &w3, &w4], wraps);
+    assert!(close(rest.0, 100.0, 0.05) && close(rest.1, 250.0, 0.05), "{rest:?}");
+    // Stated widths that come to more than the room, 582.2 pt for 450.8 pt,
+    // give way like any others: each column keeps its least, 42.46 pt for
+    // the longest word here, and the same fraction of the rest. Word has
+    // the columns 111.89 pt and 168.79 pt wide.
+    let (w28, w44, w4444) = (width(2800), width(4400), width(4444));
+    let over = lay(r#"<w:tblW w:w="0" w:type="auto"/>"#, [&w28, &w44, &w4444], wraps);
+    assert!(close(over.0, 111.89, 0.15) && close(over.1, 111.89 + 168.79, 0.2), "{over:?}");
+    // The room is less by the table's indent: it reaches from where the
+    // indent puts it to the far margin. (Word, in a document it saved,
+    // LibreOffice's fdo78904_fileHang: one column stated at 442.8 pt in a
+    // text 432 pt wide is 414 pt behind an indent of 18 pt.) Here the
+    // third column is down to its least, 42.46 pt, and the two that state
+    // 237.5 pt each share the rest of 450.8 pt less 18 pt.
+    let w475 = width(4750);
+    let indented =
+        lay(r#"<w:tblW w:w="0" w:type="auto"/><w:tblInd w:w="360" w:type="dxa"/>"#, [&w475, &w475, ""], wraps);
+    assert!(close(indented.0, (450.8 - 18.0 - 42.46) / 2.0, 0.1), "{indented:?}");
+}
+
+#[test]
+fn a_cell_that_spans_columns_widens_them_in_proportion() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-span`): the first column
+    // holds "one" and "first" and would be 30.1 pt, but the cell that spans
+    // it and the second asks for more than the two together, and what is
+    // lacking goes to each in proportion to what it asks itself. Word has
+    // the columns 31.32, 384.80 and 34.82 pt wide.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let auto = r#"<w:tcW w:w="0" w:type="auto"/>"#;
+    let two = format!(r#"{auto}<w:gridSpan w:val="2"/>"#);
+    let texts = [
+        cell("spans two columns: Pagination is the process of dividing a document into discrete pages, either electronic pages or printed pages."),
+        cell("third"),
+        cell("one"),
+        cell("two Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."),
+        cell("three"),
+        cell("first"),
+        cell("spans two: A typesetting engine must decide where each line ends and where each page ends; small differences accumulate."),
+    ];
+    let body = fitted(
+        r#"<w:tblW w:w="0" w:type="auto"/>"#,
+        &[3000, 3000, 3000],
+        &[
+            &[(&two, &texts[0]), (auto, &texts[1])],
+            &[(auto, &texts[2]), (auto, &texts[3]), (auto, &texts[4])],
+            &[(auto, &texts[5]), (&two, &texts[6])],
+        ],
+    );
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert!(close(starts(&page, "one"), 77.66, 0.03), "{}", starts(&page, "one"));
+    assert!(close(starts(&page, "two Ut"), 108.98, 0.05), "{}", starts(&page, "two Ut"));
+    assert!(close(starts(&page, "three"), 493.78, 0.15), "{}", starts(&page, "three"));
+}
+
+#[test]
+fn a_table_in_a_cell_is_part_of_what_the_cell_holds() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-nested`): a table of 150 pt
+    // in a cell makes the column 150 pt, its border and the cell's margins
+    // wide, 161.3 pt, however little text there is beside it; and its lines
+    // are lines of the page like any others.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let (a, b) = (cell("in a"), cell("in b"));
+    let inner = table(&[1500, 1500], "", &[&[&a, &b]]);
+    let (left, middle, right) = (cell(LONG), inner + &cell("after"), cell("outer right"));
+    let auto = r#"<w:tcW w:w="0" w:type="auto"/>"#;
+    let body =
+        fitted(r#"<w:tblW w:w="0" w:type="auto"/>"#, &[3000; 3], &[&[(auto, &left), (auto, &middle), (auto, &right)]]);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    // From the text of the inner table's first cell to that of the next
+    // column: 150 pt and the two cell margins between the tables' edges.
+    let across = starts(&page, "outer") - starts(&page, "in a");
+    assert!(close(across, 150.0 + 5.4 + 0.25, 0.05), "{across}");
+    assert!(close(starts(&page, "in b") - starts(&page, "in a"), 75.0, 0.01));
+
+    // A table that states its width keeps it though it is fitted to its
+    // content: the column cannot be less. (Word, in a document it saved,
+    // POI's bug65738: a table stated at 210.5 pt in a column stated at
+    // 432 pt that had to give way left the column 314.6 pt.)
+    let stated = fitted(r#"<w:tblW w:w="3000" w:type="dxa"/>"#, &[1500, 1500], &[&[(auto, &a), (auto, &b)]]);
+    let (left, middle, right) = (cell(LONG), stated + &cell("after"), cell("outer right"));
+    let body =
+        fitted(r#"<w:tblW w:w="0" w:type="auto"/>"#, &[3000; 3], &[&[(auto, &left), (auto, &middle), (auto, &right)]]);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let across = starts(&page, "outer") - starts(&page, "in a");
+    assert!(close(across, 150.0 + 5.4 + 0.25, 0.05), "{across}");
+}
+
+#[test]
+fn columns_that_cannot_all_have_their_least_are_cut_down_alike() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Word, in a document it saved (LibreOffice's test document tdf123054):
+    // where the words are too long for the page the table is still as wide
+    // as the room there is, and the words are broken.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let (short, long) = (cell(&"e".repeat(60)), cell(&"e".repeat(120)));
+    let auto = r#"<w:tcW w:w="0" w:type="auto"/>"#;
+    let body =
+        fitted(r#"<w:tblW w:w="0" w:type="auto"/>"#, &[3000; 2], &[&[(auto, &short), (auto, &long)]]) + &cell("after");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    // 60 and 120 letters of 5.33 pt with 10.8 pt of margins: 330.4 and
+    // 650.0 pt, cut down to the 450.8 pt there are.
+    let second = page.lines.iter().map(|line| line.x0).fold(0.0, f32::max);
+    assert!(close(second - 77.65, 450.8 * 330.4 / 980.4, 0.3), "{second}");
+    assert!(page.lines.len() > 4, "the words are broken across lines");
+}
+
+#[test]
+fn what_cannot_be_measured_has_the_width_word_left_in_the_grid() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let cell = |family: &str, text: &str| paragraph(&font(family, 24), "", text);
+    let auto = r#"<w:tcW w:w="0" w:type="auto"/>"#;
+    let second = |first: &str, saved_by: &str| {
+        let other = cell("Liberation Serif", "other");
+        let body = fitted(r#"<w:tblW w:w="0" w:type="auto"/>"#, &[3000, 2000], &[&[(auto, first), (auto, &other)]]);
+        let page = pages(&Source { body: &body, saved_by, ..Source::default() }, &fonts, Model::Word).remove(0);
+        starts(&page, "other") - 77.65
+    };
+    // A picture is not read, so the cell's content cannot be measured: the
+    // column is as wide as the grid has it, 150 pt, not as its one word.
+    let picture = "<w:p><w:r><w:t>word</w:t></w:r><w:r><w:drawing/></w:r></w:p>";
+    assert!(close(second(picture, ""), 150.0, 0.05), "{}", second(picture, ""));
+    assert!(second(&cell("Liberation Serif", "word"), "") < 40.0);
+    // Text in a font that is missing is measured in another, which may be
+    // wider or narrower. In a document that Word saved the grid is Word's
+    // own measure; in any other it is not to be relied on.
+    let missing = cell("No Such Font", "word");
+    assert!(close(second(&missing, "Microsoft Office Word"), 150.0, 0.05));
+    assert!(second(&missing, "") < 40.0);
+}
+
+#[test]
+fn a_row_begins_after_the_columns_it_leaves_out() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let width = |twips: u32| format!(r#"<w:tcW w:w="{twips}" w:type="dxa"/>"#);
+    let (w1, w2) = (width(1000), width(2000));
+    let (a, b, c) = (cell("a"), cell("b"), cell("c"));
+    let table = fitted(r#"<w:tblW w:w="0" w:type="auto"/>"#, &[1000, 2000], &[&[(&w1, &a), (&w2, &b)], &[(&w2, &c)]]);
+    // The second row has one cell, in the second column.
+    let body = table.replacen(
+        "<w:tr><w:tc><w:tcPr><w:tcW w:w=\"2000\"",
+        "<w:tr><w:trPr><w:gridBefore w:val=\"1\"/></w:trPr><w:tc><w:tcPr><w:tcW w:w=\"2000\"",
+        1,
+    );
+    assert_ne!(body, table);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert!(close(starts(&page, "b") - starts(&page, "a"), 50.0, 0.01));
+    assert!(close(starts(&page, "c"), starts(&page, "b"), 0.01), "{}", starts(&page, "c"));
 }

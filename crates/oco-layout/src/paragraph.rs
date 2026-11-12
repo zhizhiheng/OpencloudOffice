@@ -70,6 +70,10 @@ pub struct Line {
     pub page_break_after: bool,
     /// How many pieces of the paragraph's [`crate::content`] come before this line.
     pub offset: usize,
+    /// The lines of text this line is made of, where it is not one itself
+    /// but the row of a table inside a cell: each with its baseline from
+    /// the line's top, where it begins and ends, and its text.
+    pub parts: Vec<(f32, f32, f32, String)>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -427,7 +431,70 @@ fn next_stop(x: f32, stops: &[TabStop], hanging_at: Option<f32>, default: f32) -
     }
 }
 
-pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
+/// How wide a paragraph is, indents included: at the least, with a line
+/// ended wherever one may end, and at the most, with every line as long as
+/// its text. These are what an auto-fit table sizes its columns by.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Extent {
+    pub min: f32,
+    pub max: f32,
+    /// Some of the text was measured in a font standing in for one that is
+    /// neither installed nor has a replacement of the same widths.
+    pub guessed: bool,
+}
+
+pub fn measure(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Extent {
+    let props = paragraph.props;
+    let builder = prepare(paragraph, fonts, context);
+    let (styles, atoms) = (&builder.styles, &builder.atoms);
+    let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
+    let char_width =
+        atoms.iter().find(|a| !a.label && a.kind == Kind::Char).map_or(mark_size, |a| styles[a.style].size);
+    let (left, right, first) = indents(props, char_width);
+    let hanging_at = (first < 0.0 && context.hanging_tab).then_some(left);
+    let kinsoku = props.kinsoku != Some(false);
+
+    // `x` runs along a line that is never broken; `word` is the width of
+    // what has come since the last place a line could end.
+    let (mut min, mut max) = (0.0f32, 0.0f32);
+    let (mut x, mut ink) = (left + first, left + first);
+    let (mut word, mut word_ink, mut word_origin) = (0.0f32, 0.0f32, left + first);
+    for (i, atom) in atoms.iter().enumerate() {
+        let breaks_before = i > 0
+            && match (atoms[i - 1].kind, atom.kind) {
+                (Kind::Char, Kind::Char) => text::can_break_between(atoms[i - 1].ch, atom.ch, kinsoku),
+                _ => true,
+            };
+        if breaks_before {
+            min = min.max(word_origin + word_ink);
+            (word, word_ink, word_origin) = (0.0, 0.0, left);
+        }
+        match atom.kind {
+            Kind::LineBreak | Kind::PageBreak => {
+                max = max.max(ink);
+                (x, ink) = (left, left);
+            }
+            Kind::Tab => {
+                x = next_stop(x, &props.tabs, hanging_at, context.default_tab).0;
+                // A tab is not ink, but what it leads to starts after it.
+                (word_origin, word, word_ink) = (x.min(left + first.max(0.0)).max(left), 0.0, 0.0);
+            }
+            Kind::Char => {
+                x += atom.advance;
+                word += atom.advance;
+                if atom.ch != ' ' && atom.ch != '\u{3000}' {
+                    (ink, word_ink) = (x, word);
+                }
+            }
+        }
+    }
+    min = min.max(word_origin + word_ink);
+    max = max.max(ink);
+    Extent { min: min + right, max: max.max(min) + right, guessed: !builder.missing_fonts.is_empty() }
+}
+
+/// The paragraph's characters, each with its font and its width.
+fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -> Builder<'a> {
     let props = paragraph.props;
     let mut builder =
         Builder { fonts, context, styles: Vec::new(), atoms: Vec::new(), after_cjk: false, missing_fonts: Vec::new() };
@@ -450,7 +517,12 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     }
     let auto_space = props.auto_space_de != Some(false);
     builder.adjust_neighbours(auto_space);
-    let Builder { styles, mut atoms, missing_fonts, .. } = builder;
+    builder
+}
+
+pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
+    let props = paragraph.props;
+    let Builder { styles, mut atoms, missing_fonts, .. } = prepare(paragraph, fonts, context);
 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);

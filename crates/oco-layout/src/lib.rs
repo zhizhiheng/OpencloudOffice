@@ -302,6 +302,13 @@ impl Row {
                         (line.baseline, line.x0) = (y + part.line.baseline, part.x + part.line.x0);
                     }
                     line.x1 = line.x1.max(part.x + part.line.x1);
+                    if part.line.parts.is_empty() {
+                        let own = (y + part.line.baseline, part.x + part.line.x0, part.x + part.line.x1);
+                        line.parts.push((own.0, own.1, own.2, part.line.text.clone()));
+                    }
+                    for (baseline, x0, x1, text) in part.line.parts.drain(..) {
+                        line.parts.push((y + baseline, part.x + x0, part.x + x1, text));
+                    }
                     texts.push(part.line.text);
                 }
                 line.items.append(&mut part.line.items);
@@ -337,6 +344,28 @@ struct Builder<'a> {
     missing_fonts: Vec<String>,
     /// The styles of the table being laid out, base first; empty outside tables.
     table_styles: Vec<&'a oco_docx::Style>,
+    /// What the columns of the tables measured so far ask for, by the
+    /// table's address: a table inside a cell is measured for the cell's
+    /// column and again when it is laid out.
+    demands: HashMap<usize, Demands>,
+    /// How many tables the content being laid out is inside.
+    depth: usize,
+}
+
+/// What the columns of an auto-fit table ask for, each across its whole
+/// width, cell margins included.
+#[derive(Debug, Clone, Default)]
+struct Demands {
+    /// The least a column can be: the widest thing in it that no line can
+    /// be broken inside.
+    min: Vec<f32>,
+    /// What a column would like to be: the width its cells state, or else
+    /// that of the longest paragraph in it set on one line.
+    pref: Vec<f32>,
+    /// A cell states the column's width (`w:tcW`).
+    stated: Vec<bool>,
+    /// The share of the table a cell states for the column, where one does.
+    share: Vec<Option<f32>>,
 }
 
 fn context(docx: &Docx, section: &Section, width: f32, model: Model) -> paragraph::Context {
@@ -386,15 +415,10 @@ fn portable_bullet(text: &str, props: &mut RunProps) -> String {
 }
 
 impl Builder<'_> {
-    /// Lays out a paragraph. `next` is the paragraph right after it, if
-    /// there is one: paragraphs with the same borders share them.
-    fn paragraph(
-        &mut self,
-        source: &oco_docx::Paragraph,
-        next: Option<&oco_docx::Paragraph>,
-        section: &Section,
-        width: f32,
-    ) -> Unit {
+    /// What a paragraph is laid out from: its properties, runs and label,
+    /// all resolved. Counts the paragraph if it is a list item.
+    fn resolved<'s>(&mut self, source: &'s oco_docx::Paragraph) -> (ParaProps, paragraph::Paragraph<'s>) {
+        static NONE: std::sync::OnceLock<ParaProps> = std::sync::OnceLock::new();
         let props: ParaProps = self.resolver.paragraph_in(&source.props, &self.table_styles);
         let style = source.props.style_id.as_deref();
         let label = self.resolver.list_level(&props).and_then(|(num_id, ilvl, level)| {
@@ -411,7 +435,48 @@ impl Builder<'_> {
             .map(|run| (self.resolver.run_in(style, &run.props, &self.table_styles), run.content.as_slice()))
             .collect();
         let mark = self.resolver.run_in(style, &source.mark_props, &self.table_styles);
-        let input = paragraph::Paragraph { props: &props, runs, mark, label };
+        // The caller puts the properties in; they cannot be borrowed from here.
+        let placeholder = NONE.get_or_init(ParaProps::default);
+        (props, paragraph::Paragraph { props: placeholder, runs, mark, label })
+    }
+
+    /// The least and the most room these blocks need across, each laid out
+    /// on its own: the widest of their paragraphs either way. Nothing is
+    /// counted: list items measured here are numbered again when laid out.
+    fn extent(&mut self, blocks: &[Block], section: &Section) -> paragraph::Extent {
+        let (paragraphs, counters) = (self.paragraphs, self.counters.clone());
+        let mut extent = paragraph::Extent::default();
+        for block in blocks {
+            let own = match block {
+                Block::Paragraph(source) => {
+                    let (props, input) = self.resolved(source);
+                    let input = paragraph::Paragraph { props: &props, ..input };
+                    let ctx = context(self.docx, section, f32::MAX / 4.0, self.options.model);
+                    paragraph::measure(&input, self.fonts, &ctx)
+                }
+                Block::Table(table) => self.table_extent(table, section),
+            };
+            extent = paragraph::Extent {
+                min: extent.min.max(own.min),
+                max: extent.max.max(own.max),
+                guessed: extent.guessed || own.guessed,
+            };
+        }
+        (self.paragraphs, self.counters) = (paragraphs, counters);
+        extent
+    }
+
+    /// Lays out a paragraph. `next` is the paragraph right after it, if
+    /// there is one: paragraphs with the same borders share them.
+    fn paragraph(
+        &mut self,
+        source: &oco_docx::Paragraph,
+        next: Option<&oco_docx::Paragraph>,
+        section: &Section,
+        width: f32,
+    ) -> Unit {
+        let (props, input) = self.resolved(source);
+        let input = paragraph::Paragraph { props: &props, ..input };
         let ctx = context(self.docx, section, width, self.options.model);
         let mut laid = paragraph::layout(&input, self.fonts, &ctx);
         for name in std::mem::take(&mut laid.missing_fonts) {
@@ -475,26 +540,288 @@ impl Builder<'_> {
         }
     }
 
-    /// A table: one unit for each row. Columns are as wide as the table's
-    /// grid says (or, without one, as the cells say, or equal); they are not
-    /// fitted to their content as Word fits the columns of an auto-fit table.
+    /// What each column of `table` asks for, from its cells: see [`Demands`].
+    ///
+    /// A cell of one column speaks for that column. A cell that spans
+    /// several is heard after those: where the columns together fall short
+    /// of what it asks, they grow in proportion to what they ask themselves
+    /// (measured in Word, docx4j's probe `table-span`), or, where the cell
+    /// states its width and some of its columns have none stated, those
+    /// columns take up the difference.
+    fn demands(&mut self, table: &oco_docx::Table, props: &oco_docx::TableProps, section: &Section) -> Demands {
+        let key = table as *const oco_docx::Table as usize;
+        if let Some(known) = self.demands.get(&key) {
+            return known.clone();
+        }
+        let styles = self.resolver.table_styles(table.props.style_id.as_deref());
+        let outer = std::mem::replace(&mut self.table_styles, styles);
+        let points = |twips: Option<i32>| twips.unwrap_or(0) as f32 * TWIP;
+        let count = column_count(table);
+        let mut min = vec![0.0f32; count];
+        let mut content = vec![0.0f32; count];
+        let mut stated: Vec<Option<f32>> = vec![None; count];
+        let mut share: Vec<Option<f32>> = vec![None; count];
+        let mut spanning = Vec::new();
+        let grid = |i: usize| table.grid.get(i).map_or(0.0, |w| (*w).max(0) as f32 * TWIP);
+        self.depth += 1;
+        for row in &table.rows {
+            // Columns the row leaves empty at either end are as wide as it says.
+            let before = (row.props.grid_before as usize).min(count);
+            let after = (row.props.grid_after as usize).min(count - before);
+            for (first, span, width) in
+                [(0, before, row.props.width_before), (count - after, after, row.props.width_after)]
+            {
+                if let Some(width) = width.filter(|_| span > 0) {
+                    spanning.push((first, span, 0.0, width as f32 * TWIP, true));
+                }
+            }
+            let mut column = before;
+            for cell in &row.cells {
+                let span = (cell.props.grid_span as usize).clamp(1, count.saturating_sub(column).max(1));
+                if column >= count {
+                    break;
+                }
+                let margins = points(cell.props.margins.left.or(props.cell_margins.left))
+                    + points(cell.props.margins.right.or(props.cell_margins.right));
+                let extent = self.extent(&cell.blocks, section);
+                let (mut least, most) = (extent.min + margins, extent.max + margins);
+                let mut width = cell.props.width.map(|w| w as f32 * TWIP);
+                // What is in the cell cannot all be measured: there is a
+                // picture or the like in it, or, in a document Word saved,
+                // text in a font that is missing. The grid is what Word
+                // last made of the table with those in it, and stands in.
+                let from_grid: f32 = (column..column + span).map(grid).sum();
+                let unknown = cell.unmeasured || extent.guessed && self.docx.recorded.from_word();
+                if unknown && from_grid > 0.0 {
+                    (least, width) = (least.max(from_grid), Some(from_grid));
+                }
+                if span == 1 {
+                    min[column] = min[column].max(least);
+                    content[column] = content[column].max(most);
+                    if let Some(width) = width {
+                        stated[column] = Some(stated[column].map_or(width, |known: f32| known.max(width)));
+                    }
+                    if let Some(part) = cell.props.width_share {
+                        let part = part as f32 / 5000.0;
+                        share[column] = Some(share[column].map_or(part, |known: f32| known.max(part)));
+                    }
+                } else {
+                    spanning.push((column, span, least, width.unwrap_or(most).max(least), width.is_some()));
+                }
+                column += span;
+            }
+        }
+        self.depth -= 1;
+        self.table_styles = outer;
+
+        let mut pref: Vec<f32> = (0..count).map(|i| stated[i].unwrap_or(content[i]).max(min[i])).collect();
+        let mut is_stated: Vec<bool> = stated.iter().map(Option::is_some).collect();
+        for (first, span, least, wanted, states) in spanning {
+            let columns = first..first + span;
+            // What the columns lack is shared out by `weights`.
+            let grow = |values: &mut [f32], target: f32, weights: Vec<f32>| {
+                let lacking = target - values.iter().sum::<f32>();
+                let total: f32 = weights.iter().sum();
+                if lacking > 0.0 {
+                    for (value, weight) in values.iter_mut().zip(&weights) {
+                        *value += lacking * if total > 0.0 { weight / total } else { 1.0 / span as f32 };
+                    }
+                }
+            };
+            let by_wish: Vec<f32> = pref[columns.clone()].to_vec();
+            grow(&mut min[columns.clone()], least, by_wish.clone());
+            let open: Vec<usize> = columns.clone().filter(|i| !is_stated[*i]).collect();
+            if states && !open.is_empty() {
+                // Columns whose width nothing has stated yet make up the
+                // cell's stated width, in the proportions of the grid.
+                let lacking = wanted - pref[columns.clone()].iter().sum::<f32>();
+                let total: f32 = open.iter().map(|i| grid(*i)).sum();
+                for i in &open {
+                    if lacking > 0.0 {
+                        pref[*i] += lacking * if total > 0.0 { grid(*i) / total } else { 1.0 / open.len() as f32 };
+                    }
+                    is_stated[*i] = true;
+                }
+            } else {
+                grow(&mut pref[columns.clone()], wanted, by_wish);
+            }
+            for i in columns {
+                pref[i] = pref[i].max(min[i]);
+            }
+        }
+        let demands = Demands { min, pref, stated: is_stated, share };
+        self.demands.insert(key, demands.clone());
+        demands
+    }
+
+    /// The widths of the columns of a table of fixed layout: those of its
+    /// grid. Where the grid gives none, a column is as wide as a cell in it
+    /// states, and failing that the columns share `room` equally.
+    fn fixed_columns(table: &oco_docx::Table, room: f32) -> Vec<f32> {
+        let count = column_count(table);
+        let mut widths: Vec<f32> =
+            (0..count).map(|i| table.grid.get(i).map_or(0.0, |w| (*w).max(0) as f32 * TWIP)).collect();
+        if widths.iter().all(|w| *w > 0.0) {
+            return widths;
+        }
+        for row in &table.rows {
+            let mut column = 0usize;
+            for cell in &row.cells {
+                let span = (cell.props.grid_span as usize).max(1);
+                let columns = column..(column + span).min(count);
+                if let Some(width) = cell.props.width.filter(|_| columns.clone().all(|i| widths[i] <= 0.0)) {
+                    for i in columns.clone() {
+                        widths[i] = width as f32 * TWIP / columns.len().max(1) as f32;
+                    }
+                }
+                column += span;
+            }
+        }
+        let known: f32 = widths.iter().sum();
+        let unknown = widths.iter().filter(|w| **w <= 0.0).count();
+        for width in widths.iter_mut().filter(|w| **w <= 0.0) {
+            *width = if known > 0.0 { (room - known).max(0.0) / unknown as f32 } else { room / count as f32 };
+        }
+        widths
+    }
+
+    /// The widths of a table's columns, each from the middle of one border
+    /// to the middle of the next, where there is `width` for the table.
+    ///
+    /// A table of fixed layout has the columns of its grid. Any other is
+    /// fitted to its content, as measured in Word (docx4j's probes
+    /// `table-width`, `table-autofit`, `table-span`, `table-nested`,
+    /// `table-grid-vs-tcw-*` and `table-grid-overwide-auto`; the grid such a
+    /// table carries is what Word last made of it, and is not consulted):
+    ///
+    /// - Each column asks for the width a cell states for it, or else for
+    ///   that of its longest paragraph on one line; and it cannot be less
+    ///   than its longest word. Cell margins are part of both.
+    /// - The table is as wide as it states, even where that is wider than
+    ///   the page. One that states nothing is as wide as its columns ask,
+    ///   up to the room there is: the text's width less the border, or,
+    ///   before Word 2013, plus the cell margins that hang out either side.
+    /// - Where the columns ask for more than the table has, those without a
+    ///   stated width give way first: each gives up the same fraction of
+    ///   the difference between what it asks and its least. Columns with a
+    ///   stated width give way, in the same manner, only once the others
+    ///   are at their least.
+    ///
+    /// What happens to room left over in a table that states its width is
+    /// not measured: here it goes to the columns without a stated width,
+    /// or to all of them, in proportion to what they ask.
+    fn columns(
+        &mut self,
+        table: &oco_docx::Table,
+        props: &oco_docx::TableProps,
+        section: &Section,
+        width: f32,
+    ) -> Vec<f32> {
+        if props.fixed_layout == Some(true) {
+            return Self::fixed_columns(table, width);
+        }
+        let points = |twips: Option<i32>| twips.unwrap_or(0) as f32 * TWIP;
+        let border = props.borders.unwrap_or(0).max(0) as f32 / 8.0;
+        // What a share of the room is a share of. Before Word 2013 a table
+        // in the body hung out into the page margins by its cell margins.
+        let room = if self.hangs() {
+            width + points(props.cell_margins.left) + points(props.cell_margins.right)
+        } else {
+            width - border
+        };
+        // A table that states no width may reach from where its indent
+        // puts it to the far margin.
+        let available = room - points(props.indent);
+        let whole = props.width.map(|w| w as f32 * TWIP).or(props.width_share.map(|s| s as f32 / 5000.0 * room));
+        let Demands { min, mut pref, mut stated, share } = self.demands(table, props, section);
+        // A share of the table is a stated width once the table's is known.
+        // Shares that come to more than the whole are cut from the last.
+        let mut left = 1.0f32;
+        for (i, part) in share.iter().enumerate() {
+            if let Some(part) = part.filter(|_| !stated[i]) {
+                let part = part.min(left);
+                left -= part;
+                pref[i] = (part * whole.unwrap_or(available)).max(min[i]);
+                stated[i] = true;
+            }
+        }
+        let asked: f32 = pref.iter().sum();
+        let least: f32 = min.iter().sum();
+        let target = whole.unwrap_or(asked.min(available));
+        let mut widths = pref.clone();
+        if least > target {
+            // Not even the least fits. The table grows as far as the room
+            // goes; beyond that every column is cut down alike, and words
+            // are broken to fit.
+            let room = least.min(target.max(available));
+            widths = min.iter().map(|w| w * room / least).collect();
+        } else if asked < target {
+            let open: Vec<usize> = (0..widths.len()).filter(|i| !stated[*i]).collect();
+            let chosen: Vec<usize> = if open.is_empty() { (0..widths.len()).collect() } else { open };
+            let total: f32 = chosen.iter().map(|i| pref[*i]).sum();
+            for i in &chosen {
+                widths[*i] += (target - asked) * if total > 0.0 { pref[*i] / total } else { 1.0 / chosen.len() as f32 };
+            }
+        } else if asked > target {
+            let mut excess = asked - target;
+            for yielding in [false, true] {
+                let group: Vec<usize> = (0..widths.len()).filter(|i| stated[*i] == yielding).collect();
+                let give: f32 = group.iter().map(|i| pref[*i] - min[*i]).sum();
+                if give <= 0.0 {
+                    continue;
+                }
+                let taken = excess.min(give);
+                for i in group {
+                    widths[i] -= (pref[i] - min[i]) * taken / give;
+                }
+                excess -= taken;
+            }
+        }
+        widths
+    }
+
+    /// The table being laid out hangs out into the page margins by its cell
+    /// margins, so that its text lines up with the text around it: the way
+    /// of Word before 2013, for tables that are not inside another.
+    fn hangs(&self) -> bool {
+        self.docx.settings.compatibility_mode < 15 && self.depth == 0
+    }
+
+    /// The least and the most room a table needs across, as content of a
+    /// cell: its columns' demands, or its width if that is fixed, with the
+    /// halves of its border that stand outside its first and last column.
+    fn table_extent(&mut self, table: &oco_docx::Table, section: &Section) -> paragraph::Extent {
+        let props = self.resolver.table(&table.props);
+        let around = props.borders.unwrap_or(0).max(0) as f32 / 8.0 + props.indent.unwrap_or(0).max(0) as f32 * TWIP;
+        if props.fixed_layout == Some(true) {
+            let whole: f32 = Self::fixed_columns(table, 0.0).iter().sum();
+            return paragraph::Extent { min: whole + around, max: whole + around, guessed: false };
+        }
+        let demands = self.demands(table, &props, section);
+        let (least, asked): (f32, f32) = (demands.min.iter().sum(), demands.pref.iter().sum());
+        match props.width {
+            // A table that states its width keeps it: the column it stands
+            // in cannot be narrower (measured against the grids Word left
+            // in documents it saved, as with all of this).
+            Some(stated) => {
+                let whole = (stated as f32 * TWIP).max(least) + around;
+                paragraph::Extent { min: whole, max: whole, guessed: false }
+            }
+            None => paragraph::Extent { min: least + around, max: asked + around, guessed: false },
+        }
+    }
+
+    /// A table: one unit for each row, with the columns [`Builder::columns`] gives.
     fn table(&mut self, table: &oco_docx::Table, section: &Section, width: f32, units: &mut Vec<Unit>) {
         let props = self.resolver.table(&table.props);
+        let widths = self.columns(table, &props, section, width);
         let styles = self.resolver.table_styles(table.props.style_id.as_deref());
         let outer = std::mem::replace(&mut self.table_styles, styles);
         let points = |twips: Option<i32>| twips.unwrap_or(0) as f32 * TWIP;
         let margins = props.cell_margins;
         let border = props.borders.unwrap_or(0).max(0) as f32 / 8.0;
 
-        let columns = table.rows.iter().map(|row| row.cells.len()).max().unwrap_or(1).max(1);
-        let grid: Vec<f32> = table.grid.iter().map(|w| *w as f32 * TWIP).collect();
-        let stated = |row: &oco_docx::TableRow| row.cells.iter().map(|c| points(c.props.width)).sum::<f32>();
-        let table_width = if grid.iter().sum::<f32>() > 0.0 {
-            grid.iter().sum()
-        } else {
-            table.rows.iter().map(stated).fold(0.0, f32::max).max(0.0)
-        };
-        let table_width = if table_width > 0.0 { table_width } else { width };
+        let table_width: f32 = widths.iter().sum();
         let mut origin = points(props.indent)
             + match props.align.as_deref() {
                 Some("center") => (width - table_width) / 2.0,
@@ -503,24 +830,18 @@ impl Builder<'_> {
             };
         // Before Word 2013 a table was moved out so that its text, not its
         // edge, stood at the margin.
-        if self.docx.settings.compatibility_mode < 15 {
+        if self.hangs() {
             origin -= points(margins.left);
         }
-
         for (number, row) in table.rows.iter().enumerate() {
             let mut cells = Vec::with_capacity(row.cells.len());
-            let mut edges = vec![origin];
-            let (mut x, mut column) = (origin, 0usize);
+            let skipped = row.props.grid_before as usize;
+            let start = origin + widths.iter().take(skipped).sum::<f32>();
+            let mut edges = vec![start];
+            let (mut x, mut column) = (start, skipped);
             for cell in &row.cells {
-                let span = cell.props.grid_span as usize;
-                let from_grid: f32 = grid.iter().skip(column).take(span).sum();
-                let cell_width = if from_grid > 0.0 {
-                    from_grid
-                } else if cell.props.width.is_some() {
-                    points(cell.props.width)
-                } else {
-                    table_width / columns as f32
-                };
+                let span = (cell.props.grid_span as usize).max(1);
+                let cell_width: f32 = widths.iter().skip(column).take(span).sum();
                 let (left, right) = (
                     points(cell.props.margins.left.or(margins.left)),
                     points(cell.props.margins.right.or(margins.right)),
@@ -529,7 +850,9 @@ impl Builder<'_> {
                 // and the text never stands on the border itself.
                 let inset = (border / 2.0).max(border - left);
                 let mut inner = Vec::new();
+                self.depth += 1;
                 self.blocks(&cell.blocks, section, (cell_width - left - right).max(1.0), &mut inner);
+                self.depth -= 1;
 
                 let mut lines = Vec::new();
                 let (mut previous_after, mut first) = (0.0f32, true);
@@ -587,9 +910,12 @@ impl Builder<'_> {
     fn story(&mut self, blocks: &[Block], section: &Section, numbers: Option<&(String, String)>) -> Vec<Unit> {
         let filled = numbers.map(|numbers| with_numbers(blocks, numbers));
         let (paragraphs, counters) = (self.paragraphs, std::mem::take(&mut self.counters));
+        // Tables measured here may be copies that are gone when this returns,
+        // and their addresses may then be those of other tables.
+        let measured = std::mem::take(&mut self.demands);
         let mut units = Vec::new();
         self.blocks(filled.as_deref().unwrap_or(blocks), section, section.text_width() as f32 * TWIP, &mut units);
-        (self.paragraphs, self.counters) = (paragraphs, counters);
+        (self.paragraphs, self.counters, self.demands) = (paragraphs, counters, measured);
         units
     }
 
@@ -660,6 +986,33 @@ impl Builder<'_> {
     }
 }
 
+/// Notes where the text of a line placed at (`x`, `y`) is: the line itself,
+/// or the lines it is made of if it is the row of a table inside a cell.
+fn record(line: &paragraph::Line, x: f32, y: f32, lines: &mut Vec<PlacedLine>) {
+    if line.text.trim().is_empty() {
+        return;
+    }
+    if line.parts.is_empty() {
+        lines.push(PlacedLine {
+            baseline: y + line.baseline,
+            x0: x + line.x0,
+            x1: x + line.x1,
+            text: line.text.clone(),
+        });
+    }
+    for (baseline, x0, x1, text) in &line.parts {
+        lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
+    }
+}
+
+/// How many columns a table has: those of its grid, or as many as its
+/// longest row covers.
+fn column_count(table: &oco_docx::Table) -> usize {
+    let covered =
+        |row: &oco_docx::TableRow| row.cells.iter().map(|cell| (cell.props.grid_span as usize).max(1)).sum::<usize>();
+    table.rows.iter().map(covered).max().unwrap_or(0).max(table.grid.len()).max(1)
+}
+
 pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     // Section properties sit on the last paragraph of each section, so the
     // page setup of a paragraph is that of the next section break at or
@@ -677,6 +1030,8 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         paragraphs: 0,
         missing_fonts: Vec::new(),
         table_styles: Vec::new(),
+        demands: HashMap::new(),
+        depth: 0,
     };
     let mut units = Vec::new();
     // Line breaks depend on the text width, which this prototype takes from
@@ -870,14 +1225,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                             item.translate(left + part.x, line_y);
                             page.items.push(item);
                         }
-                        if !part.line.text.trim().is_empty() {
-                            page.lines.push(PlacedLine {
-                                baseline: line_y + part.line.baseline,
-                                x0: left + part.x + part.line.x0,
-                                x1: left + part.x + part.line.x1,
-                                text: part.line.text.clone(),
-                            });
-                        }
+                        record(&part.line, left + part.x, line_y, &mut page.lines);
                         line_y += part.line.height;
                     }
                     *cursor = end;
@@ -928,14 +1276,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 item.translate(left + unit.left, y);
                 page.items.push(item);
             }
-            if !line.text.trim().is_empty() {
-                page.lines.push(PlacedLine {
-                    baseline: y + line.baseline,
-                    x0: left + line.x0,
-                    x1: left + line.x1,
-                    text: line.text.clone(),
-                });
-            }
+            record(line, left, y, &mut page.lines);
             y += line.height;
             page_is_empty = false;
             if line.page_break_after {
@@ -975,19 +1316,12 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             let (placed, height) = stack(builder.story(blocks, section, Some(&numbers)));
             let origin =
                 if footer { page.height - section.footer as f32 * TWIP - height } else { section.header as f32 * TWIP };
-            for (offset, line) in placed {
-                for mut item in line.items {
+            for (offset, mut line) in placed {
+                for mut item in std::mem::take(&mut line.items) {
                     item.translate(left, origin + offset);
                     page.items.push(item);
                 }
-                if !line.text.trim().is_empty() {
-                    lines.push(PlacedLine {
-                        baseline: origin + offset + line.baseline,
-                        x0: left + line.x0,
-                        x1: left + line.x1,
-                        text: line.text,
-                    });
-                }
+                record(&line, left, origin + offset, &mut lines);
             }
         }
         page.lines.append(&mut lines);

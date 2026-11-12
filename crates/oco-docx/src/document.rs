@@ -145,6 +145,10 @@ pub struct TableRow {
 pub struct TableCell {
     pub props: CellProps,
     pub blocks: Vec<Block>,
+    /// The cell holds something that takes room and is not read: a
+    /// picture, a shape, an embedded object or a formula. How wide its
+    /// content is cannot then be told from `blocks`.
+    pub unmeasured: bool,
 }
 
 impl Run {
@@ -382,7 +386,9 @@ fn parse_cells(parent: Node, depth: usize, cells: &mut Vec<TableCell>, coverage:
             if let Some(props) = elements(child).find(|n| w_name(*n) == Some("tcPr")) {
                 cell.props = CellProps::parse(props, coverage);
             }
+            let objects = coverage.objects();
             parse_blocks(child, depth, &mut cell.blocks, coverage);
+            cell.unmeasured = coverage.objects() > objects;
             cells.push(cell);
         }
         // ... and so can whole cells, which is how Word stores a form field
