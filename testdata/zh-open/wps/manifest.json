@@ -1,0 +1,113 @@
+{
+ "application": "WPS Office for Linux 11.1.0.11723",
+ "export": "SaveAs2 with wdFormatPDF",
+ "documents": {
+  "01-font-sizes.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSans",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "02-character-effects.docx": {
+   "pages": 2,
+   "fonts": [
+    "Inter-Regular",
+    "LXGWWenKai-Regular",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "LiberationSerif-BoldItalic",
+    "LiberationSerif-Italic",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular",
+    "WenQuanYiZenHei"
+   ]
+  },
+  "03-indents-and-spacing.docx": {
+   "pages": 4,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "04-report-headings.docx": {
+   "pages": 4,
+   "fonts": [
+    "DejaVuSans",
+    "DejaVuSans-Bold",
+    "LiberationSerif",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "05-official-notice.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "06-contract.docx": {
+   "pages": 2,
+   "fonts": [
+    "DejaVuSans",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "07-regulation.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "08-thesis.docx": {
+   "pages": 3,
+   "fonts": [
+    "DejaVuSans",
+    "DejaVuSans-Bold",
+    "LiberationSans-Bold",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "09-number-formats.docx": {
+   "pages": 9,
+   "fonts": [
+    "DejaVuSans",
+    "LiberationSans",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular",
+    "WenQuanYiZenHei"
+   ]
+  },
+  "10-punctuation.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  }
+ }
+}

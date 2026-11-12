@@ -4536,7 +4536,158 @@
      "same": 272
     }
    },
-   "wps": {}
+   "wps": {
+    "testdata/zh-open/01-font-sizes.docx": {
+     "dx": 0.0,
+     "dy": 0.05,
+     "lines": 33,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 27,
+     "plain": true,
+     "same": 27
+    },
+    "testdata/zh-open/02-character-effects.docx": {
+     "dx": 0.0,
+     "dy": 0.07,
+     "lines": 27,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 19,
+     "plain": true,
+     "same": 21
+    },
+    "testdata/zh-open/03-indents-and-spacing.docx": {
+     "dx": 0.0,
+     "dy": 124.72,
+     "lines": 70,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 1,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 8,
+     "plain": true,
+     "same": 21
+    },
+    "testdata/zh-open/04-report-headings.docx": {
+     "dx": 0.0,
+     "dy": 111.74,
+     "lines": 52,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 1,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 3,
+     "plain": true,
+     "same": 30
+    },
+    "testdata/zh-open/05-official-notice.docx": {
+     "dx": 0.04,
+     "dy": 2.02,
+     "lines": 33,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 24
+    },
+    "testdata/zh-open/06-contract.docx": {
+     "dx": 0.0,
+     "dy": 140.48,
+     "lines": 37,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 0,
+     "pages": [
+      2,
+      3
+     ],
+     "placed": 1,
+     "plain": true,
+     "same": 23
+    },
+    "testdata/zh-open/07-regulation.docx": {
+     "dx": 0.0,
+     "dy": 1.27,
+     "lines": 26,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 1,
+     "plain": true,
+     "same": 26
+    },
+    "testdata/zh-open/08-thesis.docx": {
+     "dx": 0.0,
+     "dy": 99.47,
+     "lines": 45,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 1,
+     "pages": [
+      3,
+      4
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 21
+    },
+    "testdata/zh-open/09-number-formats.docx": {
+     "dx": 0.0,
+     "dy": 62.47,
+     "lines": 186,
+     "missing_fonts": [],
+     "page_starts": 8,
+     "page_starts_equal": 0,
+     "pages": [
+      9,
+      10
+     ],
+     "placed": 20,
+     "plain": true,
+     "same": 167
+    },
+    "testdata/zh-open/10-punctuation.docx": {
+     "dx": 0.0,
+     "dy": 0.07,
+     "lines": 31,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 17,
+     "plain": true,
+     "same": 17
+    }
+   }
   },
   "reading": {
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-1-p-alone.docx": "agrees",
@@ -4959,7 +5110,8 @@
    "SourceHanSerifCN-Regular.otf": "3754ea669c530e24"
   },
   "references": {
-   "corpus-word/docx4j/word": "128 files df0797f098e81b5c"
+   "corpus-word/docx4j/word": "128 files df0797f098e81b5c",
+   "testdata/zh-open/wps": "10 files 3de0cb867adafbf2"
   }
  },
  "layout": {
@@ -5040,31 +5192,31 @@
   },
   "wps": {
    "all": {
-    "documents": 0,
-    "lines": 0,
-    "page_starts": 0,
-    "page_starts_equal": 0,
-    "pages_equal": 0,
-    "placed": 0,
-    "same": 0
+    "documents": 10,
+    "lines": 540,
+    "page_starts": 22,
+    "page_starts_equal": 8,
+    "pages_equal": 7,
+    "placed": 96,
+    "same": 377
    },
    "covered": {
-    "documents": 0,
-    "lines": 0,
-    "page_starts": 0,
-    "page_starts_equal": 0,
-    "pages_equal": 0,
-    "placed": 0,
-    "same": 0
+    "documents": 10,
+    "lines": 540,
+    "page_starts": 22,
+    "page_starts_equal": 8,
+    "pages_equal": 7,
+    "placed": 96,
+    "same": 377
    },
    "plain": {
-    "documents": 0,
-    "lines": 0,
-    "page_starts": 0,
-    "page_starts_equal": 0,
-    "pages_equal": 0,
-    "placed": 0,
-    "same": 0
+    "documents": 10,
+    "lines": 540,
+    "page_starts": 22,
+    "page_starts_equal": 8,
+    "pages_equal": 7,
+    "placed": 96,
+    "same": 377
    }
   }
  },

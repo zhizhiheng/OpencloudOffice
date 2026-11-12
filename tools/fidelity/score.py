@@ -40,11 +40,12 @@ OCO = ROOT / "target/release/oco"
 BASELINE = Path(__file__).resolve().parent / "baseline.json"
 
 sys.path.insert(0, str(ROOT / "tools"))
+from common.layout_lines import reference_files  # noqa: E402
 from word import compare as pdfs  # noqa: E402
 
 # Document sets that may have a reference application's PDFs beside them,
 # in a subfolder named after the application.
-REFERENCE_SETS = ["corpus-word/docx4j", "testdata/zh"]
+REFERENCE_SETS = ["corpus-word/docx4j", "testdata/zh", "testdata/zh-open"]
 REFERENCES = [
     ("word", "Word", "还没有 Word 导出的 PDF。见 docs/fidelity.md 第五节。"),
     ("wps", "WPS", "还没有 WPS 导出的 PDF。用 tools/wps/export.py 生成（见 docs/fidelity.md 第五节）。"),
@@ -87,7 +88,8 @@ def environment(corpus: Path, font_dirs):
     references = {}
     for name in REFERENCE_SETS:
         for kind, _, _ in REFERENCES:
-            files = sorted((ROOT / name / kind).rglob("*.pdf")) if (ROOT / name / kind).is_dir() else []
+            # The files the comparison reads: a PDF, or the lines file that stands in for it.
+            files = sorted(reference_files(ROOT / name / kind).values())
             if files:
                 digest = hashlib.sha256(b"".join(hashlib.sha256(f.read_bytes()).digest() for f in files))
                 references[f"{name}/{kind}"] = f"{len(files)} files {digest.hexdigest()[:16]}"

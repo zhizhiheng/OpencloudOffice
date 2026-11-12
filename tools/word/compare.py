@@ -9,6 +9,9 @@ the application, one PDF per document, under the same name:
     testdata/zh/word/04-report-headings.pdf    exported by Word
     testdata/zh/wps/04-report-headings.pdf     exported by WPS Office
 
+Where the PDFs are too big to commit, the lines read from each stand in for
+it: `04-report-headings.lines.json`, which the export scripts write.
+
 Word is the standard the engine follows. WPS is a second reference: it lays
 Chinese documents out much as Word does, and is easier to come by.
 tools/word/export.ps1 makes Word's PDFs, tools/wps/export.py those of WPS.
@@ -32,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 
 sys.path.insert(0, str(ROOT / "tools"))
-from common.layout_lines import OCO, compare, our_lines, our_summary, pdf_lines  # noqa: E402
+from common.layout_lines import OCO, compare, our_lines, our_summary, reference_files, reference_lines  # noqa: E402
 
 # Narrowing groups of documents, as in `oco score`: the last holds those the
 # engine has no excuse for getting wrong.
@@ -44,14 +47,13 @@ GROUPS = [
 
 
 def pairs(documents: Path, reference: Path):
-    """(document, the reference's PDF of it) for every PDF that has its document."""
+    """(document, the reference's layout of it) for every reference that has its document."""
     found = []
-    for pdf in sorted(reference.rglob("*.pdf")) if reference.is_dir() else []:
-        stem = pdf.relative_to(reference).with_suffix("")
+    for stem, file in reference_files(reference).items():
         for extension in (".docx", ".docm"):
-            docx = documents / stem.with_suffix(extension)
+            docx = documents / (stem + extension)
             if docx.exists():
-                found.append((docx, pdf))
+                found.append((docx, file))
                 break
     return found
 
@@ -59,9 +61,9 @@ def pairs(documents: Path, reference: Path):
 def measure(documents: Path, reference: Path, out: Path):
     """Results by document path relative to `documents`."""
     results = {}
-    for docx, pdf in pairs(documents, reference):
+    for docx, file in pairs(documents, reference):
         target = out / docx.relative_to(documents).with_suffix("")
-        result = compare(our_lines(docx, target), pdf_lines(pdf))
+        result = compare(our_lines(docx, target), reference_lines(file))
         summary = our_summary(target)
         result["plain"] = not summary["beyond_body_text"]
         result["missing_fonts"] = summary["missing_fonts"]
@@ -127,7 +129,7 @@ def main():
         sys.exit(f"{OCO} not found; run `cargo build --release` first")
     if not pairs(documents, reference):
         sys.exit(
-            f"no PDFs in {reference}\n"
+            f"no reference PDFs (or lines files) in {reference}\n"
             "Word's are made on a Windows machine that has Word:\n"
             f"    powershell -ExecutionPolicy Bypass -File tools\\word\\export.ps1 -In {args.documents}\n"
             "those of WPS Office wherever WPS is installed:\n"

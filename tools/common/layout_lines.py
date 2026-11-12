@@ -63,6 +63,37 @@ def pdf_lines(pdf_path):
     return pages
 
 
+# A reference layout is kept either as the PDF itself or, where PDFs are too
+# big to commit, as the lines read from it: `<name>.lines.json`.
+LINES_SUFFIX = ".lines.json"
+
+
+def reference_files(directory: Path):
+    """The reference layouts in `directory`, by document path without extension.
+    Where both a PDF and its lines file exist, the PDF is used."""
+    found = {}
+    if directory.is_dir():
+        for file in sorted(directory.rglob("*" + LINES_SUFFIX)):
+            found[file.relative_to(directory).as_posix()[: -len(LINES_SUFFIX)]] = file
+        for file in sorted(directory.rglob("*.pdf")):
+            found[file.relative_to(directory).with_suffix("").as_posix()] = file
+    return found
+
+
+def reference_lines(file: Path):
+    """The lines of a reference layout, from a PDF or from a lines file."""
+    if file.name.endswith(LINES_SUFFIX):
+        return json.loads(file.read_text(encoding="utf-8"))
+    return pdf_lines(file)
+
+
+def write_lines_file(pdf: Path):
+    """Writes the lines of `pdf` beside it, for committing in the PDF's place."""
+    target = pdf.with_name(pdf.stem + LINES_SUFFIX)
+    target.write_text(json.dumps(pdf_lines(pdf), ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return target
+
+
 def our_lines(docx: Path, out: Path, model: str = "word"):
     """Lays the document out with our engine into `out` and returns its lines."""
     subprocess.run([str(OCO), "render", str(docx), "--out", str(out), "--model", model],

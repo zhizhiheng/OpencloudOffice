@@ -4,4 +4,6 @@
 /corpus-word
 /fonts
 /out
+# WPS embeds most of each font in a PDF; the lines read from it are committed instead.
+/testdata/*/wps/*.pdf
 __pycache__/

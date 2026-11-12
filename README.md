@@ -56,6 +56,7 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 | `crates/oco-layout` | 排版：字体度量与替换、断行、行高、编号、分页，输出 SVG |
 | `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试，`score` 对照 Word 的分页记录打分 |
 | `testdata/zh` | 10 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
+| `testdata/zh-open` | 同样的 10 份，字体名换成开源字体，用于与 WPS 逐行对照；`wps/` 下是 WPS 的排版结果 |
 | `tools/zh` | 生成中文测试文档，与 LibreOffice 的排版结果对比 |
 | `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照；生成带 Word PDF 的探针文档集 |
 | `tools/fidelity` | 还原度记分表和基线 |
