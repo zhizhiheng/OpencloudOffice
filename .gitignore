@@ -1,6 +1,7 @@
 /target
 /corpus
 /corpus-lo
+/corpus-word
 /fonts
 /out
 __pycache__/

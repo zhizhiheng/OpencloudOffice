@@ -129,6 +129,9 @@ pub struct Page {
     /// Where in the document the page begins. `None` when it begins with
     /// something other than a paragraph of body text, such as a table row.
     pub start: Option<Position>,
+    /// The top and the bottom of the area the body text is set in: the page
+    /// between its top and bottom margins. Headers and footers lie outside.
+    pub body: (f32, f32),
 }
 
 /// The result of laying a document out.
@@ -427,6 +430,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     let new_page = |section: &Section| Page {
         width: section.page_width as f32 * TWIP,
         height: section.page_height as f32 * TWIP,
+        body: (section.margin_top as f32 * TWIP, (section.page_height - section.margin_bottom) as f32 * TWIP),
         ..Page::default()
     };
     pages.push(new_page(setups[0]));

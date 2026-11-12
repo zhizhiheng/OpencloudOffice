@@ -2482,7 +2482,2062 @@
     ]
    }
   },
-  "lines": {},
+  "lines": {
+   "word": {
+    "corpus-word/docx4j/anchor-side-by-side.docx": {
+     "dx": 0.02,
+     "dy": 223.9,
+     "lines": 23,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 0,
+     "pages": [
+      2,
+      1
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 23
+    },
+    "corpus-word/docx4j/border-hanging.docx": {
+     "dx": 0.01,
+     "dy": 0.1,
+     "lines": 37,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 37,
+     "plain": true,
+     "same": 37
+    },
+    "corpus-word/docx4j/break-justified.docx": {
+     "dx": 0.02,
+     "dy": 0.09,
+     "lines": 86,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 68,
+     "plain": true,
+     "same": 77
+    },
+    "corpus-word/docx4j/break-longword.docx": {
+     "dx": 0.01,
+     "dy": 0.2,
+     "lines": 42,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 21,
+     "plain": false,
+     "same": 34
+    },
+    "corpus-word/docx4j/break-opportunities.docx": {
+     "dx": 0.05,
+     "dy": 0.1,
+     "lines": 86,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 82,
+     "plain": true,
+     "same": 82
+    },
+    "corpus-word/docx4j/break-ragged.docx": {
+     "dx": 0.02,
+     "dy": 0.08,
+     "lines": 68,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 68,
+     "plain": true,
+     "same": 68
+    },
+    "corpus-word/docx4j/fonts-author-had.docx": {
+     "dx": 0.02,
+     "dy": 2.71,
+     "lines": 6,
+     "missing_fonts": [
+      "Docx4j Probe NameOnly",
+      "Docx4j Probe Signed"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": true,
+     "same": 6
+    },
+    "corpus-word/docx4j/fonts-cjk-linebox.docx": {
+     "dx": 0.02,
+     "dy": 324.89,
+     "lines": 220,
+     "missing_fonts": [
+      "Meiryo",
+      "Yu Gothic",
+      "MS Gothic",
+      "MS Mincho",
+      "Malgun Gothic",
+      "Microsoft JhengHei"
+     ],
+     "page_starts": 4,
+     "page_starts_equal": 0,
+     "pages": [
+      5,
+      4
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 106
+    },
+    "corpus-word/docx4j/fonts-cs-off.docx": {
+     "dx": 0.02,
+     "dy": 0.09,
+     "lines": 13,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 11,
+     "plain": true,
+     "same": 11
+    },
+    "corpus-word/docx4j/fonts-georgia.docx": {
+     "dx": 0.02,
+     "dy": 28.77,
+     "lines": 8,
+     "missing_fonts": [
+      "Georgia"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 3
+    },
+    "corpus-word/docx4j/fonts-hebrew-no-cs.docx": {
+     "dx": 0.02,
+     "dy": 16.66,
+     "lines": 7,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 2
+    },
+    "corpus-word/docx4j/fonts-light-bold.docx": {
+     "dx": 0.02,
+     "dy": 0.55,
+     "lines": 6,
+     "missing_fonts": [
+      "Calibri Light"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": true,
+     "same": 4
+    },
+    "corpus-word/docx4j/fonts-missing-slots.docx": {
+     "dx": 0.02,
+     "dy": 6.67,
+     "lines": 9,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": true,
+     "same": 8
+    },
+    "corpus-word/docx4j/fonts-segoe-ui.docx": {
+     "dx": 0.02,
+     "dy": 30.18,
+     "lines": 10,
+     "missing_fonts": [
+      "Segoe UI",
+      "Segoe UI Light"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 5
+    },
+    "corpus-word/docx4j/fonts-space-cjk.docx": {
+     "dx": 0.02,
+     "dy": 0.08,
+     "lines": 6,
+     "missing_fonts": [
+      "MS Gothic"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 4,
+     "plain": true,
+     "same": 4
+    },
+    "corpus-word/docx4j/fonts-symbol-and-emoji.docx": {
+     "dx": 0.02,
+     "dy": 2.76,
+     "lines": 6,
+     "missing_fonts": [
+      "symbol",
+      "wingdings",
+      "Symbol",
+      "Wingdings"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 1
+    },
+    "corpus-word/docx4j/fonts-theme-lang.docx": {
+     "dx": 0.02,
+     "dy": 0.07,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 8,
+     "plain": true,
+     "same": 8
+    },
+    "corpus-word/docx4j/fonts-unresolvable.docx": {
+     "dx": 0.02,
+     "dy": 4.22,
+     "lines": 16,
+     "missing_fonts": [
+      "Docx4j Probe A",
+      "Docx4j Probe B",
+      "Docx4j Probe C",
+      "Docx4j Probe D",
+      "Docx4j Probe E",
+      "Docx4j Probe F"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 10
+    },
+    "corpus-word/docx4j/footer-offpage-shape.docx": {
+     "dx": 0.02,
+     "dy": 27.6,
+     "lines": 129,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 0,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 41,
+     "plain": true,
+     "same": 123
+    },
+    "corpus-word/docx4j/footnote-space-after.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 166,
+     "missing_fonts": [],
+     "page_starts": 5,
+     "page_starts_equal": 3,
+     "pages": [
+      6,
+      6
+     ],
+     "placed": 91,
+     "plain": false,
+     "same": 149
+    },
+    "corpus-word/docx4j/footnotes.docx": {
+     "dx": 0.02,
+     "dy": 1.6,
+     "lines": 99,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 0,
+     "pages": [
+      3,
+      2
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 82
+    },
+    "corpus-word/docx4j/frame-stacking-2.docx": {
+     "dx": 0.02,
+     "dy": 0.13,
+     "lines": 40,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 3,
+     "page_starts_equal": 3,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 40,
+     "plain": false,
+     "same": 40
+    },
+    "corpus-word/docx4j/frame-stacking.docx": {
+     "dx": 0.02,
+     "dy": 0.13,
+     "lines": 30,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 2,
+     "page_starts_equal": 2,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 30,
+     "plain": false,
+     "same": 30
+    },
+    "corpus-word/docx4j/image-anchored.docx": {
+     "dx": 0.02,
+     "dy": 70.4,
+     "lines": 66,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 0,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 0,
+     "plain": false,
+     "same": 50
+    },
+    "corpus-word/docx4j/image-inline.docx": {
+     "dx": 0.02,
+     "dy": 32.0,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/justification-crossover-2.docx": {
+     "dx": 0.02,
+     "dy": 0.23,
+     "lines": 33,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 25,
+     "plain": true,
+     "same": 27
+    },
+    "corpus-word/docx4j/justification-crossover.docx": {
+     "dx": 0.02,
+     "dy": 0.3,
+     "lines": 63,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 42,
+     "plain": true,
+     "same": 63
+    },
+    "corpus-word/docx4j/kern-title.docx": {
+     "dx": 0.02,
+     "dy": 0.2,
+     "lines": 40,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 28,
+     "plain": true,
+     "same": 31
+    },
+    "corpus-word/docx4j/line-auto.docx": {
+     "dx": 0.02,
+     "dy": 0.15,
+     "lines": 86,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 2,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 66,
+     "plain": true,
+     "same": 86
+    },
+    "corpus-word/docx4j/line-box-bold.docx": {
+     "dx": 0.02,
+     "dy": 0.49,
+     "lines": 74,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 38,
+     "plain": true,
+     "same": 74
+    },
+    "corpus-word/docx4j/line-box-typo-metrics.docx": {
+     "dx": 0.02,
+     "dy": 152.6,
+     "lines": 167,
+     "missing_fonts": [
+      "Bierstadt",
+      "DokChampa",
+      "Aptos"
+     ],
+     "page_starts": 3,
+     "page_starts_equal": 0,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 4,
+     "plain": true,
+     "same": 57
+    },
+    "corpus-word/docx4j/line-exact-atleast.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 26,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 26,
+     "plain": true,
+     "same": 26
+    },
+    "corpus-word/docx4j/line-mixed.docx": {
+     "dx": 0.02,
+     "dy": 0.04,
+     "lines": 17,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 17,
+     "plain": true,
+     "same": 17
+    },
+    "corpus-word/docx4j/list-label-baseline.docx": {
+     "dx": 0.05,
+     "dy": 0.13,
+     "lines": 42,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 30,
+     "plain": true,
+     "same": 42
+    },
+    "corpus-word/docx4j/list-label-width.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 16,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 16,
+     "plain": true,
+     "same": 16
+    },
+    "corpus-word/docx4j/mc-textbox-branches-bound-sdt.docx": {
+     "dx": 0.02,
+     "dy": 0.5,
+     "lines": 10,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": false,
+     "same": 5
+    },
+    "corpus-word/docx4j/mc-textbox-branches-numbered.docx": {
+     "dx": 0.05,
+     "dy": 54.5,
+     "lines": 15,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 6,
+     "plain": false,
+     "same": 12
+    },
+    "corpus-word/docx4j/missing-family-weight-2.docx": {
+     "dx": 0.02,
+     "dy": 7.41,
+     "lines": 26,
+     "missing_fonts": [
+      "Plutext Probe Alt",
+      "Plutext Probe Thin",
+      "Plutext Probe Light",
+      "Plutext Probe Theme Light"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": true,
+     "same": 20
+    },
+    "corpus-word/docx4j/missing-family-weight.docx": {
+     "dx": 0.02,
+     "dy": 5.39,
+     "lines": 26,
+     "missing_fonts": [
+      "Plutext Probe Serif",
+      "Plutext Probe Sans",
+      "Plutext Probe Ghost",
+      "Plutext Probe Theme"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": true,
+     "same": 15
+    },
+    "corpus-word/docx4j/numbering-default-style-numbered.docx": {
+     "dx": 0.03,
+     "dy": 0.1,
+     "lines": 6,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 6,
+     "plain": true,
+     "same": 6
+    },
+    "corpus-word/docx4j/numbering-leader-kinds.docx": {
+     "dx": 0.1,
+     "dy": 0.1,
+     "lines": 17,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 12,
+     "plain": true,
+     "same": 12
+    },
+    "corpus-word/docx4j/numbering-level-pstyle-in-ppr.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 13,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 13,
+     "plain": true,
+     "same": 13
+    },
+    "corpus-word/docx4j/numbering-level-vs-style-indent.docx": {
+     "dx": 0.05,
+     "dy": 0.1,
+     "lines": 10,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 10,
+     "plain": true,
+     "same": 10
+    },
+    "corpus-word/docx4j/numbering-linked-level-other-style.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 26,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 26,
+     "plain": true,
+     "same": 26
+    },
+    "corpus-word/docx4j/numbering-lvlrestart.docx": {
+     "dx": 0.05,
+     "dy": 0.1,
+     "lines": 18,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 18,
+     "plain": true,
+     "same": 18
+    },
+    "corpus-word/docx4j/numbering-numstylelink-separate.docx": {
+     "dx": 0.05,
+     "dy": 0.1,
+     "lines": 11,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 5,
+     "plain": true,
+     "same": 5
+    },
+    "corpus-word/docx4j/numbering-override-rpr.docx": {
+     "dx": 0.05,
+     "dy": 2.38,
+     "lines": 9,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": true,
+     "same": 9
+    },
+    "corpus-word/docx4j/numbering-shared-abstract-styles.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 10,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 10,
+     "plain": true,
+     "same": 10
+    },
+    "corpus-word/docx4j/numbering-shared-abstract.docx": {
+     "dx": 0.05,
+     "dy": 0.1,
+     "lines": 8,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 8,
+     "plain": true,
+     "same": 8
+    },
+    "corpus-word/docx4j/numbering-stories.docx": {
+     "dx": 0.05,
+     "dy": 5.6,
+     "lines": 29,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": false,
+     "same": 9
+    },
+    "corpus-word/docx4j/numbering-unlinked-level-claim.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 29,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 29,
+     "plain": true,
+     "same": 29
+    },
+    "corpus-word/docx4j/page-blank-landscape.docx": {
+     "dx": 0.02,
+     "dy": 0.3,
+     "lines": 54,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 0,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 7
+    },
+    "corpus-word/docx4j/page-break-line.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 134,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 9,
+     "page_starts_equal": 9,
+     "pages": [
+      11,
+      10
+     ],
+     "placed": 58,
+     "plain": false,
+     "same": 134
+    },
+    "corpus-word/docx4j/page-first-even-odd-heights.docx": {
+     "dx": 0.02,
+     "dy": 36.35,
+     "lines": 318,
+     "missing_fonts": [],
+     "page_starts": 6,
+     "page_starts_equal": 1,
+     "pages": [
+      7,
+      7
+     ],
+     "placed": 88,
+     "plain": true,
+     "same": 288
+    },
+    "corpus-word/docx4j/page-first-even-odd.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 251,
+     "missing_fonts": [],
+     "page_starts": 5,
+     "page_starts_equal": 5,
+     "pages": [
+      6,
+      6
+     ],
+     "placed": 240,
+     "plain": true,
+     "same": 240
+    },
+    "corpus-word/docx4j/page-header-footer.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 139,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 1,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 62,
+     "plain": false,
+     "same": 123
+    },
+    "corpus-word/docx4j/page-header-footnotes.docx": {
+     "dx": 0.02,
+     "dy": 126.9,
+     "lines": 135,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 0,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 97
+    },
+    "corpus-word/docx4j/page-landscape-margins.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 80,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 0,
+     "pages": [
+      3,
+      4
+     ],
+     "placed": 24,
+     "plain": false,
+     "same": 24
+    },
+    "corpus-word/docx4j/page-tall-header-image.docx": {
+     "dx": 0.02,
+     "dy": 252.9,
+     "lines": 167,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 0,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 160
+    },
+    "corpus-word/docx4j/page-tall-header.docx": {
+     "dx": 0.02,
+     "dy": 227.8,
+     "lines": 192,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 0,
+     "pages": [
+      4,
+      3
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 120
+    },
+    "corpus-word/docx4j/page-top-space-before-compat12.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 139,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 9,
+     "page_starts_equal": 9,
+     "pages": [
+      11,
+      10
+     ],
+     "placed": 90,
+     "plain": true,
+     "same": 139
+    },
+    "corpus-word/docx4j/page-top-space-before-compat14.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 139,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 9,
+     "page_starts_equal": 9,
+     "pages": [
+      11,
+      10
+     ],
+     "placed": 90,
+     "plain": true,
+     "same": 139
+    },
+    "corpus-word/docx4j/page-top-space-before-set.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 139,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 9,
+     "page_starts_equal": 9,
+     "pages": [
+      11,
+      10
+     ],
+     "placed": 90,
+     "plain": true,
+     "same": 139
+    },
+    "corpus-word/docx4j/page-top-space-before.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 139,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 9,
+     "page_starts_equal": 9,
+     "pages": [
+      11,
+      10
+     ],
+     "placed": 90,
+     "plain": true,
+     "same": 139
+    },
+    "corpus-word/docx4j/ptab-right.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 13,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 12,
+     "plain": true,
+     "same": 12
+    },
+    "corpus-word/docx4j/section-continuous-geometry.docx": {
+     "dx": 0.02,
+     "dy": 0.2,
+     "lines": 302,
+     "missing_fonts": [],
+     "page_starts": 8,
+     "page_starts_equal": 1,
+     "pages": [
+      9,
+      8
+     ],
+     "placed": 60,
+     "plain": false,
+     "same": 240
+    },
+    "corpus-word/docx4j/spacing-adjacent.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 48,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 48,
+     "plain": true,
+     "same": 48
+    },
+    "corpus-word/docx4j/spacing-autospacing-cell-list.docx": {
+     "dx": 0.02,
+     "dy": 8.3,
+     "lines": 35,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/spacing-autospacing-context.docx": {
+     "dx": 0.02,
+     "dy": 21.0,
+     "lines": 21,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 12
+    },
+    "corpus-word/docx4j/spacing-autospacing.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 12,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 12,
+     "plain": true,
+     "same": 12
+    },
+    "corpus-word/docx4j/spacing-char.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 28,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 28,
+     "plain": true,
+     "same": 28
+    },
+    "corpus-word/docx4j/spacing-contextual.docx": {
+     "dx": 0.02,
+     "dy": 0.04,
+     "lines": 20,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 20,
+     "plain": true,
+     "same": 20
+    },
+    "corpus-word/docx4j/spacing-empty-before.docx": {
+     "dx": 0.02,
+     "dy": 7.6,
+     "lines": 20,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 6,
+     "plain": false,
+     "same": 18
+    },
+    "corpus-word/docx4j/spacing-empty-heading.docx": {
+     "dx": 0.02,
+     "dy": 0.27,
+     "lines": 31,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 16,
+     "plain": false,
+     "same": 24
+    },
+    "corpus-word/docx4j/spacing-in-table.docx": {
+     "dx": 0.02,
+     "dy": 0.9,
+     "lines": 11,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/spacing-page-top.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 92,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 6,
+     "page_starts_equal": 6,
+     "pages": [
+      7,
+      7
+     ],
+     "placed": 65,
+     "plain": false,
+     "same": 92
+    },
+    "corpus-word/docx4j/spacing-section-start.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 19,
+     "missing_fonts": [],
+     "page_starts": 5,
+     "page_starts_equal": 5,
+     "pages": [
+      6,
+      6
+     ],
+     "placed": 10,
+     "plain": false,
+     "same": 19
+    },
+    "corpus-word/docx4j/styles-default-pstyle.docx": {
+     "dx": 0.02,
+     "dy": 0.18,
+     "lines": 33,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 33,
+     "plain": true,
+     "same": 33
+    },
+    "corpus-word/docx4j/styles-linerule.docx": {
+     "dx": null,
+     "dy": null,
+     "lines": 18,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 0
+    },
+    "corpus-word/docx4j/styles-no-size-anywhere.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 16,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 16,
+     "plain": true,
+     "same": 16
+    },
+    "corpus-word/docx4j/styles-numpr-ilvl-only.docx": {
+     "dx": 0.05,
+     "dy": 1.65,
+     "lines": 6,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": true,
+     "same": 6
+    },
+    "corpus-word/docx4j/styles-table-default.docx": {
+     "dx": 0.02,
+     "dy": 1.1,
+     "lines": 6,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/surrogate-pairs-bidi.docx": {
+     "dx": 0.02,
+     "dy": 2.12,
+     "lines": 7,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 2
+    },
+    "corpus-word/docx4j/surrogate-pairs.docx": {
+     "dx": 0.02,
+     "dy": 4.08,
+     "lines": 6,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": true,
+     "same": 2
+    },
+    "corpus-word/docx4j/tab-leader-in-cell-2.docx": {
+     "dx": 0.02,
+     "dy": 68.0,
+     "lines": 18,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": false,
+     "same": 11
+    },
+    "corpus-word/docx4j/tab-leader-in-cell.docx": {
+     "dx": 0.02,
+     "dy": 1.9,
+     "lines": 23,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 14
+    },
+    "corpus-word/docx4j/tab-leader-kinds.docx": {
+     "dx": 0.02,
+     "dy": 0.2,
+     "lines": 31,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 24,
+     "plain": true,
+     "same": 30
+    },
+    "corpus-word/docx4j/tab-leader-sizes.docx": {
+     "dx": 0.1,
+     "dy": 1.2,
+     "lines": 12,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 4,
+     "plain": true,
+     "same": 9
+    },
+    "corpus-word/docx4j/tab-trailing-cell.docx": {
+     "dx": 0.02,
+     "dy": 29.4,
+     "lines": 21,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 9
+    },
+    "corpus-word/docx4j/table-autofit.docx": {
+     "dx": 0.02,
+     "dy": 53.8,
+     "lines": 19,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/table-cellspacing.docx": {
+     "dx": 0.02,
+     "dy": 66.0,
+     "lines": 19,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/table-fixed.docx": {
+     "dx": 0.02,
+     "dy": 16.3,
+     "lines": 28,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 10
+    },
+    "corpus-word/docx4j/table-floating.docx": {
+     "dx": 0.02,
+     "dy": 13.8,
+     "lines": 37,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 28
+    },
+    "corpus-word/docx4j/table-grid-overwide-auto.docx": {
+     "dx": 0.02,
+     "dy": 1.2,
+     "lines": 91,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 8,
+     "page_starts_equal": 8,
+     "pages": [
+      9,
+      9
+     ],
+     "placed": 21,
+     "plain": false,
+     "same": 48
+    },
+    "corpus-word/docx4j/table-grid-vs-tcw-compat12.docx": {
+     "dx": 0.02,
+     "dy": 0.3,
+     "lines": 37,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 4,
+     "page_starts_equal": 4,
+     "pages": [
+      5,
+      5
+     ],
+     "placed": 14,
+     "plain": false,
+     "same": 22
+    },
+    "corpus-word/docx4j/table-grid-vs-tcw-compat14.docx": {
+     "dx": 0.02,
+     "dy": 0.3,
+     "lines": 37,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 4,
+     "page_starts_equal": 4,
+     "pages": [
+      5,
+      5
+     ],
+     "placed": 14,
+     "plain": false,
+     "same": 22
+    },
+    "corpus-word/docx4j/table-grid-vs-tcw-compat15.docx": {
+     "dx": 0.02,
+     "dy": 0.3,
+     "lines": 37,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 4,
+     "page_starts_equal": 4,
+     "pages": [
+      5,
+      5
+     ],
+     "placed": 14,
+     "plain": false,
+     "same": 22
+    },
+    "corpus-word/docx4j/table-hidemark.docx": {
+     "dx": 0.02,
+     "dy": 64.39,
+     "lines": 24,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      2
+     ],
+     "placed": 3,
+     "plain": false,
+     "same": 11
+    },
+    "corpus-word/docx4j/table-indent-compat14.docx": {
+     "dx": 0.02,
+     "dy": 1.45,
+     "lines": 11,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 8
+    },
+    "corpus-word/docx4j/table-indent-compat15.docx": {
+     "dx": 0.02,
+     "dy": 1.45,
+     "lines": 11,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 8
+    },
+    "corpus-word/docx4j/table-nested-trailing.docx": {
+     "dx": 0.02,
+     "dy": 35.92,
+     "lines": 38,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 0,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 5,
+     "plain": false,
+     "same": 25
+    },
+    "corpus-word/docx4j/table-nested.docx": {
+     "dx": 0.02,
+     "dy": 10.37,
+     "lines": 14,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/table-row-keepnext.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 225,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 11,
+     "page_starts_equal": 5,
+     "pages": [
+      12,
+      6
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 18
+    },
+    "corpus-word/docx4j/table-rowheight.docx": {
+     "dx": 0.02,
+     "dy": 8.4,
+     "lines": 13,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/table-rowsplit-2.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 508,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 18,
+     "page_starts_equal": 4,
+     "pages": [
+      19,
+      18
+     ],
+     "placed": 83,
+     "plain": false,
+     "same": 93
+    },
+    "corpus-word/docx4j/table-rowsplit.docx": {
+     "dx": 0.02,
+     "dy": 0.19,
+     "lines": 448,
+     "missing_fonts": [
+      "Aptos"
+     ],
+     "page_starts": 12,
+     "page_starts_equal": 4,
+     "pages": [
+      13,
+      17
+     ],
+     "placed": 23,
+     "plain": false,
+     "same": 91
+    },
+    "corpus-word/docx4j/table-span.docx": {
+     "dx": 0.02,
+     "dy": 136.0,
+     "lines": 17,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/table-width.docx": {
+     "dx": 0.02,
+     "dy": 26.05,
+     "lines": 33,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 8
+    },
+    "corpus-word/docx4j/tables-banding-band-size.docx": {
+     "dx": 0.02,
+     "dy": 92.06,
+     "lines": 27,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 0,
+     "pages": [
+      2,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/tables-banding-col-band-size.docx": {
+     "dx": 0.02,
+     "dy": 21.56,
+     "lines": 9,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-banding-merged-row.docx": {
+     "dx": 0.02,
+     "dy": 30.66,
+     "lines": 13,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 2
+    },
+    "corpus-word/docx4j/tables-compat-size-jc-absent.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 9,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-compat-size-jc-mode12.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 9,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-compat-size-jc-mode14.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 9,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-compat-size-jc-on.docx": {
+     "dx": 0.02,
+     "dy": 10.79,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 2
+    },
+    "corpus-word/docx4j/tables-compat-size-jc.docx": {
+     "dx": 0.02,
+     "dy": 10.79,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 2
+    },
+    "corpus-word/docx4j/tables-footnote-in-cell.docx": {
+     "dx": null,
+     "dy": null,
+     "lines": 6,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": false,
+     "same": 0
+    },
+    "corpus-word/docx4j/tables-named-normal-table.docx": {
+     "dx": 0.02,
+     "dy": 21.79,
+     "lines": 7,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/tables-normal-table-text.docx": {
+     "dx": 0.02,
+     "dy": 16.49,
+     "lines": 10,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 4
+    },
+    "corpus-word/docx4j/tables-numbered-in-cell.docx": {
+     "dx": 0.02,
+     "dy": 16.22,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 2,
+     "plain": false,
+     "same": 8
+    },
+    "corpus-word/docx4j/tables-renamed-default-margins.docx": {
+     "dx": 0.02,
+     "dy": 11.03,
+     "lines": 6,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-renamed-default-nomargins.docx": {
+     "dx": 0.02,
+     "dy": 11.03,
+     "lines": 6,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 1,
+     "plain": false,
+     "same": 3
+    },
+    "corpus-word/docx4j/tables-textbox-in-cell.docx": {
+     "dx": 0.02,
+     "dy": 136.62,
+     "lines": 8,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 0,
+     "plain": false,
+     "same": 1
+    },
+    "corpus-word/docx4j/theme-fonts-no-theme-part.docx": {
+     "dx": 0.02,
+     "dy": 0.71,
+     "lines": 24,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 10,
+     "plain": true,
+     "same": 24
+    },
+    "corpus-word/docx4j/toggle-levels-docdefaults.docx": {
+     "dx": 0.02,
+     "dy": 0.1,
+     "lines": 7,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 7,
+     "plain": true,
+     "same": 7
+    },
+    "corpus-word/docx4j/toggle-levels.docx": {
+     "dx": 0.02,
+     "dy": 0.75,
+     "lines": 13,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 4,
+     "plain": false,
+     "same": 8
+    },
+    "corpus-word/docx4j/vml-textbox-vertical.docx": {
+     "dx": 0.02,
+     "dy": 1.32,
+     "lines": 43,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 3,
+     "plain": false,
+     "same": 6
+    },
+    "corpus-word/docx4j/widow-orphan.docx": {
+     "dx": 0.02,
+     "dy": 0.0,
+     "lines": 272,
+     "missing_fonts": [],
+     "page_starts": 5,
+     "page_starts_equal": 5,
+     "pages": [
+      6,
+      6
+     ],
+     "placed": 272,
+     "plain": false,
+     "same": 272
+    }
+   },
+   "wps": {}
+  },
   "reading": {
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-1-p-alone.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-2-p-between-runs.docx": "agrees",
@@ -2902,6 +4957,9 @@
    "SourceHanSansCN-Regular.otf": "e2bc8a2e7f37474b",
    "SourceHanSerifCN-Bold.otf": "4ee555ae58b3d22f",
    "SourceHanSerifCN-Regular.otf": "3754ea669c530e24"
+  },
+  "references": {
+   "corpus-word/docx4j/word": "128 files df0797f098e81b5c"
   }
  },
  "layout": {
@@ -2951,12 +5009,64 @@
   }
  },
  "lines": {
-  "documents": 0,
-  "lines": 0,
-  "page_starts": 0,
-  "page_starts_equal": 0,
-  "pages_equal": 0,
-  "same": 0
+  "word": {
+   "all": {
+    "documents": 128,
+    "lines": 7046,
+    "page_starts": 193,
+    "page_starts_equal": 122,
+    "pages_equal": 112,
+    "placed": 2688,
+    "same": 4836
+   },
+   "covered": {
+    "documents": 31,
+    "lines": 1907,
+    "page_starts": 29,
+    "page_starts_equal": 16,
+    "pages_equal": 30,
+    "placed": 1050,
+    "same": 1728
+   },
+   "plain": {
+    "documents": 63,
+    "lines": 3259,
+    "page_starts": 72,
+    "page_starts_equal": 52,
+    "pages_equal": 57,
+    "placed": 1666,
+    "same": 2788
+   }
+  },
+  "wps": {
+   "all": {
+    "documents": 0,
+    "lines": 0,
+    "page_starts": 0,
+    "page_starts_equal": 0,
+    "pages_equal": 0,
+    "placed": 0,
+    "same": 0
+   },
+   "covered": {
+    "documents": 0,
+    "lines": 0,
+    "page_starts": 0,
+    "page_starts_equal": 0,
+    "pages_equal": 0,
+    "placed": 0,
+    "same": 0
+   },
+   "plain": {
+    "documents": 0,
+    "lines": 0,
+    "page_starts": 0,
+    "page_starts_equal": 0,
+    "pages_equal": 0,
+    "placed": 0,
+    "same": 0
+   }
+  }
  },
  "reading": {
   "agree": 306,

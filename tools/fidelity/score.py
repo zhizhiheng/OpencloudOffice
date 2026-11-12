@@ -9,8 +9,10 @@ Everything here is measured against Word itself, with no copy of Word in the loo
             page began. Do our pages begin in the same places?
             (oco score)
   lines     Word exported a PDF of a document. Do we break every line and
-            every page where Word did? Counted only for the document sets
-            that have Word's PDFs beside them (tools/word/compare.py).
+            every page where Word did, and put each line where Word put it?
+            Counted for the document sets that have Word's PDFs beside them
+            (tools/word/compare.py). The same against PDFs from WPS Office,
+            as a second reference, where those exist.
 
 The result is compared with the baseline kept beside this script. A document
 that agreed with Word when the baseline was cut must still agree: that is the
@@ -38,10 +40,20 @@ OCO = ROOT / "target/release/oco"
 BASELINE = Path(__file__).resolve().parent / "baseline.json"
 
 sys.path.insert(0, str(ROOT / "tools"))
-from word.compare import measure as measure_against_pdfs  # noqa: E402
+from word import compare as pdfs  # noqa: E402
 
-# Document sets that may have Word's own PDFs in a `word` subfolder.
-WORD_SETS = ["testdata/zh"]
+# Document sets that may have a reference application's PDFs beside them,
+# in a subfolder named after the application.
+REFERENCE_SETS = ["corpus-word/docx4j", "testdata/zh"]
+REFERENCES = [
+    ("word", "Word", "还没有 Word 导出的 PDF。见 docs/fidelity.md 第五节。"),
+    ("wps", "WPS", "还没有 WPS 导出的 PDF。用 tools/wps/export.py 生成（见 docs/fidelity.md 第五节）。"),
+]
+LINE_GROUPS = [
+    ("all", "全部文档"),
+    ("plain", "……只含正文（无表格、图片、分栏等）"),
+    ("covered", "……且所用字体齐全"),
+]
 
 # The groups of documents `oco score` reports, widest first.
 GROUPS = [
@@ -71,7 +83,15 @@ def environment(corpus: Path, font_dirs):
             hidden = any(part.startswith(".") for part in file.relative_to(directory).parts)
             if file.is_file() and not hidden and file.suffix.lower() in (".ttf", ".otf", ".ttc"):
                 fonts[file.name] = hashlib.sha256(file.read_bytes()).hexdigest()[:16]
-    return {"corpus": commits, "fonts": fonts}
+    # The reference PDFs: how many, and a digest of their contents.
+    references = {}
+    for name in REFERENCE_SETS:
+        for kind, _, _ in REFERENCES:
+            files = sorted((ROOT / name / kind).rglob("*.pdf")) if (ROOT / name / kind).is_dir() else []
+            if files:
+                digest = hashlib.sha256(b"".join(hashlib.sha256(f.read_bytes()).digest() for f in files))
+                references[f"{name}/{kind}"] = f"{len(files)} files {digest.hexdigest()[:16]}"
+    return {"corpus": commits, "fonts": fonts, "references": references}
 
 
 def measure(corpus: Path):
@@ -98,22 +118,17 @@ def measure(corpus: Path):
     reading = {relative(path): outcome for path, outcome in pairs.items()}
 
     lines = {}
-    for name in WORD_SETS:
-        results = measure_against_pdfs(ROOT / name, ROOT / name / "word", ROOT / "out/word-compare" / Path(name).name)
-        lines.update({f"{name}/{document}": result for document, result in results.items()})
-    total = lambda field: sum(result[field] for result in lines.values())
+    for kind, _, _ in REFERENCES:
+        results = {}
+        for name in REFERENCE_SETS:
+            found = pdfs.measure(ROOT / name, ROOT / name / kind, ROOT / "out" / f"{kind}-compare" / Path(name).name)
+            results.update({f"{name}/{document}": result for document, result in found.items()})
+        lines[kind] = results
     return {
         "environment": environment(corpus, layout["font_dirs"]),
         "reading": {"pairs": len(reading), "agree": sum(o == "agrees" for o in reading.values())},
         "layout": {name: layout["groups"][name] for name, _ in GROUPS},
-        "lines": {
-            "documents": len(lines),
-            "pages_equal": sum(r["pages"][0] == r["pages"][1] for r in lines.values()),
-            "lines": total("lines"),
-            "same": total("same"),
-            "page_starts": total("page_starts"),
-            "page_starts_equal": total("page_starts_equal"),
-        },
+        "lines": {kind: pdfs.totals(results) for kind, results in lines.items()},
         "documents": {"reading": reading, "layout": documents, "lines": lines},
     }
 
@@ -164,19 +179,28 @@ def scoreboard(current, baseline):
         f"  （另有分页符等强制出来的页首 {forced['forced_page_starts']} 处，"
         f"还原 {forced['forced_page_starts_equal']} 处，不计入上表）"
     )
-    lines += ["", "逐行：对照 Word 导出的 PDF"]
-    exact, before = current["lines"], old.get("lines", {})
-    if exact["documents"]:
+    for kind, application, missing in REFERENCES:
+        lines += ["", f"逐行：对照 {application} 导出的 PDF"]
+        groups, before = current["lines"][kind], (old.get("lines", {}).get(kind) or {})
+        if not groups["all"]["documents"]:
+            lines.append(f"  {missing}")
+            continue
         lines.append(
-            f"  {exact['documents']} 份文档；页数一致 {exact['pages_equal']}"
-            + delta(exact["pages_equal"], before.get("pages_equal")).rstrip()
-            + f"；断行一致 {share(exact['same'], exact['lines'])}"
-            + delta(exact["same"], before.get("same")).rstrip()
-            + f"；页首一致 {share(exact['page_starts_equal'], exact['page_starts'])}"
-            + delta(exact["page_starts_equal"], before.get("page_starts_equal")).rstrip()
+            f"  {'':38}{right('文档', 6)}"
+            + "".join(right(title, 17) + " " * 7 for title in ("页数一致", "断行一致", "位置一致(0.5pt内)", "页首一致"))
         )
-    else:
-        lines.append("  还没有 Word 导出的 PDF。用 tools/word/export.ps1 在装有 Word 的 Windows 上生成（见 docs/fidelity.md）。")
+        for name, title in LINE_GROUPS:
+            group, was = groups[name], before.get(name, {})
+            cells = [
+                (group["pages_equal"], group["documents"], "pages_equal"),
+                (group["same"], group["lines"], "same"),
+                (group["placed"], group["lines"], "placed"),
+                (group["page_starts_equal"], group["page_starts"], "page_starts_equal"),
+            ]
+            lines.append(
+                f"  {title}{' ' * (38 - width(title))}{group['documents']:>6}"
+                + "".join(f"{share(count, total):>17}" + delta(count, was.get(key)) for count, total, key in cells)
+            )
     return "\n".join(line.rstrip() for line in lines)
 
 
@@ -208,22 +232,25 @@ def compare(current, baseline):
                 )
         for improved, text in changes:
             (better if improved else worse).append(f"排版 {path}: {text}")
-    for path, before in baseline["documents"].get("lines", {}).items():
-        now = current["documents"]["lines"].get(path)
-        if now is None:
-            gone.append(f"逐行 {path}")
-            continue
-        for field, title in (("same", "断行一致"), ("page_starts_equal", "页首一致")):
-            if now[field] != before[field]:
-                (better if now[field] > before[field] else worse).append(
-                    f"逐行 {path}: {title} {before[field]} → {now[field]}"
+    for kind, application, _ in REFERENCES:
+        known = baseline["documents"].get("lines", {}).get(kind) or {}
+        for path, before in known.items():
+            now = current["documents"]["lines"][kind].get(path)
+            if now is None:
+                gone.append(f"逐行（{application}） {path}")
+                continue
+            for field, title in (("same", "断行一致"), ("placed", "位置一致"), ("page_starts_equal", "页首一致")):
+                if now[field] != before.get(field, 0):
+                    (better if now[field] > before.get(field, 0) else worse).append(
+                        f"逐行（{application}） {path}: {title} {before.get(field, 0)} → {now[field]}（共 {now['lines'] if field != 'page_starts_equal' else now['page_starts']}）"
+                    )
+            pages_before, pages_now = before["pages"][0] == before["pages"][1], now["pages"][0] == now["pages"][1]
+            if pages_before != pages_now:
+                (better if pages_now else worse).append(
+                    f"逐行（{application}） {path}: 页数 {application} {now['pages'][0]}，我们 {before['pages'][1]} → {now['pages'][1]}"
                 )
-        pages_before, pages_now = before["pages"][0] == before["pages"][1], now["pages"][0] == now["pages"][1]
-        if pages_before != pages_now:
-            (better if pages_now else worse).append(
-                f"逐行 {path}: 页数 Word {now['pages'][0]}，我们 {before['pages'][1]} → {now['pages'][1]}"
-            )
-    for kind, name in (("reading", "读取"), ("layout", "排版"), ("lines", "逐行")):
+        new += [f"逐行（{application}） {p}" for p in current["documents"]["lines"][kind] if p not in known]
+    for kind, name in (("reading", "读取"), ("layout", "排版")):
         known = baseline["documents"].get(kind, {})
         new += [f"{name} {p}" for p in current["documents"][kind] if p not in known]
     return worse, better, gone, new
@@ -248,8 +275,8 @@ def main():
 
     comparable = True
     if baseline:
-        for what, name in (("corpus", "测试集"), ("fonts", "字体")):
-            before, now = baseline["environment"][what], current["environment"][what]
+        for what, name in (("corpus", "测试集"), ("fonts", "字体"), ("references", "参照 PDF")):
+            before, now = baseline["environment"].get(what, {}), current["environment"][what]
             if before != now:
                 comparable = False
                 print(f"{name}与基线不同，数字不可比：")
@@ -275,7 +302,7 @@ def main():
         elif not (better or gone or new):
             print("\n与基线一致。")
     elif baseline:
-        print("\n未与基线比较。换回基线所用的测试集和字体，或用 --update 以当前环境重新建立基线。")
+        print("\n未与基线比较。换回基线所用的测试集、字体和参照 PDF，或用 --update 以当前环境重新建立基线。")
         status = 2
     else:
         print("\n还没有基线。用 --update 建立。")

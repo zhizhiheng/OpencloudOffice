@@ -61,6 +61,27 @@ impl Arguments {
     }
 }
 
+/// Whether the document holds anything the engine does not lay out yet:
+/// tables, pictures, text boxes, notes, columns, frames or section changes.
+/// Such a document cannot be expected to come out as Word has it.
+pub fn beyond_body_text(docx: &Docx) -> bool {
+    let unsupported =
+        |needles: &[&str]| docx.coverage.unsupported.keys().any(|key| needles.iter().any(|n| key.contains(n)));
+    docx.document.body.iter().any(|block| matches!(block, Block::Table(_)))
+        || unsupported(&[
+            "w:drawing",
+            "w:pict",
+            "w:object",
+            "mc:AlternateContent",
+            "footnoteReference",
+            "endnoteReference",
+            "w:sectPr/w:cols",
+            "w:pPr/w:framePr",
+            "m:oMath",
+        ])
+        || docx.document.paragraphs().iter().any(|p| p.section_break.is_some())
+}
+
 /// One document's layout next to Word's record of it.
 #[derive(Serialize)]
 struct Scored {
@@ -229,22 +250,6 @@ fn score(path: &Path, fonts: &FontDb) -> Option<Scored> {
     let equal = |hint: &Hint| places.contains(&hint.place);
     let (forced, chosen): (Vec<&Hint>, Vec<&Hint>) = record.hints.iter().partition(|hint| hint.forced);
 
-    let unsupported =
-        |needles: &[&str]| docx.coverage.unsupported.keys().any(|key| needles.iter().any(|n| key.contains(n)));
-    let rich = docx.document.body.iter().any(|block| matches!(block, Block::Table(_)))
-        || unsupported(&[
-            "w:drawing",
-            "w:pict",
-            "w:object",
-            "mc:AlternateContent",
-            "footnoteReference",
-            "endnoteReference",
-            "w:sectPr/w:cols",
-            "w:pPr/w:framePr",
-            "m:oMath",
-        ])
-        || docx.document.paragraphs().iter().any(|p| p.section_break.is_some());
-
     Some(Scored {
         path: path.display().to_string(),
         word_pages,
@@ -260,7 +265,7 @@ fn score(path: &Path, fonts: &FontDb) -> Option<Scored> {
             .count(),
         forced_page_starts: forced.len(),
         forced_page_starts_equal: forced.iter().filter(|hint| equal(hint)).count(),
-        plain: !rich,
+        plain: !beyond_body_text(&docx),
         missing_fonts: layout.missing_fonts,
     })
 }

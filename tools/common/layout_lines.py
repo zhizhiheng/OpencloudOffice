@@ -19,6 +19,10 @@ OCO = ROOT / "target/release/oco"
 # trailing marks are left out when lines are compared.
 TRAILING_MARKS = "，。、；：？！）”’》】"
 
+# How far, in points, a line may be from the reference's and still count as
+# being in the same place. Half a point is a sixth of a millimetre.
+NEAR = 0.5
+
 
 def pdf_lines(pdf_path):
     """Reads a PDF and groups its characters into lines by baseline."""
@@ -66,25 +70,51 @@ def our_lines(docx: Path, out: Path, model: str = "word"):
     return json.loads((out / "lines.json").read_text(encoding="utf-8"))
 
 
+def our_summary(out: Path):
+    """What the engine said about the document it laid out into `out`: the
+    fonts it lacked, and whether the document holds content it does not lay out."""
+    return json.loads((out / "layout.json").read_text(encoding="utf-8"))
+
+
 def key(text):
     """What must match for two lines to count as the same line."""
-    # Dot leaders are text in a PDF and a drawn rule in ours.
-    return re.sub(r"\.{4,}", "", re.sub(r"\s", "", text)).rstrip(TRAILING_MARKS)
+    # Tab leaders are text in a PDF and a drawn rule in ours.
+    return re.sub(r"[.\-_·…]{4,}", "", re.sub(r"\s", "", text)).rstrip(TRAILING_MARKS)
+
+
+def first_body_line(page, body):
+    """Index of the first line of `page` that is not in its header: the first
+    below the top of the body area, or the very first when none is."""
+    if body:
+        for index, line in enumerate(page["lines"]):
+            if line["baseline"] > body[0]:
+                return index
+    return 0
 
 
 def compare(ours, reference):
     """Compares our layout with a reference layout of the same document.
 
-    Returns the reference's line count, how many of those lines we break
-    identically, the page counts, how many of the reference's page starts
-    are page starts of ours, and the median distance between the lines that
-    match: `dx` between their left ends, `dy` between their baselines when
-    they are on the same page.
+    A page starts with its first line of body text; a header above it does
+    not count. Our own pages say where the body area is, and the reference's
+    pages are taken to have the same margins.
+
+    Returns the reference's line count; how many of those lines we break
+    identically (`same`); how many of them also sit where the reference has
+    them, on the same page and within `NEAR` points both ways (`placed`);
+    the page counts; how many of the reference's page starts are page starts
+    of ours; and the median distance between the lines that match: `dx`
+    between their left ends, `dy` between their baselines when they are on
+    the same page.
     """
     flat = lambda pages: [(number, index, line) for number, page in enumerate(pages) for index, line in enumerate(page["lines"])]
     a, b = flat(ours), flat(reference)
+    bodies = [page.get("body") for page in ours]
+    body_of = lambda number: bodies[min(number, len(bodies) - 1)] if bodies else None
+    first_of_ours = [first_body_line(page, page.get("body")) for page in ours]
+    first_of_reference = [first_body_line(page, body_of(number)) for number, page in enumerate(reference)]
     matcher = difflib.SequenceMatcher(None, [key(e[2]["text"]) for e in a], [key(e[2]["text"]) for e in b], autojunk=False)
-    same, dx, dy, starts_equal = 0, [], [], 0
+    same, placed, dx, dy, starts_equal = 0, 0, [], [], 0
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag != "equal":
             continue
@@ -94,13 +124,15 @@ def compare(ours, reference):
             dx.append(abs(line_a["x0"] - line_b["x0"]))
             if page_a == page_b:
                 dy.append(abs(line_a["baseline"] - line_b["baseline"]))
+                placed += dx[-1] <= NEAR and dy[-1] <= NEAR
             # A page of the reference begins with this line, and so does one of ours.
-            if page_b > 0 and index_b == 0 and page_a > 0 and index_a == 0:
+            if page_b > 0 and index_b == first_of_reference[page_b] and page_a > 0 and index_a == first_of_ours[page_a]:
                 starts_equal += 1
     median = lambda values: round(statistics.median(values), 2) if values else None
     return {
         "lines": len(b),
         "same": same,
+        "placed": placed,
         "pages": [len(reference), len(ours)],
         "page_starts": sum(1 for page in reference[1:] if page["lines"]),
         "page_starts_equal": starts_equal,
