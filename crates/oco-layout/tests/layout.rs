@@ -1323,3 +1323,38 @@ fn a_list_label_counts_for_its_ascent_only() {
     assert!(close(big[0], 12.6 + 4.67, 0.05), "{big:?}");
     assert!(close(big[1], 12.6, 0.03), "{big:?}");
 }
+
+#[test]
+fn automatic_spacing_depends_on_where_the_paragraph_stands() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `spacing-autospacing-context` and
+    // `spacing-autospacing-cell-list`): automatic spacing is 14 pt, but none
+    // between two items of one list, none above the first paragraph of a
+    // cell, and none below the last unless that is a list item.
+    let numbering = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/>
+        <w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>
+        <w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif"/><w:sz w:val="24"/></w:rPr></w:lvl></w:abstractNum>
+        <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#;
+    let auto = r#"<w:spacing w:beforeAutospacing="1" w:afterAutospacing="1"/>"#;
+    let listed = format!(r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>{auto}"#);
+    let plain = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let spaced = |text: &str| paragraph(&font("Liberation Serif", 24), auto, text);
+    let item = |text: &str| paragraph(&font("Liberation Serif", 24), &listed, text);
+    let steps = |body: String| {
+        let source = Source { body: &body, numbering, ..Source::default() };
+        pitches(&pages(&source, &fonts, Model::Word).remove(0))
+    };
+    let close_to = |found: &[f32], wanted: &[f32]| {
+        found.len() == wanted.len() && found.iter().zip(wanted).all(|(a, b)| close(*a, *b, 0.03))
+    };
+    // 13.8 pt a line.
+    let list = steps(plain("above") + &item("one") + &item("two") + &plain("below"));
+    assert!(close_to(&list, &[27.8, 13.8, 27.8]), "{list:?}");
+    let apart = steps(plain("above") + &spaced("one") + &spaced("two") + &plain("below"));
+    assert!(close_to(&apart, &[27.8, 27.8, 27.8]), "{apart:?}");
+    // In cells, with the half-point rules of the rows: two paragraphs in
+    // the first row, a list item alone in the second.
+    let (first, second) = (spaced("one") + &spaced("two"), item("three"));
+    let cells = steps(plain("above") + &table(&[4000], "", &[&[&first], &[&second]]) + &plain("below"));
+    assert!(close_to(&cells, &[14.3, 27.8, 14.3, 13.8 + 14.0 + 0.5]), "{cells:?}");
+}

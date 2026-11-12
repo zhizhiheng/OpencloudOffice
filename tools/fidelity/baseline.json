@@ -3586,7 +3586,7 @@
     },
     "corpus-word/docx4j/spacing-autospacing-cell-list.docx": {
      "dx": 0.15,
-     "dy": 70.0,
+     "dy": 0.1,
      "lines": 35,
      "missing_fonts": [
       "Aptos"
@@ -3597,13 +3597,13 @@
       1,
       1
      ],
-     "placed": 2,
+     "placed": 35,
      "plain": false,
-     "same": 31
+     "same": 35
     },
     "corpus-word/docx4j/spacing-autospacing-context.docx": {
      "dx": 0.02,
-     "dy": 42.0,
+     "dy": 0.0,
      "lines": 21,
      "missing_fonts": [
       "Aptos"
@@ -3614,7 +3614,7 @@
       1,
       1
      ],
-     "placed": 4,
+     "placed": 21,
      "plain": false,
      "same": 21
     },
@@ -5135,11 +5135,11 @@
    "forced_page_starts": 410,
    "forced_page_starts_equal": 386,
    "multipage": 655,
-   "multipage_pages_equal": 454,
+   "multipage_pages_equal": 455,
    "multipage_pages_within_one": 579,
    "page_starts": 2041,
-   "page_starts_equal": 381,
-   "page_starts_same_paragraph": 515
+   "page_starts_equal": 378,
+   "page_starts_same_paragraph": 511
   },
   "covered": {
    "documents": 537,
@@ -5183,8 +5183,8 @@
     "page_starts": 193,
     "page_starts_equal": 160,
     "pages_equal": 118,
-    "placed": 4797,
-    "same": 6361
+    "placed": 4847,
+    "same": 6365
    },
    "covered": {
     "documents": 28,

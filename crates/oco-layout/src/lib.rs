@@ -223,6 +223,11 @@ struct Unit {
     /// The row is of a floating table. In a header or footer such a table
     /// takes no room; in the body it is laid out in line all the same.
     floating: bool,
+    /// The space before and the space after are "automatic": 14 pt, less
+    /// where the paragraph stands (see [`Builder::blocks`]).
+    automatic: (bool, bool),
+    /// The list the paragraph is an item of, by the id of its numbering.
+    list: Option<i32>,
 }
 
 /// A table row ready to be placed. Its cells are columns of lines side by
@@ -546,6 +551,8 @@ impl Builder<'_> {
             paragraph: Some(index),
             row: None,
             floating: false,
+            automatic: (props.spacing.before_auto == Some(true), props.spacing.after_auto == Some(true)),
+            list: self.resolver.list_level(&props).map(|(list, _, _)| list),
         }
     }
 
@@ -875,6 +882,17 @@ impl Builder<'_> {
                 self.depth += 1;
                 self.blocks(blocks, section, (cell_width - left - right).max(1.0), &mut inner);
                 self.depth -= 1;
+                // Automatic spacing gives way to the edges of the cell:
+                // above the first paragraph always, below the last unless
+                // it is a list item. (Word, docx4j's probes
+                // `spacing-autospacing-context` and
+                // `spacing-autospacing-cell-list`.)
+                if let Some(first) = inner.first_mut().filter(|unit| unit.automatic.0) {
+                    first.before = 0.0;
+                }
+                if let Some(last) = inner.last_mut().filter(|unit| unit.automatic.1 && unit.list.is_none()) {
+                    last.after = 0.0;
+                }
                 // The paragraph left out is a paragraph of the document all the same.
                 self.paragraphs += cell.blocks.len() - blocks.len();
 
@@ -941,6 +959,8 @@ impl Builder<'_> {
                     last: number + 1 == table.rows.len(),
                 }),
                 floating: props.floating,
+                automatic: (false, false),
+                list: None,
             });
         }
         self.table_styles = outer;
@@ -1012,7 +1032,15 @@ impl Builder<'_> {
         Frame { top, bottom, header, footer, number, section: index }
     }
 
+    /// Lays out blocks that follow one another.
+    ///
+    /// Automatic spacing is as a browser would have it, which is where it
+    /// comes from: none between two items of one list. (Measured in Word,
+    /// docx4j's probe `spacing-autospacing-context`; and none above the
+    /// first paragraph of a cell or below the last, which
+    /// [`Builder::table`] sees to.)
     fn blocks(&mut self, blocks: &[Block], section: &Section, width: f32, units: &mut Vec<Unit>) {
+        let mut previous: Option<usize> = None;
         for (index, block) in blocks.iter().enumerate() {
             match block {
                 Block::Paragraph(paragraph) => {
@@ -1020,9 +1048,24 @@ impl Builder<'_> {
                         Some(Block::Paragraph(next)) => Some(next),
                         _ => None,
                     };
-                    units.push(self.paragraph(paragraph, next, section, width));
+                    let mut unit = self.paragraph(paragraph, next, section, width);
+                    if let Some(before) = previous.map(|at| &mut units[at]) {
+                        if before.list.is_some() && before.list == unit.list {
+                            if before.automatic.1 {
+                                before.after = 0.0;
+                            }
+                            if unit.automatic.0 {
+                                unit.before = 0.0;
+                            }
+                        }
+                    }
+                    previous = Some(units.len());
+                    units.push(unit);
                 }
-                Block::Table(table) => self.table(table, section, width, units),
+                Block::Table(table) => {
+                    self.table(table, section, width, units);
+                    previous = None;
+                }
             }
         }
     }
