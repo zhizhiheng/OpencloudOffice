@@ -659,6 +659,97 @@ fn a_row_breaks_between_lines_at_the_foot_of_a_page_unless_told_not_to() {
 }
 
 #[test]
+fn the_lines_of_a_cell_are_not_left_alone_where_a_row_breaks() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-rowsplit`): a row whose
+    // cell is a paragraph of two lines goes to the next page whole where
+    // only the first line fits; the care taken of widows and orphans holds
+    // inside cells. Lines of exactly 20 pt, 34 to the page.
+    let exact = r#"<w:spacing w:line="400" w:lineRule="exact"/>"#;
+    let line = |text: &str| paragraph(&font("Liberation Serif", 24), exact, text);
+    // One paragraph of `count` lines, by line breaks.
+    let lines = |count: usize, props: &str| {
+        let breaks = "cell<w:br/>".repeat(count - 1);
+        format!(
+            r#"<w:p><w:pPr>{exact}{props}</w:pPr><w:r><w:rPr>{}</w:rPr><w:t>{breaks}cell</w:t></w:r></w:p>"#,
+            font("Liberation Serif", 24)
+        )
+        .replace("cell<w:br/>", "</w:t><w:t>cell</w:t><w:br/><w:t>")
+    };
+    let on_pages = |fillers: usize, cell: &str| {
+        let filler: String = (0..fillers).map(|n| line(&format!("filler {n}"))).collect();
+        let body = filler + &table(&[4000], "", &[&[cell]]);
+        let pages = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word);
+        pages.iter().map(|page| page.lines.iter().filter(|l| l.text.starts_with("cell")).count()).collect::<Vec<_>>()
+    };
+    // Room for one line under 33 fillers: two lines stay together.
+    assert_eq!(on_pages(33, &lines(2, "")), [0, 2]);
+    // Unless the paragraph does without that care.
+    assert_eq!(on_pages(33, &lines(2, r#"<w:widowControl w:val="0"/>"#)), [1, 1]);
+    // Five lines break two and three, not three and two or four and one,
+    // where there is room for four; and not at all where it is for one.
+    assert_eq!(on_pages(30, &lines(5, "")), [3, 2]);
+    assert_eq!(on_pages(31, &lines(5, "")), [3, 2]);
+    assert_eq!(on_pages(32, &lines(5, "")), [2, 3]);
+    assert_eq!(on_pages(33, &lines(5, "")), [0, 5]);
+    // Lines kept together are.
+    assert_eq!(on_pages(31, &lines(5, "<w:keepLines/>")), [0, 5]);
+}
+
+#[test]
+fn the_rule_over_a_row_comes_on_top_of_its_least_height() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-rowheight`): from rule to
+    // rule a row of at least 30 pt is 30.5 pt with a half-point rule, a row
+    // of exactly 30 pt is 30 pt, and a row of one 13.8 pt line 14.3 pt.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let step = |row_props: &str| {
+        let (a, b) = (cell("above"), cell("below"));
+        let body = table(&[4000], row_props, &[&[&a], &[&b]]);
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        page.lines[1].baseline - page.lines[0].baseline
+    };
+    assert!(close(step(""), 14.3, 0.01), "{}", step(""));
+    assert!(close(step(r#"<w:trHeight w:val="600"/>"#), 30.5, 0.01), "{}", step(r#"<w:trHeight w:val="600"/>"#));
+    assert!(close(step(r#"<w:trHeight w:val="600" w:hRule="exact"/>"#), 30.0, 0.01));
+    // Less than the content asks for changes nothing.
+    assert!(close(step(r#"<w:trHeight w:val="100"/>"#), 14.3, 0.01));
+}
+
+#[test]
+fn a_row_keeps_with_the_next_if_its_first_paragraph_does() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-row-keepnext`): a row goes
+    // to the next page with what follows it if the first paragraph of its
+    // first cell is to be kept with the next, whatever its other paragraphs
+    // say. Lines of exactly 20 pt, 34 to the page and 17.9 pt over; a table
+    // of two rows comes after 33, and a paragraph after the table.
+    let exact = r#"<w:spacing w:line="400" w:lineRule="exact"/>"#;
+    let line = |text: &str, keep: bool| {
+        let props = format!("{exact}{}", if keep { "<w:keepNext/>" } else { "" });
+        paragraph(&font("Liberation Serif", 24), &props, text)
+    };
+    let first_page = |cells: [[bool; 2]; 2]| {
+        let filler: String = (0..33).map(|n| line(&format!("filler {n}"), false)).collect();
+        let row = |name: &str, keeps: [bool; 2]| [line(name, keeps[0]), line("other", keeps[1])];
+        let (one, two) = (row("row one", cells[0]), row("row two", cells[1]));
+        let body =
+            filler + &table(&[2000, 2000], "", &[&[&one[0], &one[1]], &[&two[0], &two[1]]]) + &line("after", false);
+        let pages = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word);
+        pages[0].lines.iter().filter(|l| l.text.starts_with("row")).count()
+    };
+    // Nothing is kept: the first row has room, the second has not.
+    assert_eq!(first_page([[false, false], [false, false]]), 1);
+    // The first row is kept with the second, in its first cell.
+    assert_eq!(first_page([[true, false], [false, false]]), 0);
+    // The last cell's paragraph does not count.
+    assert_eq!(first_page([[false, true], [false, true]]), 1);
+    // Both rows kept, with each other and with the paragraph after: all
+    // go over.
+    assert_eq!(first_page([[true, true], [true, true]]), 0);
+}
+
+#[test]
 fn an_empty_paragraph_is_a_line_of_its_own_font() {
     let Some(fonts) = fonts(&[("Carlito", 'a')]) else { return };
     // As measured in Word (docx4j's probes `tables-banding-band-size` and

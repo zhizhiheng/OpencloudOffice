@@ -494,7 +494,7 @@
    "libreoffice/sw/qa/core/layout/data/floattable-3pages.docx": {
     "pages": [
      3,
-     2
+     3
     ],
     "starts": [
      2,
@@ -1148,7 +1148,7 @@
     ],
     "starts": [
      4,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/tdf123636_newlinePageBreak2.docx": {
@@ -1854,7 +1854,7 @@
    "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-wrap-on-all-pages.docx": {
     "pages": [
      2,
-     2
+     3
     ],
     "starts": [
      1,
@@ -4147,18 +4147,18 @@
       "Aptos"
      ],
      "page_starts": 11,
-     "page_starts_equal": 7,
+     "page_starts_equal": 10,
      "pages": [
       12,
       12
      ],
-     "placed": 203,
+     "placed": 218,
      "plain": false,
      "same": 225
     },
     "corpus-word/docx4j/table-rowheight.docx": {
      "dx": 0.02,
-     "dy": 0.4,
+     "dy": 0.1,
      "lines": 13,
      "missing_fonts": [],
      "page_starts": 0,
@@ -4173,18 +4173,18 @@
     },
     "corpus-word/docx4j/table-rowsplit-2.docx": {
      "dx": 0.1,
-     "dy": 1.3,
+     "dy": 0.1,
      "lines": 508,
      "missing_fonts": [
       "Aptos"
      ],
      "page_starts": 18,
-     "page_starts_equal": 11,
+     "page_starts_equal": 18,
      "pages": [
       19,
       19
      ],
-     "placed": 214,
+     "placed": 508,
      "plain": false,
      "same": 508
     },
@@ -4196,12 +4196,12 @@
       "Aptos"
      ],
      "page_starts": 12,
-     "page_starts_equal": 10,
+     "page_starts_equal": 12,
      "pages": [
       13,
       13
      ],
-     "placed": 390,
+     "placed": 448,
      "plain": false,
      "same": 448
     },
@@ -5138,8 +5138,8 @@
    "multipage_pages_equal": 453,
    "multipage_pages_within_one": 578,
    "page_starts": 2041,
-   "page_starts_equal": 304,
-   "page_starts_same_paragraph": 437
+   "page_starts_equal": 308,
+   "page_starts_same_paragraph": 442
   },
   "covered": {
    "documents": 537,
@@ -5160,8 +5160,8 @@
    "multipage_pages_equal": 172,
    "multipage_pages_within_one": 220,
    "page_starts": 467,
-   "page_starts_equal": 135,
-   "page_starts_same_paragraph": 183
+   "page_starts_equal": 136,
+   "page_starts_same_paragraph": 186
   },
   "plain": {
    "documents": 881,
@@ -5181,9 +5181,9 @@
     "documents": 128,
     "lines": 7059,
     "page_starts": 193,
-    "page_starts_equal": 147,
+    "page_starts_equal": 159,
     "pages_equal": 118,
-    "placed": 4316,
+    "placed": 4683,
     "same": 6361
    },
    "covered": {

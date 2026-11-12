@@ -261,6 +261,10 @@ struct CellLine {
     gap: f32,
     /// Where the line's origin is, from the text margin.
     x: f32,
+    /// A page may end before this line: it begins a paragraph, or leaves
+    /// enough of its paragraph on either side (two lines, unless the
+    /// paragraph does without that care).
+    breakable: bool,
 }
 
 impl RowCell {
@@ -280,9 +284,14 @@ impl Row {
     /// Height of the row, or of what is left of it, given the height of the
     /// content still to place.
     fn part_height(&self, content: f32, first_part: bool) -> f32 {
-        let natural = self.border + content + self.padding.0 + self.padding.1;
+        // The least height of a row is that of its cells; the rule above
+        // them comes on top of it. A row of exact height is that height,
+        // rule and all. (Word, docx4j's probe `table-rowheight`: a row of at
+        // least 30 pt with one line in it is 30.5 pt from rule to rule, and
+        // one of exactly 30 pt is 30 pt.)
         let least = if first_part { self.min_height } else { 0.0 };
-        self.exact_height.unwrap_or(natural.max(least)) + if self.last { self.border } else { 0.0 }
+        let natural = self.border + (content + self.padding.0 + self.padding.1).max(least);
+        self.exact_height.unwrap_or(natural) + if self.last { self.border } else { 0.0 }
     }
 
     /// The row as one line that cannot break, for a table inside a cell.
@@ -860,12 +869,21 @@ impl Builder<'_> {
                     let mut gap = if first { unit.before } else { unit.before.max(previous_after) };
                     first = false;
                     previous_after = unit.after;
+                    let (keep_lines, widow_control) = (unit.keep_lines, unit.widow_control);
                     let own = match unit.row {
                         Some(nested) => vec![nested.into_line()],
                         None => unit.lines,
                     };
-                    for line in own {
-                        lines.push(CellLine { line, gap, x: x + left + inset });
+                    let count = own.len();
+                    for (number, line) in own.into_iter().enumerate() {
+                        // The lines of a paragraph in a cell are kept from
+                        // standing alone like any others. (Word, docx4j's
+                        // probe `table-rowsplit`: a row whose cell has two
+                        // lines goes to the next page whole where only one
+                        // of them fits.)
+                        let breakable =
+                            number == 0 || !keep_lines && (!widow_control || number >= 2 && count - number >= 2);
+                        lines.push(CellLine { line, gap, x: x + left + inset, breakable });
                         gap = 0.0;
                     }
                 }
@@ -875,12 +893,21 @@ impl Builder<'_> {
                 edges.push(x);
             }
             let height = points(row.props.height);
+            // A row keeps with what follows it if the first paragraph of its
+            // first cell does. (Word, docx4j's probe `table-row-keepnext`: it
+            // is of no account whether any other paragraph of the row does.)
+            let keeps = match row.cells.first().and_then(|cell| cell.blocks.first()) {
+                Some(Block::Paragraph(first)) => {
+                    self.resolver.paragraph_in(&first.props, &self.table_styles).keep_next == Some(true)
+                }
+                _ => false,
+            };
             units.push(Unit {
                 lines: Vec::new(),
                 before: 0.0,
                 after: 0.0,
                 left: 0.0,
-                keep_next: false,
+                keep_next: keeps,
                 keep_lines: true,
                 widow_control: false,
                 page_break_before: false,
@@ -1094,6 +1121,15 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
 
     // Height of the lines of `unit` that must share a page with its first line.
     let must_stay = |unit: &Unit| -> f32 {
+        if let Some(row) = &unit.row {
+            // A row that may split needs room for the first line of its
+            // cells, and for its least height; any other, for all of it.
+            if row.cant_split || row.exact_height.is_some() {
+                return row.height();
+            }
+            let first = row.cells.iter().filter_map(|cell| cell.lines.first()).map(|part| part.gap + part.line.height);
+            return row.border + (row.padding.0 + first.fold(0.0, f32::max)).max(row.min_height);
+        }
         let count = if unit.keep_lines {
             unit.lines.len()
         } else if unit.widow_control {
@@ -1155,7 +1191,10 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 chain += must_stay(link);
                 break;
             }
-            chain += link.lines.iter().map(|l| l.height).sum::<f32>() + link.after.max(units[k + 1].before);
+            chain += match &link.row {
+                Some(row) => row.height(),
+                None => link.lines.iter().map(|l| l.height).sum::<f32>() + link.after.max(units[k + 1].before),
+            };
             k += 1;
         }
         let page_height = bottom - top;
@@ -1181,18 +1220,27 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                     .zip(&cursors)
                     .map(|(cell, cursor)| {
                         let mut used = 0.0;
-                        cell.lines[*cursor..]
+                        let mut take = cell.lines[*cursor..]
                             .iter()
                             .take_while(|part| {
                                 used += part.gap + part.line.height;
                                 used <= room + 0.01
                             })
-                            .count()
+                            .count();
+                        // Back to a place where the page may end.
+                        while take > 0 && cell.lines.get(*cursor + take).is_some_and(|next| !next.breakable) {
+                            take -= 1;
+                        }
+                        take
                     })
                     .collect();
                 let fits = y + height <= bottom + 0.01;
                 // A row breaks only where every cell that has something left
                 // gets at least a line onto this page.
+                // And its first part must be as tall as the row is to be at
+                // the least. (Word, docx4j's probe `table-rowsplit-2`: rows
+                // of at least 60 pt with three lines in them go to the next
+                // page whole where 36 pt are left, though two lines would fit.)
                 let splits = !row.cant_split
                     && row.exact_height.is_none()
                     && takes.iter().any(|take| *take > 0)
