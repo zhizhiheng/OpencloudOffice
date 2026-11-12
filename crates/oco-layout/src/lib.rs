@@ -214,8 +214,6 @@ struct Unit {
     page_break_before: bool,
     contextual: bool,
     style: Option<String>,
-    /// Extra drawing below the last line: a bottom border.
-    bottom_rule: Option<(f32, f32, Rgb, f32, f32)>,
     /// The section that ends after this unit.
     ends_section: Option<Section>,
     /// Index of the paragraph this is, in document order; `None` for a table row.
@@ -388,7 +386,15 @@ fn portable_bullet(text: &str, props: &mut RunProps) -> String {
 }
 
 impl Builder<'_> {
-    fn paragraph(&mut self, source: &oco_docx::Paragraph, section: &Section, width: f32) -> Unit {
+    /// Lays out a paragraph. `next` is the paragraph right after it, if
+    /// there is one: paragraphs with the same borders share them.
+    fn paragraph(
+        &mut self,
+        source: &oco_docx::Paragraph,
+        next: Option<&oco_docx::Paragraph>,
+        section: &Section,
+        width: f32,
+    ) -> Unit {
         let props: ParaProps = self.resolver.paragraph_in(&source.props, &self.table_styles);
         let style = source.props.style_id.as_deref();
         let label = self.resolver.list_level(&props).and_then(|(num_id, ilvl, level)| {
@@ -407,8 +413,8 @@ impl Builder<'_> {
         let mark = self.resolver.run_in(style, &source.mark_props, &self.table_styles);
         let input = paragraph::Paragraph { props: &props, runs, mark, label };
         let ctx = context(self.docx, section, width, self.options.model);
-        let laid = paragraph::layout(&input, self.fonts, &ctx);
-        for name in laid.missing_fonts {
+        let mut laid = paragraph::layout(&input, self.fonts, &ctx);
+        for name in std::mem::take(&mut laid.missing_fonts) {
             if !self.missing_fonts.contains(&name) {
                 self.missing_fonts.push(name);
             }
@@ -416,15 +422,40 @@ impl Builder<'_> {
         let index = self.paragraphs;
         self.paragraphs += 1;
 
-        let bottom_rule = props.borders.bottom.as_ref().filter(|b| b.is_visible()).map(|border| {
-            let color = match border.color {
-                Some(oco_docx::Color::Rgb(r, g, b)) => [r, g, b],
-                _ => [0, 0, 0],
-            };
-            let left = props.indent.left.unwrap_or(0) as f32 * TWIP;
-            let right = width - props.indent.right.unwrap_or(0) as f32 * TWIP;
-            (left, right, color, border.size as f32 / 8.0, border.space as f32)
-        });
+        // The border under a paragraph is drawn its space below the last
+        // line, and the paragraph is taller by that space and by the width
+        // of the border: what follows begins under the border. Measured in
+        // WPS, in the body (a 3 pt border 6 pt away moves the next paragraph
+        // down 9 pt) and under a header that reaches below the top margin.
+        //
+        // Paragraphs one after the other with the same borders and indents
+        // are bordered as one, so only the last of them has the border.
+        if let Some(border) = props.borders.bottom.as_ref().filter(|b| b.is_visible()) {
+            let joined = next.is_some_and(|next| {
+                let below = self.resolver.paragraph_in(&next.props, &self.table_styles);
+                below.borders == props.borders
+                    && (below.indent.left, below.indent.right) == (props.indent.left, props.indent.right)
+            });
+            if let Some(line) = laid.lines.last_mut().filter(|_| !joined) {
+                let color = match border.color {
+                    Some(oco_docx::Color::Rgb(r, g, b)) => [r, g, b],
+                    _ => [0, 0, 0],
+                };
+                let (rule, space) = (border.size as f32 / 8.0, border.space as f32);
+                let at = line.height + space + rule / 2.0;
+                line.items.push(Item::Rule {
+                    x1: props.indent.left.unwrap_or(0) as f32 * TWIP,
+                    y1: at,
+                    x2: width - props.indent.right.unwrap_or(0) as f32 * TWIP,
+                    y2: at,
+                    width: rule,
+                    color,
+                    dash: [0.0, 0.0],
+                });
+                line.height += space + rule;
+                line.needed += space + rule;
+            }
+        }
         Unit {
             lines: laid.lines,
             before: laid.space_before,
@@ -437,7 +468,6 @@ impl Builder<'_> {
             page_break_before: props.page_break_before == Some(true),
             contextual: props.contextual_spacing == Some(true),
             style: props.style_id.clone(),
-            bottom_rule,
             ends_section: source.section_break.clone(),
             paragraph: Some(index),
             row: None,
@@ -533,7 +563,6 @@ impl Builder<'_> {
                 page_break_before: false,
                 contextual: false,
                 style: None,
-                bottom_rule: None,
                 ends_section: None,
                 paragraph: None,
                 row: Some(Row {
@@ -616,9 +645,15 @@ impl Builder<'_> {
     }
 
     fn blocks(&mut self, blocks: &[Block], section: &Section, width: f32, units: &mut Vec<Unit>) {
-        for block in blocks {
+        for (index, block) in blocks.iter().enumerate() {
             match block {
-                Block::Paragraph(paragraph) => units.push(self.paragraph(paragraph, section, width)),
+                Block::Paragraph(paragraph) => {
+                    let next = match blocks.get(index + 1) {
+                        Some(Block::Paragraph(next)) => Some(next),
+                        _ => None,
+                    };
+                    units.push(self.paragraph(paragraph, next, section, width));
+                }
                 Block::Table(table) => self.table(table, section, width, units),
             }
         }
@@ -909,19 +944,6 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 after_break = true;
             }
         }
-        if let Some((x1, x2, color, width, space)) = unit.bottom_rule {
-            let page = pages.last_mut().expect("a page is always open");
-            let at = y + space + width / 2.0;
-            page.items.push(Item::Rule {
-                x1: left + x1,
-                y1: at,
-                x2: left + x2,
-                y2: at,
-                width,
-                color,
-                dash: [0.0, 0.0],
-            });
-        }
         previous_after = unit.after;
         previous_style = Some((unit.style.clone(), unit.contextual));
 
@@ -942,8 +964,11 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     for (page, frame) in pages.iter_mut().zip(&frames) {
         let section = setups[frame.section];
         let left = (section.margin_left + section.gutter) as f32 * TWIP;
-        let shown = |n: i32| format_number(section.page_number_format.as_deref().unwrap_or("decimal"), n);
-        let numbers = (shown(frame.number), shown(count as i32));
+        // The page's number is written the way its section numbers pages;
+        // the count of pages is always in figures (as WPS shows it: a page
+        // numbered ii of a document of ten pages is "ii" of "10").
+        let number = format_number(section.page_number_format.as_deref().unwrap_or("decimal"), frame.number);
+        let numbers = (number, count.to_string());
         let mut lines = Vec::new();
         for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
             let Some(blocks) = story.as_deref().and_then(|id| docx.stories.get(id)) else { continue };

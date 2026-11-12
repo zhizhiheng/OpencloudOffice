@@ -40,9 +40,19 @@ def pdf_lines(pdf_path):
             # Superscripts, subscripts and raised text have baselines of their
             # own. Fold each such fragment into the line it sits beside: the
             # nearest row within half its height that holds more characters.
+            #
+            # So can the figures in a line of Chinese: WPS sets the two fonts
+            # a fraction of a point apart. Rows that close are one line
+            # whichever holds more. (Rows further apart with as many
+            # characters each are left alone: they may be the cells of a
+            # table row in different sizes.)
             height = {b: max(c["size"] for c in chars) for b, chars in rows.items()}
-            for baseline in sorted(rows, key=lambda b: len(rows[b])):
-                near = [b for b in rows if b != baseline and abs(b - baseline) < 0.6 * height[b] and len(rows[b]) > len(rows[baseline])]
+            for baseline in sorted(rows, key=lambda b: (len(rows[b]), b)):
+                near = [
+                    b for b in rows
+                    if b != baseline and abs(b - baseline) < 0.6 * height[b]
+                    and (len(rows[b]) > len(rows[baseline]) or abs(b - baseline) < 0.25)
+                ]
                 if near:
                     host = min(near, key=lambda b: abs(b - baseline))
                     rows[host].extend(rows.pop(baseline))
@@ -80,11 +90,24 @@ def reference_files(directory: Path):
     return found
 
 
+def lines_file(pdf: Path):
+    """Where the lines read from `pdf` are kept."""
+    return pdf.with_name(pdf.stem + LINES_SUFFIX)
+
+
 def reference_lines(file: Path):
-    """The lines of a reference layout, from a PDF or from a lines file."""
+    """The lines of a reference layout, from a PDF or from a lines file.
+
+    A PDF that has a lines file beside it must agree with it: the lines file
+    is what is committed, and what a machine without the PDF compares with.
+    """
     if file.name.endswith(LINES_SUFFIX):
         return json.loads(file.read_text(encoding="utf-8"))
-    return pdf_lines(file)
+    lines = pdf_lines(file)
+    kept = lines_file(file)
+    if kept.exists() and json.loads(kept.read_text(encoding="utf-8")) != json.loads(json.dumps(lines)):
+        raise SystemExit(f"{kept} does not hold what {file.name} reads as now; write it again (write_lines_file)")
+    return lines
 
 
 def write_lines_file(pdf: Path):

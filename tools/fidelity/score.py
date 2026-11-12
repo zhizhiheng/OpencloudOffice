@@ -40,7 +40,7 @@ OCO = ROOT / "target/release/oco"
 BASELINE = Path(__file__).resolve().parent / "baseline.json"
 
 sys.path.insert(0, str(ROOT / "tools"))
-from common.layout_lines import reference_files  # noqa: E402
+from common.layout_lines import lines_file, reference_files  # noqa: E402
 from word import compare as pdfs  # noqa: E402
 
 # Document sets that may have a reference application's PDFs beside them,
@@ -89,7 +89,10 @@ def environment(corpus: Path, font_dirs):
     for name in REFERENCE_SETS:
         for kind, _, _ in REFERENCES:
             # The files the comparison reads: a PDF, or the lines file that stands in for it.
+            # Where both are there the lines file is what counts: it is the one committed,
+            # and exporting a document again gives a PDF of other bytes that reads the same.
             files = sorted(reference_files(ROOT / name / kind).values())
+            files = [lines_file(f) if f.suffix == ".pdf" and lines_file(f).exists() else f for f in files]
             if files:
                 digest = hashlib.sha256(b"".join(hashlib.sha256(f.read_bytes()).digest() for f in files))
                 references[f"{name}/{kind}"] = f"{len(files)} files {digest.hexdigest()[:16]}"

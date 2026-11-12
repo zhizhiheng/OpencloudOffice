@@ -17,7 +17,7 @@ for real documents saved by Word.
 from pathlib import Path
 
 from docx_builder import (
-    SIZES, abstract_num, default_styles, level, num, numbering, p, page_break, ppr, r, rpr, section,
+    SIZES, abstract_num, default_styles, field, level, num, numbering, p, page_break, ppr, r, rpr, section,
     start_override, style, write,
 )
 
@@ -540,9 +540,64 @@ def punctuation():
     write(OUT / "10-punctuation.docx", "".join(parts))
 
 
+# --------------------------------------------------------------------------- 11
+
+def handbook():
+    """A handbook with headers, footers and page numbers, as long documents
+    have them: a cover without either, front matter numbered in roman, and a
+    body that starts again from page 1 with a header of its own.
+
+    Odd and even pages differ. The body's own header, on its odd pages, is
+    three lines and reaches below the top margin, so the text of those pages
+    starts lower than on the even pages, whose header is one line. The body
+    names no even header and no footers: it has those of the front matter.
+    """
+    small = lambda text, **fmt: r(text, sz=9, **fmt)
+    rule = (6, "auto", 1)
+    head = lambda *runs, jc: p(*runs, jc=jc, border_bottom=rule, snap=False)
+    foot = lambda *runs, jc: p(*runs, jc=jc, snap=False)
+    stories = {
+        # Front matter, odd pages.
+        "header1": head(small("前言"), jc="right"),
+        # Even pages, throughout.
+        "header2": head(small("办公文档排版手册"), jc="left"),
+        # The body, odd pages: taller than the top margin leaves room for.
+        "header3": p(small("办公文档排版手册"), jc="right", snap=False)
+        + p(small("第二版"), jc="right", snap=False)
+        + head(small("正文"), jc="right"),
+        "footer1": foot(small("第 "), field("PAGE", "1", sz=9), small(" 页"), jc="right"),
+        "footer2": foot(small("第 "), field("PAGE", "2", sz=9), small(" 页 共 "), field("NUMPAGES", "9", sz=9), small(" 页"), jc="left"),
+    }
+    front = section(headers={"default": "header1", "even": "header2"}, footers={"default": "footer1", "even": "footer2"},
+                    title_page=True, page_numbers=("lowerRoman", None))
+    body_section = section(headers={"default": "header3"}, page_numbers=("decimal", 1))
+
+    paragraph = lambda text: body(text)
+    texts = (TEXT_A, TEXT_B, TEXT_C, TEXT_D)
+    parts = [
+        p(spacing={"before": 2400}),
+        p(r("办公文档排版手册", font="黑体", ascii="Arial", sz=26), jc="center", spacing={"after": 312}),
+        p(r("第二版", font="楷体", sz=16), jc="center"),
+        p(spacing={"before": 4800}),
+        p(r("文档工程组", sz=14), jc="center"),
+        p(r("2026 年 11 月", sz=14), jc="center"),
+        p(page_break()),
+        title("前  言"),
+    ]
+    for number in range(1, 17):
+        parts.append(paragraph(f"（前言第 {number} 段）" + texts[number % 4]))
+    # The last paragraph of the front matter carries its section properties.
+    parts.append(f"<w:p><w:pPr>{front}</w:pPr></w:p>")
+    for chapter, name in enumerate(("版心与页边距", "页眉、页脚与页码", "分节与页码格式"), start=1):
+        parts.append(title(f"第{'一二三'[chapter - 1]}章  {name}", size=16))
+        for number in range(1, 15):
+            parts.append(paragraph(f"（{chapter}.{number}）" + texts[(chapter + number) % 4]))
+    write(OUT / "11-header-footer.docx", "".join(parts), sect=body_section, stories=stories, even_and_odd=True)
+
+
 def main():
     for build in (font_sizes, character_effects, indents_and_spacing, report, official_notice, contract, regulation,
-                  thesis, number_formats, punctuation):
+                  thesis, number_formats, punctuation, handbook):
         build()
     for path in sorted(OUT.glob("*.docx")):
         print(f"{path.stat().st_size:7d}  {path.relative_to(OUT.parent.parent)}")

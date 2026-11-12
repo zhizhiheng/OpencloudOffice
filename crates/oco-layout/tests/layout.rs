@@ -779,11 +779,14 @@ fn each_page_gets_the_header_meant_for_it_with_its_number() {
 #[test]
 fn a_section_without_a_header_of_its_own_has_the_one_before_and_may_renumber() {
     let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
-    let number = r#"<w:p><w:fldSimple w:instr="PAGE"><w:r><w:t>0</w:t></w:r></w:fldSimple></w:p>"#;
+    let number = r#"<w:p><w:fldSimple w:instr="PAGE"><w:r><w:t>0</w:t></w:r></w:fldSimple><w:r><w:t xml:space="preserve"> of </w:t></w:r>
+        <w:fldSimple w:instr="NUMPAGES"><w:r><w:t>0</w:t></w:r></w:fldSimple></w:p>"#;
     let stories = [("h", "header", "<w:p><w:r><w:t>head</w:t></w:r></w:p>"), ("n", "footer", number)];
     // The first section names the header and footer; the second names
     // neither, starts on a new page, and numbers from iv in roman: its
-    // first page is iv, and the pages after it count on from there.
+    // first page is iv, and the pages after it count on from there. The
+    // count of pages stays in figures (as WPS shows it; testdata/zh-open,
+    // 11-header-footer).
     let body = format!(
         r#"<w:p><w:pPr><w:sectPr><w:headerReference r:id="h"/><w:footerReference r:id="n"/>{A4_WITH_STORIES}</w:sectPr></w:pPr>
            <w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p>
@@ -793,7 +796,7 @@ fn a_section_without_a_header_of_its_own_has_the_one_before_and_may_renumber() {
     let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
     let pages = pages(&source, &fonts, Model::Word);
     let texts: Vec<Vec<&str>> = pages.iter().map(|page| page.lines.iter().map(|l| l.text.as_str()).collect()).collect();
-    assert_eq!(texts, [["head", "one", "1"], ["head", "two", "iv"], ["head", "three", "v"]]);
+    assert_eq!(texts, [["head", "one", "1 of 3"], ["head", "two", "iv of 3"], ["head", "three", "v of 3"]]);
 }
 
 #[test]
@@ -850,4 +853,55 @@ fn a_floating_table_in_a_header_takes_no_room() {
     assert!(close(at(&page, "under") - at(&page, "head"), 13.8, 0.03), "{}", at(&page, "under"));
     assert!(close(at(&page, "body"), 72.0 + 11.2, 0.03), "{}", at(&page, "body"));
     assert!(page.lines.iter().any(|l| l.text.ends_with("a5")), "the table is still drawn");
+}
+
+#[test]
+fn the_border_under_a_paragraph_takes_its_space_and_its_width() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (testdata/zh-open, 05-official-notice): a 3 pt
+    // border 6 pt under a paragraph moves what follows down by 9 pt.
+    let bordered = |size: u32, text: &str| {
+        let border =
+            format!(r#"<w:pBdr><w:bottom w:val="single" w:sz="{size}" w:space="6" w:color="FF0000"/></w:pBdr>"#);
+        paragraph(&font("Liberation Serif", 24), &border, text)
+    };
+    let plain = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let steps = |body: String| {
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        pitches(&page)
+    };
+    let close_to = |found: &[f32], wanted: &[f32]| {
+        found.len() == wanted.len() && found.iter().zip(wanted).all(|(a, b)| close(*a, *b, 0.03))
+    };
+    // 12 pt Liberation Serif is a line of 13.8 pt.
+    let one = steps(bordered(24, "a") + &plain("b") + &plain("c"));
+    assert!(close_to(&one, &[13.8 + 9.0, 13.8]), "{one:?}");
+    // Paragraphs with the same border are bordered as one: the border, and
+    // the room it takes, come after the last of them.
+    let joined = steps(bordered(24, "a") + &bordered(24, "b") + &plain("c"));
+    assert!(close_to(&joined, &[13.8, 13.8 + 9.0]), "{joined:?}");
+    // A different border is a border of its own: 3 pt and 1.5 pt, 6 pt away.
+    let apart = steps(bordered(24, "a") + &bordered(12, "b") + &plain("c"));
+    assert!(close_to(&apart, &[13.8 + 9.0, 13.8 + 7.5]), "{apart:?}");
+}
+
+#[test]
+fn the_border_under_a_header_is_part_of_its_height() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (testdata/zh-open, 11-header-footer): under a header
+    // that reaches below the top margin, the body begins lower by the space
+    // and the width of the header's bottom border, here 1 pt and 0.75 pt.
+    let line = |props: &str| paragraph(&font("Liberation Serif", 24), props, "head");
+    let rule = r#"<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>"#;
+    let top_of_body = |last: &str| {
+        let header = line("").repeat(4) + &line(last);
+        let stories = [("h", "header", header.as_str())];
+        let section = format!(r#"<w:headerReference w:type="default" r:id="h"/>{A4_WITH_STORIES}"#);
+        let body = paragraph("", "", "body");
+        let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+        pages(&source, &fonts, Model::Word)[0].body.0
+    };
+    // Five lines of 13.8 pt from 35.4 pt down: 104.4 pt.
+    assert!(close(top_of_body(""), 104.4, 0.02), "{}", top_of_body(""));
+    assert!(close(top_of_body(rule), 104.4 + 1.75, 0.02), "{}", top_of_body(rule));
 }

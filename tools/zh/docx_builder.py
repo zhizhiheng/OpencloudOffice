@@ -102,6 +102,20 @@ def page_break():
     return '<w:r><w:br w:type="page"/></w:r>'
 
 
+def field(instruction, shown, **fmt):
+    """A field, as Word writes one: its instruction, then the result Word
+    last worked out for it. `shown` is that stale result; an application
+    that lays the document out works the value out again."""
+    run = lambda content: f"<w:r>{rpr(**fmt)}{content}</w:r>"
+    return (
+        run('<w:fldChar w:fldCharType="begin"/>')
+        + run(f'<w:instrText xml:space="preserve"> {instruction} </w:instrText>')
+        + run('<w:fldChar w:fldCharType="separate"/>')
+        + run(f"<w:t>{escape(shown)}</w:t>")
+        + run('<w:fldChar w:fldCharType="end"/>')
+    )
+
+
 def ppr(*, style=None, jc=None, ind=None, spacing=None, num=None, keep_next=None, keep_lines=None,
         page_break_before=None, tabs=None, mark=None, border_bottom=None, snap=None, outline=None, widow=None):
     out = []
@@ -228,16 +242,34 @@ def numbering(abstracts, nums):
     return f"<w:numbering {W}>{''.join(abstracts)}{''.join(nums)}</w:numbering>"
 
 
-def section(*, width=11906, height=16838, top=1440, bottom=1440, left=1800, right=1800, grid=("lines", 312)):
+def section(*, width=11906, height=16838, top=1440, bottom=1440, left=1800, right=1800, grid=("lines", 312),
+            headers=None, footers=None, title_page=False, page_numbers=None):
+    """Section properties.
+
+    `headers` and `footers` name the parts given to `write` as `stories`, by
+    the kind of page they are for: `{"default": "header1", "even": "header2"}`.
+    `page_numbers` is the number format of the section's pages and, if they
+    do not count on from the section before, the number of its first page:
+    `("lowerRoman", None)`, `("decimal", 1)`.
+    """
     grid_xml = ""
     if grid:
         kind, pitch, *rest = grid
         char_space = f' w:charSpace="{rest[0]}"' if rest else ""
         grid_xml = f'<w:docGrid w:type="{kind}" w:linePitch="{pitch}"{char_space}/>'
+    references = "".join(
+        f'<w:{element}Reference w:type="{kind}" r:id="{part}"/>'
+        for element, parts in (("header", headers), ("footer", footers))
+        for kind, part in (parts or {}).items()
+    )
+    numbers = ""
+    if page_numbers:
+        fmt, start = page_numbers
+        numbers = f'<w:pgNumType w:fmt="{fmt}"' + (f' w:start="{start}"' if start is not None else "") + "/>"
     return (
-        f'<w:sectPr><w:pgSz w:w="{width}" w:h="{height}"/>'
+        f'<w:sectPr>{references}<w:pgSz w:w="{width}" w:h="{height}"/>'
         f'<w:pgMar w:top="{top}" w:right="{right}" w:bottom="{bottom}" w:left="{left}" w:header="851" w:footer="992" w:gutter="0"/>'
-        f'<w:cols w:space="425"/>{grid_xml}</w:sectPr>'
+        f'{numbers}<w:cols w:space="425"/>{"<w:titlePg/>" if title_page else ""}{grid_xml}</w:sectPr>'
     )
 
 
@@ -283,18 +315,42 @@ APP = (
 )
 
 
-def write(path, body, *, styles=None, numbering_xml=None, sect=None):
-    """Writes a package. Entries have a fixed timestamp so rebuilds are byte-identical."""
+def write(path, body, *, styles=None, numbering_xml=None, sect=None, stories=None, even_and_odd=False):
+    """Writes a package. Entries have a fixed timestamp so rebuilds are byte-identical.
+
+    `stories` are the headers and footers: the content of each by the name of
+    its part, which is `header…` or `footer…` and is also the id that
+    `section` refers to it by. `even_and_odd` turns on different headers
+    for odd and even pages, which is a setting of the whole document.
+    """
+    stories = stories or {}
+    content_types, relationships, namespaces, settings = CONTENT_TYPES, DOCUMENT_RELS, W, SETTINGS
+    for name in stories:
+        kind = "header" if name.startswith("header") else "footer"
+        content_types = content_types.replace(
+            "</Types>",
+            f'<Override PartName="/word/{name}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.{kind}+xml"/></Types>',
+        )
+        relationships = relationships.replace(
+            "</Relationships>", f'<Relationship Id="{name}" Type="{DOC_RELS}/{kind}" Target="{name}.xml"/></Relationships>'
+        )
+    if stories:
+        namespaces += f' xmlns:r="{DOC_RELS}"'
+    if even_and_odd:
+        settings = settings.replace("<w:drawingGridVerticalSpacing", "<w:evenAndOddHeaders/><w:drawingGridVerticalSpacing")
     parts = {
-        "[Content_Types].xml": CONTENT_TYPES,
+        "[Content_Types].xml": content_types,
         "_rels/.rels": PACKAGE_RELS,
         "docProps/app.xml": APP,
-        "word/_rels/document.xml.rels": DOCUMENT_RELS,
-        "word/document.xml": f"<w:document {W}><w:body>{body}{sect or section()}</w:body></w:document>",
+        "word/_rels/document.xml.rels": relationships,
+        "word/document.xml": f"<w:document {namespaces}><w:body>{body}{sect or section()}</w:body></w:document>",
         "word/styles.xml": styles or default_styles(),
-        "word/settings.xml": SETTINGS,
+        "word/settings.xml": settings,
         "word/numbering.xml": numbering_xml or numbering([], []),
     }
+    for name, content in stories.items():
+        root = "hdr" if name.startswith("header") else "ftr"
+        parts[f"word/{name}.xml"] = f"<w:{root} {W}>{content}</w:{root}>"
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in parts.items():
