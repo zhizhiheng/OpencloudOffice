@@ -418,8 +418,19 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     let mut is_first = true;
     while start < atoms.len() {
         let origin = if is_first { left + first } else { left };
-        // A right-aligned label ends at the origin, so it starts before it.
+        // A right-aligned label ends at the origin, so it starts before it;
+        // the tab after it must be measured from where the label really ends.
         let mut x = origin;
+        if is_first {
+            if let Some(label) = &paragraph.label {
+                let width: f32 = atoms.iter().take_while(|a| a.label && a.kind == Kind::Char).map(|a| a.advance).sum();
+                match label.align {
+                    LabelAlign::Right => x -= width,
+                    LabelAlign::Center => x -= width / 2.0,
+                    LabelAlign::Left => {}
+                }
+            }
+        }
         let mut i = start;
         let mut last_opportunity: Option<usize> = None;
         let mut forced = false;

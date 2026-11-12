@@ -304,6 +304,41 @@ fn list_labels_sit_at_left_minus_hanging() {
 }
 
 #[test]
+fn right_aligned_labels_end_where_left_aligned_ones_begin() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let numbering = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="9"/><w:numFmt w:val="decimal"/>
+        <w:lvlText w:val="%1."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="840" w:hanging="420"/></w:pPr></w:lvl></w:abstractNum>
+        <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#;
+    let item = paragraph(
+        &font("Liberation Serif", 24),
+        r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>"#,
+        LOREM,
+    );
+    let page =
+        &pages(&Source { body: &(item.clone() + &item), numbering, ..Source::default() }, &fonts, Model::Word)[0];
+    let nine = &page.lines[0];
+    let ten = page.lines.iter().find(|l| l.text.starts_with("10.")).expect("the second item is numbered 10");
+    // "9." and "10." end at the same place, 21 pt in, so the wider one starts one digit further left ...
+    assert!(ten.x0 < nine.x0 - 4.0, "{} {}", nine.x0, ten.x0);
+    // ... and the text of both starts at the left indent, as the following lines do.
+    let text_start = |line: &oco_layout::PlacedLine| -> f32 {
+        let glyphs: Vec<f32> = page
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                oco_layout::Item::Glyph { x, y, .. } if (*y - line.baseline).abs() < 0.01 => Some(*x),
+                _ => None,
+            })
+            .collect();
+        // The first glyph after the gap left by the tab.
+        glyphs.windows(2).find(|pair| pair[1] - pair[0] > 8.0).map(|pair| pair[1]).unwrap()
+    };
+    assert!(close(text_start(nine) - 72.0, 42.0, 0.01), "{}", text_start(nine) - 72.0);
+    assert!(close(text_start(ten) - 72.0, 42.0, 0.01), "{}", text_start(ten) - 72.0);
+    assert!(close(page.lines[1].x0 - 72.0, 42.0, 0.01));
+}
+
+#[test]
 fn headings_stay_with_the_paragraph_they_introduce() {
     let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
     let body_text = |n: usize| paragraph(&font("Liberation Serif", 24), "", &format!("Line {n}."));
