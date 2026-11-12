@@ -239,6 +239,9 @@ fn context(docx: &Docx, section: &Section, width: f32, model: Model) -> paragrap
         // From Word 2013 on, a justified line may squeeze its spaces a little
         // to take in one more word.
         shrink_spaces: docx.settings.compatibility_mode >= 15,
+        // Measured in WPS Office, which this follows for want of Word's own
+        // output of Chinese text. LibreOffice does not do it.
+        squeeze_punctuation: docx.settings.compress_punctuation && model == Model::Word,
         model,
     }
 }

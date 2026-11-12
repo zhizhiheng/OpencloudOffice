@@ -496,3 +496,36 @@ fn the_last_line_of_a_page_need_only_fit_as_far_as_its_text() {
     assert_eq!(pages.iter().map(|page| page.lines.len()).collect::<Vec<_>>(), [17, 3]);
     assert!(close(pitches(&pages[0])[0], 41.4, 0.01));
 }
+
+#[test]
+fn a_line_squeezes_its_punctuation_to_take_one_more_character() {
+    let Some(fonts) = fonts(&[("Source Han Serif CN", '中')]) else { return };
+    // As measured in WPS Office (testdata/zh-open): a line of full-width
+    // text may run over by up to half an em when it holds a punctuation mark
+    // with blank to give up, and the mark is narrowed by the excess.
+    // The measure here is 20.6 em of 10.5 pt text.
+    let section =
+        r#"<w:pgSz w:w="7206" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>"#;
+    let squeezing = r#"<w:characterSpacingControl w:val="compressPunctuation"/>"#;
+    let text = "一二三四五，六七八九十一二三四五六七八九十甲乙丙丁戊己庚辛";
+    let body = paragraph(&font("Source Han Serif CN", 21), "", text);
+    let first_line = |settings: &str| {
+        let pages = pages(&Source { body: &body, section, settings, ..Source::default() }, &fonts, Model::Word);
+        pages[0].lines[0].clone()
+    };
+    let (plain, squeezed) = (first_line(""), first_line(squeezing));
+    assert_eq!(plain.text.chars().count(), 20, "{}", plain.text);
+    assert_eq!(squeezed.text.chars().count(), 21, "{}", squeezed.text);
+    // The squeezed line ends at the margin: twenty-one characters in 20.6 em.
+    assert!(close(squeezed.x1, 72.0 + 20.6 * 10.5, 0.05), "{}", squeezed.x1);
+
+    // Without a mark to squeeze, or when it would take more than half an em,
+    // the line breaks where it did.
+    let without_mark = paragraph(&font("Source Han Serif CN", 21), "", &text.replace('，', "中"));
+    let narrow =
+        r#"<w:pgSz w:w="7164" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>"#;
+    for (body, section) in [(&without_mark, section), (&body, narrow)] {
+        let pages = pages(&Source { body, section, settings: squeezing, ..Source::default() }, &fonts, Model::Word);
+        assert_eq!(pages[0].lines[0].text.chars().count(), 20, "{}", pages[0].lines[0].text);
+    }
+}

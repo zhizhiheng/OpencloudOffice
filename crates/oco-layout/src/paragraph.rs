@@ -29,6 +29,8 @@ pub struct Context {
     pub hanging_tab: bool,
     /// A justified line may compress its spaces to fit one more word.
     pub shrink_spaces: bool,
+    /// A line may squeeze its full-width punctuation to fit one more character.
+    pub squeeze_punctuation: bool,
     pub model: Model,
 }
 
@@ -327,6 +329,54 @@ impl Builder<'_> {
     }
 }
 
+/// How far past the measure, in em, a line may run when it has full-width
+/// punctuation to squeeze, and the most one mark gives up. Measured in WPS
+/// Office: a line takes one more character when that needs no more than
+/// half an em, the excess comes equally out of each mark that has blank to
+/// give, and no mark is seen narrower than 9/16 em.
+const SQUEEZE_ROOM: f32 = 0.5;
+const SQUEEZE_MOST: f32 = 0.4375;
+
+/// The room a character needs as the last of its line: a full-width closing
+/// mark shows only its inked left half there.
+fn at_line_end(atom: &Atom) -> f32 {
+    if text::is_closing_punctuation(atom.ch) && atom.advance > 0.9 * atom.size {
+        atom.advance - 0.5 * atom.size
+    } else {
+        atom.advance
+    }
+}
+
+/// Whether the atom at `index` of a line that starts at `start` is a
+/// full-width punctuation mark with blank to give up: a closing mark before
+/// ordinary text, or an opening mark after it. Marks that touch other marks
+/// have been closed up already, and an opening mark that starts the line
+/// stays whole.
+fn squeezable(atoms: &[Atom], start: usize, index: usize) -> bool {
+    let atom = &atoms[index];
+    let full = |a: &Atom| a.kind == Kind::Char && a.advance > 0.9 * a.size;
+    let plain = |a: Option<&Atom>| {
+        a.is_some_and(|a| {
+            a.kind == Kind::Char
+                && !a.label
+                && !text::is_closing_punctuation(a.ch)
+                && !text::is_opening_punctuation(a.ch)
+                && a.ch != ' '
+                && a.ch != '\u{3000}'
+        })
+    };
+    if !full(atom) || atom.label {
+        return false;
+    }
+    if text::is_closing_punctuation(atom.ch) {
+        plain(atoms.get(index + 1))
+    } else if text::is_opening_punctuation(atom.ch) {
+        index > start && plain(atoms.get(index - 1))
+    } else {
+        false
+    }
+}
+
 /// Converts character-unit and twip indents to points. A character unit is
 /// the width of one character at the paragraph's font size.
 fn indents(props: &ParaProps, char_width: f32) -> (f32, f32, f32) {
@@ -425,6 +475,8 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         page_break: bool,
         /// The line is over-full and its spaces are to be compressed.
         shrink: bool,
+        /// The line is over-full and its punctuation is to be squeezed.
+        squeeze: bool,
     }
     let mut breaks: Vec<Break> = Vec::new();
     let mut start = 0;
@@ -449,6 +501,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         let mut forced = false;
         let mut page_break = false;
         let mut shrink = false;
+        let mut squeeze = false;
         let mut end = atoms.len();
         while i < atoms.len() {
             // Copied out because a tab's width is written back below.
@@ -507,6 +560,20 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                                 break;
                             }
                             end = last_opportunity.map_or(i, |o| o + 1);
+                            break;
+                        } else if !squeeze
+                            && context.squeeze_punctuation
+                            && x + at_line_end(&atom) - limit <= SQUEEZE_ROOM * atom.size
+                            && (start..i).any(|k| squeezable(&atoms, start, k))
+                            && atoms.get(i + 1).is_none_or(|next| {
+                                next.kind != Kind::Char || text::can_break_between(atom.ch, next.ch, kinsoku)
+                            })
+                        {
+                            // Full-width punctuation gives up part of its
+                            // blank half so that the line takes this
+                            // character too; the line then ends here.
+                            squeeze = true;
+                            end = i + 1;
                             break;
                         } else {
                             end = last_opportunity.map_or(i, |o| o + 1);
@@ -578,12 +645,12 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         }
         // Never loop without progress, whatever the widths were.
         let end = end.max(start + 1);
-        breaks.push(Break { start, end, forced, page_break, shrink });
+        breaks.push(Break { start, end, forced, page_break, shrink, squeeze });
         start = end;
         is_first = false;
     }
     if atoms.is_empty() {
-        breaks.push(Break { start: 0, end: 0, forced: true, page_break: false, shrink: false });
+        breaks.push(Break { start: 0, end: 0, forced: true, page_break: false, shrink: false, squeeze: false });
     }
 
     // --------------------------------------------------------------- placement
@@ -636,6 +703,13 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         let shrinkable =
             (stretch_from..visible).filter(|i| range[*i].ch == ' ' && range[*i].kind == Kind::Char).count();
         let per_space = if br.shrink && shrinkable > 0 && slack < 0.0 { slack / shrinkable as f32 } else { 0.0 };
+        // ... or, in Chinese text, out of its punctuation, equally from each mark.
+        let marks: Vec<usize> = (0..visible).filter(|k| squeezable(range, 0, *k)).collect();
+        let per_mark = if br.squeeze && !marks.is_empty() && slack < 0.0 {
+            (-slack / marks.len() as f32).min(SQUEEZE_MOST * range[marks[0]].size)
+        } else {
+            0.0
+        };
         let offset = match align {
             "center" => (slack / 2.0).max(0.0),
             "right" | "end" => slack.max(0.0),
@@ -726,6 +800,12 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
             }
             let style = &styles[atom.style];
             let in_text = index < visible;
+            // A squeezed closing mark loses blank on its right, an opening
+            // mark on its left.
+            let squeezed = if per_mark > 0.0 && marks.contains(&index) { per_mark } else { 0.0 };
+            if squeezed > 0.0 && text::is_opening_punctuation(atom.ch) {
+                x -= squeezed;
+            }
             match atom.kind {
                 Kind::Char => {
                     if atom.ch != ' ' && atom.ch != '\u{3000}' {
@@ -761,6 +841,9 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                         stretchable(index)
                     };
                     x += atom.advance + if in_text && justify && stretches { per_gap } else { 0.0 };
+                    if squeezed > 0.0 && text::is_closing_punctuation(atom.ch) {
+                        x -= squeezed;
+                    }
                     if in_text && index >= stretch_from && atom.ch == ' ' {
                         x += per_space;
                     }

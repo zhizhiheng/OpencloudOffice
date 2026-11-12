@@ -4539,7 +4539,7 @@
    "wps": {
     "testdata/zh-open/01-font-sizes.docx": {
      "dx": 0.0,
-     "dy": 0.05,
+     "dy": 0.06,
      "lines": 33,
      "missing_fonts": [],
      "page_starts": 1,
@@ -4548,9 +4548,9 @@
       2,
       2
      ],
-     "placed": 27,
+     "placed": 31,
      "plain": true,
-     "same": 27
+     "same": 31
     },
     "testdata/zh-open/02-character-effects.docx": {
      "dx": 0.0,
@@ -4565,11 +4565,11 @@
      ],
      "placed": 19,
      "plain": true,
-     "same": 21
+     "same": 22
     },
     "testdata/zh-open/03-indents-and-spacing.docx": {
      "dx": 0.0,
-     "dy": 124.72,
+     "dy": 0.07,
      "lines": 70,
      "missing_fonts": [],
      "page_starts": 3,
@@ -4578,9 +4578,9 @@
       4,
       4
      ],
-     "placed": 8,
+     "placed": 20,
      "plain": true,
-     "same": 21
+     "same": 44
     },
     "testdata/zh-open/04-report-headings.docx": {
      "dx": 0.0,
@@ -4595,7 +4595,7 @@
      ],
      "placed": 3,
      "plain": true,
-     "same": 30
+     "same": 42
     },
     "testdata/zh-open/05-official-notice.docx": {
      "dx": 0.04,
@@ -4610,11 +4610,11 @@
      ],
      "placed": 0,
      "plain": true,
-     "same": 24
+     "same": 22
     },
     "testdata/zh-open/06-contract.docx": {
      "dx": 0.0,
-     "dy": 140.48,
+     "dy": 179.46,
      "lines": 37,
      "missing_fonts": [],
      "page_starts": 1,
@@ -4625,7 +4625,7 @@
      ],
      "placed": 1,
      "plain": true,
-     "same": 23
+     "same": 29
     },
     "testdata/zh-open/07-regulation.docx": {
      "dx": 0.0,
@@ -4653,9 +4653,9 @@
       3,
       4
      ],
-     "placed": 0,
+     "placed": 1,
      "plain": true,
-     "same": 21
+     "same": 34
     },
     "testdata/zh-open/09-number-formats.docx": {
      "dx": 0.0,
@@ -4683,9 +4683,9 @@
       2,
       2
      ],
-     "placed": 17,
+     "placed": 24,
      "plain": true,
-     "same": 17
+     "same": 24
     }
    }
   },
@@ -5123,8 +5123,8 @@
    "multipage_pages_equal": 406,
    "multipage_pages_within_one": 553,
    "page_starts": 2041,
-   "page_starts_equal": 245,
-   "page_starts_same_paragraph": 409
+   "page_starts_equal": 244,
+   "page_starts_same_paragraph": 408
   },
   "covered": {
    "documents": 601,
@@ -5197,8 +5197,8 @@
     "page_starts": 22,
     "page_starts_equal": 8,
     "pages_equal": 7,
-    "placed": 96,
-    "same": 377
+    "placed": 120,
+    "same": 441
    },
    "covered": {
     "documents": 10,
@@ -5206,8 +5206,8 @@
     "page_starts": 22,
     "page_starts_equal": 8,
     "pages_equal": 7,
-    "placed": 96,
-    "same": 377
+    "placed": 120,
+    "same": 441
    },
    "plain": {
     "documents": 10,
@@ -5215,8 +5215,8 @@
     "page_starts": 22,
     "page_starts_equal": 8,
     "pages_equal": 7,
-    "placed": 96,
-    "same": 377
+    "placed": 120,
+    "same": 441
    }
   }
  },
