@@ -108,6 +108,8 @@ pub struct Settings {
     pub underline_trailing_spaces: bool,
     /// Do not treat a hanging indent as a tab stop (`noTabHangInd`).
     pub no_tab_hang_indent: bool,
+    /// Even pages have headers and footers of their own (`evenAndOddHeaders`).
+    pub even_and_odd_headers: bool,
     /// The Word version whose layout rules the document asks for; 15 is
     /// current, and a document that does not say gets 12.
     pub compatibility_mode: i32,
@@ -121,6 +123,7 @@ impl Default for Settings {
             compress_punctuation: false,
             underline_trailing_spaces: false,
             no_tab_hang_indent: false,
+            even_and_odd_headers: false,
             compatibility_mode: 12,
         }
     }
@@ -136,6 +139,7 @@ impl Settings {
                 Some("defaultTabStop") => {
                     settings.default_tab_stop = crate::xml::twips(crate::xml::val(node)).unwrap_or(720).max(1);
                 }
+                Some("evenAndOddHeaders") => settings.even_and_odd_headers = crate::xml::on_off(node),
                 Some("characterSpacingControl") => {
                     settings.compress_punctuation =
                         crate::xml::val(node).is_some_and(|v| v.starts_with("compressPunctuation"));

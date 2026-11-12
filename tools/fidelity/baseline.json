@@ -2803,7 +2803,7 @@
       3
      ],
      "placed": 41,
-     "plain": true,
+     "plain": false,
      "same": 123
     },
     "corpus-word/docx4j/footnote-space-after.docx": {
@@ -3378,7 +3378,7 @@
       7
      ],
      "placed": 88,
-     "plain": true,
+     "plain": false,
      "same": 288
     },
     "corpus-word/docx4j/page-first-even-odd.docx": {
@@ -3453,7 +3453,7 @@
       4
      ],
      "placed": 0,
-     "plain": true,
+     "plain": false,
      "same": 160
     },
     "corpus-word/docx4j/page-tall-header.docx": {
@@ -4699,7 +4699,7 @@
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-7-footer.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br-8-p-page.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-1-run-properties.docx": "agrees",
-   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-2-instrtext-field.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-2-instrtext-field.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-3-instrtext-bare-header.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-4-body-br.docx": "text differs",
    "docx4j/docx4j-core-tests/src/test/resources/br-placement/br2-5-body-br-page.docx": "text differs",
@@ -5127,15 +5127,15 @@
    "page_starts_same_paragraph": 416
   },
   "covered": {
-   "documents": 601,
-   "forced_page_starts": 37,
-   "forced_page_starts_equal": 37,
-   "multipage": 66,
-   "multipage_pages_equal": 62,
-   "multipage_pages_within_one": 66,
-   "page_starts": 54,
-   "page_starts_equal": 38,
-   "page_starts_same_paragraph": 42
+   "documents": 548,
+   "forced_page_starts": 36,
+   "forced_page_starts_equal": 36,
+   "multipage": 63,
+   "multipage_pages_equal": 59,
+   "multipage_pages_within_one": 63,
+   "page_starts": 50,
+   "page_starts_equal": 36,
+   "page_starts_same_paragraph": 40
   },
   "fresh": {
    "documents": 1943,
@@ -5149,15 +5149,15 @@
    "page_starts_same_paragraph": 175
   },
   "plain": {
-   "documents": 950,
-   "forced_page_starts": 44,
-   "forced_page_starts_equal": 44,
-   "multipage": 85,
-   "multipage_pages_equal": 80,
-   "multipage_pages_within_one": 85,
-   "page_starts": 83,
-   "page_starts_equal": 48,
-   "page_starts_same_paragraph": 53
+   "documents": 893,
+   "forced_page_starts": 42,
+   "forced_page_starts_equal": 42,
+   "multipage": 80,
+   "multipage_pages_equal": 76,
+   "multipage_pages_within_one": 80,
+   "page_starts": 74,
+   "page_starts_equal": 46,
+   "page_starts_same_paragraph": 50
   }
  },
  "lines": {
@@ -5172,22 +5172,22 @@
     "same": 6036
    },
    "covered": {
-    "documents": 31,
-    "lines": 1907,
-    "page_starts": 29,
-    "page_starts_equal": 16,
-    "pages_equal": 30,
-    "placed": 1050,
-    "same": 1728
+    "documents": 28,
+    "lines": 1293,
+    "page_starts": 18,
+    "page_starts_equal": 15,
+    "pages_equal": 27,
+    "placed": 921,
+    "same": 1157
    },
    "plain": {
-    "documents": 63,
-    "lines": 3259,
-    "page_starts": 72,
-    "page_starts_equal": 52,
-    "pages_equal": 57,
-    "placed": 1666,
-    "same": 2788
+    "documents": 60,
+    "lines": 2645,
+    "page_starts": 61,
+    "page_starts_equal": 51,
+    "pages_equal": 54,
+    "placed": 1537,
+    "same": 2217
    }
   },
   "wps": {
@@ -5221,7 +5221,7 @@
   }
  },
  "reading": {
-  "agree": 306,
+  "agree": 307,
   "pairs": 370
  }
 }

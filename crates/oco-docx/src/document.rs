@@ -4,6 +4,8 @@
 //! [`crate::Resolver`] to compute what a paragraph or run actually looks like
 //! once styles and document defaults are applied.
 
+use std::collections::HashSet;
+
 use roxmltree::Node;
 use serde::Serialize;
 
@@ -52,6 +54,19 @@ pub struct Run {
     pub content: Vec<RunContent>,
     /// Set when the run sits inside a tracked change.
     pub revision: Option<Revision>,
+    /// Where the parts of complex fields fall in `content`, while the
+    /// paragraph is being read; empty afterwards.
+    #[serde(skip)]
+    pub(crate) field_marks: Vec<(usize, FieldMark)>,
+}
+
+/// A part of a complex field (`w:fldChar`, `w:instrText`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FieldMark {
+    Begin,
+    Code(String),
+    Separate,
+    End,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -69,6 +84,13 @@ pub enum RunContent {
     /// began at this point when it last laid the document out. It is ground
     /// truth for pagination that comes with the file.
     PageBreakHint,
+    /// A `PAGE` field: the number of the page the run is on. Holds the text
+    /// Word last showed for it, which is all a reader that does not lay the
+    /// document out has to go on.
+    PageNumber(String),
+    /// A `NUMPAGES` field: how many pages the document has. Holds the text
+    /// Word last showed for it.
+    PageCount(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -136,6 +158,7 @@ impl Run {
                 RunContent::Break(_) => "\n".to_owned(),
                 RunContent::Symbol { character, .. } => character.to_string(),
                 RunContent::PageBreakHint => String::new(),
+                RunContent::PageNumber(shown) | RunContent::PageCount(shown) => shown.clone(),
             })
             .collect()
     }
@@ -153,6 +176,14 @@ impl Paragraph {
 }
 
 impl Document {
+    /// The content of a header or footer part (`w:hdr`, `w:ftr`).
+    pub(crate) fn parse_story(xml: &str, coverage: &mut Coverage) -> Result<Vec<Block>, roxmltree::Error> {
+        let tree = roxmltree::Document::parse(xml)?;
+        let mut blocks = Vec::new();
+        parse_blocks(tree.root_element(), 0, &mut blocks, coverage);
+        Ok(blocks)
+    }
+
     pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
         let doc = roxmltree::Document::parse(xml)?;
         let mut document = Document::default();
@@ -386,7 +417,110 @@ fn parse_paragraph(node: Node, coverage: &mut Coverage) -> Paragraph {
         }
     }
     parse_inlines(node, None, &mut paragraph.runs, coverage);
+    resolve_fields(&mut paragraph.runs);
     paragraph
+}
+
+/// A field whose value depends on where the layout puts it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LiveField {
+    Page,
+    Pages,
+}
+
+fn live_field(instruction: &str) -> Option<LiveField> {
+    match instruction.split_whitespace().next()?.to_ascii_uppercase().as_str() {
+        "PAGE" => Some(LiveField::Page),
+        "NUMPAGES" | "SECTIONPAGES" => Some(LiveField::Pages),
+        _ => None,
+    }
+}
+
+fn live_content(field: LiveField, shown: String) -> RunContent {
+    match field {
+        LiveField::Page => RunContent::PageNumber(shown),
+        LiveField::Pages => RunContent::PageCount(shown),
+    }
+}
+
+/// Turns the complex fields of a paragraph that show a page number or a
+/// page count into [`RunContent::PageNumber`] and [`RunContent::PageCount`],
+/// in place of the result Word stored. Other fields keep their stored
+/// result, which is what a reader shows for them. The field marks are used up.
+fn resolve_fields(runs: &mut [Run]) {
+    struct Open {
+        code: String,
+        in_result: bool,
+        /// Content of the result: (run, index in its content).
+        result: Vec<(usize, usize)>,
+    }
+    if runs.iter().all(|run| run.field_marks.is_empty()) {
+        return;
+    }
+    let mut open: Vec<Open> = Vec::new();
+    // What happens to the content at (run, index): it goes, or something
+    // takes its place; and what is put in before it.
+    let mut dropped: HashSet<(usize, usize)> = HashSet::new();
+    let mut inserted: Vec<((usize, usize), LiveField, String)> = Vec::new();
+    for (run_index, run) in runs.iter().enumerate() {
+        let mut marks = run.field_marks.iter().peekable();
+        for position in 0..=run.content.len() {
+            while let Some((_, mark)) = marks.next_if(|(at, _)| *at <= position) {
+                match mark {
+                    FieldMark::Begin => open.push(Open { code: String::new(), in_result: false, result: Vec::new() }),
+                    FieldMark::Code(text) => {
+                        if let Some(field) = open.last_mut().filter(|field| !field.in_result) {
+                            field.code.push_str(text);
+                        }
+                    }
+                    FieldMark::Separate => {
+                        if let Some(field) = open.last_mut() {
+                            field.in_result = true;
+                        }
+                    }
+                    FieldMark::End => {
+                        // Only a field that is not inside another: a page
+                        // number inside an IF, say, is the IF's business.
+                        let Some(field) = open.pop().filter(|_| open.is_empty()) else { continue };
+                        let Some(live) = live_field(&field.code) else { continue };
+                        let shown = field
+                            .result
+                            .iter()
+                            .filter_map(|(run, index)| match &runs[*run].content[*index] {
+                                RunContent::Text(text) => Some(text.as_str()),
+                                _ => None,
+                            })
+                            .collect();
+                        inserted.push((field.result.first().copied().unwrap_or((run_index, position)), live, shown));
+                        dropped.extend(field.result);
+                    }
+                }
+            }
+            if position == run.content.len() {
+                break;
+            }
+            if open.iter().any(|field| !field.in_result) {
+                // Inside an instruction: not part of what the document shows.
+                dropped.insert((run_index, position));
+            } else if let [field] = open.as_mut_slice() {
+                field.result.push((run_index, position));
+            }
+        }
+    }
+    for (run_index, run) in runs.iter_mut().enumerate() {
+        run.field_marks.clear();
+        let old = std::mem::take(&mut run.content);
+        let places = old.len();
+        let mut old = old.into_iter();
+        for position in 0..=places {
+            for (_, live, shown) in inserted.iter().filter(|(at, ..)| *at == (run_index, position)) {
+                run.content.push(live_content(*live, shown.clone()));
+            }
+            if let Some(piece) = old.next().filter(|_| !dropped.contains(&(run_index, position))) {
+                run.content.push(piece);
+            }
+        }
+    }
 }
 
 /// Elements that belong inside a run. Word also honours them when they sit
@@ -413,8 +547,24 @@ fn parse_inlines(parent: Node, revision: Option<&Revision>, runs: &mut Vec<Run>,
             Some("del") => parse_inlines(child, Some(&tracked(RevisionKind::Deleted)), runs, coverage),
             Some("moveFrom") => parse_inlines(child, Some(&tracked(RevisionKind::MovedFrom)), runs, coverage),
             Some("moveTo") => parse_inlines(child, Some(&tracked(RevisionKind::MovedTo)), runs, coverage),
+            // A field written in one piece: its instruction and, inside, the
+            // result Word stored.
+            Some("fldSimple") => {
+                let mut result = Vec::new();
+                parse_inlines(child, revision, &mut result, coverage);
+                match w_attr(child, "instr").and_then(live_field) {
+                    Some(live) => {
+                        let shown: String = result.iter().map(Run::text).collect();
+                        let mut run = result.into_iter().next().unwrap_or_default();
+                        run.revision = revision.cloned();
+                        run.content = vec![live_content(live, shown)];
+                        runs.push(run);
+                    }
+                    None => runs.append(&mut result),
+                }
+            }
             // Wrappers whose content is ordinary inline content.
-            Some("hyperlink" | "smartTag" | "customXml" | "fldSimple" | "dir" | "bdo") => {
+            Some("hyperlink" | "smartTag" | "customXml" | "dir" | "bdo") => {
                 parse_inlines(child, revision, runs, coverage);
             }
             Some("sdt") => for_each_child(child, &mut |part| {
@@ -464,13 +614,22 @@ fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
         Some("rPr") => run.props.read(child, coverage),
         Some(name) if is_run_content(name) => read_run_content(child, name, &mut run.content, coverage),
         Some(name) if is_ignorable(name) => {}
+        // The parts of a complex field; `resolve_fields` makes sense of them.
+        Some("fldChar") => {
+            let mark = match w_attr(child, "fldCharType") {
+                Some("begin") => Some(FieldMark::Begin),
+                Some("separate") => Some(FieldMark::Separate),
+                Some("end") => Some(FieldMark::End),
+                _ => None,
+            };
+            run.field_marks.extend(mark.map(|mark| (run.content.len(), mark)));
+        }
+        Some("instrText") => run.field_marks.push((run.content.len(), FieldMark::Code(text_of(child)))),
         // Not modelled yet. Named so that they are not mistaken for wrappers.
         Some(
             "drawing"
             | "pict"
             | "object"
-            | "fldChar"
-            | "instrText"
             | "delInstrText"
             | "footnoteReference"
             | "endnoteReference"

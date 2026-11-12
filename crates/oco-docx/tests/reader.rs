@@ -423,6 +423,136 @@ fn normal_table_is_built_in_and_table_styles_format_paragraphs() {
 }
 
 #[test]
+fn page_number_fields_are_told_from_the_results_stored_for_them() {
+    let field = |kind: &str| format!(r#"<w:r><w:fldChar w:fldCharType="{kind}"/></w:r>"#);
+    let code = |text: &str| format!(r#"<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>"#);
+    let text = |text: &str| format!(r#"<w:r><w:t xml:space="preserve">{text}</w:t></w:r>"#);
+    let body = [
+        "<w:p>".to_owned(),
+        text("Page "),
+        // A complex field, its instruction in two pieces and its result in two runs.
+        field("begin")
+            + &code(" PA")
+            + &code("GE  \\* MERGEFORMAT ")
+            + &field("separate")
+            + &text("1")
+            + &text("2")
+            + &field("end"),
+        text(" of "),
+        // The same thing written in one piece.
+        r#"<w:fldSimple w:instr=" NUMPAGES "><w:r><w:rPr><w:b/></w:rPr><w:t>40</w:t></w:r></w:fldSimple>"#.to_owned(),
+        text(", "),
+        // Any other field shows the result stored for it.
+        field("begin") + &code(" DATE ") + &field("separate") + &text("today") + &field("end"),
+        // A page number inside another field is that field's business.
+        field("begin")
+            + &code(" IF ")
+            + &field("begin")
+            + &code(" PAGE ")
+            + &field("separate")
+            + &text("7")
+            + &field("end")
+            + &code(" > 1 yes no ")
+            + &field("separate")
+            + &text(" yes")
+            + &field("end"),
+        // A field with no result stored at all.
+        field("begin") + &code("PAGE") + &field("end"),
+        "</w:p>".to_owned(),
+    ]
+    .concat();
+    let docx = docx(&body, "");
+    let paragraph = docx.document.paragraphs()[0];
+    let content: Vec<_> = paragraph.runs.iter().flat_map(|run| run.content.iter().cloned()).collect();
+    assert_eq!(
+        content,
+        [
+            RunContent::Text("Page ".into()),
+            RunContent::PageNumber("12".into()),
+            RunContent::Text(" of ".into()),
+            RunContent::PageCount("40".into()),
+            RunContent::Text(", ".into()),
+            RunContent::Text("today".into()),
+            RunContent::Text(" yes".into()),
+            RunContent::PageNumber(String::new()),
+        ]
+    );
+    // A reader that does not lay the document out shows what Word last showed.
+    assert_eq!(paragraph.text(), "Page 12 of 40, today yes");
+    // The formatting of the result stays with the number.
+    let count = paragraph.runs.iter().find(|run| matches!(run.content[..], [RunContent::PageCount(_)])).unwrap();
+    assert_eq!(count.props.bold, Some(true));
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
+fn reads_headers_and_footers_and_which_pages_they_are_for() {
+    let relationship = |id: &str, kind: &str, target: &str| {
+        format!(r#"<Relationship Id="{id}" Type="{DOC_RELS}/{kind}" Target="{target}"/>"#)
+    };
+    let r = r#"xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
+    let body = r#"<w:p><w:pPr><w:sectPr>
+             <w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="even" r:id="rId3"/>
+           </w:sectPr></w:pPr></w:p>
+           <w:sectPr>
+             <w:headerReference w:type="first" r:id="rId2"/><w:footerReference r:id="rId3"/>
+             <w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440" w:header="567" w:footer="850"/>
+             <w:titlePg/><w:pgNumType w:start="5" w:fmt="lowerRoman"/>
+           </w:sectPr>"#;
+    let bytes = zip(&[
+        (
+            "word/_rels/document.xml.rels",
+            format!(
+                r#"<Relationships xmlns="{PKG_RELS}">{}{}{}{}{}</Relationships>"#,
+                relationship("rId1", "header", "header1.xml"),
+                relationship("rId2", "header", "header2.xml"),
+                relationship("rId3", "footer", "footer1.xml"),
+                relationship("rId4", "settings", "settings.xml"),
+                relationship("rId5", "header", "gone.xml"),
+            ),
+        ),
+        ("word/document.xml", format!("<w:document {W} {r}><w:body>{body}</w:body></w:document>")),
+        ("word/header1.xml", format!("<w:hdr {W}><w:p><w:r><w:t>running head</w:t></w:r></w:p></w:hdr>")),
+        ("word/header2.xml", format!("<w:hdr {W}><w:p><w:r><w:t>title page</w:t></w:r></w:p></w:hdr>")),
+        (
+            "word/footer1.xml",
+            format!(
+                r#"<w:ftr {W}><w:p><w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>"#
+            ),
+        ),
+        ("word/settings.xml", format!("<w:settings {W}><w:evenAndOddHeaders/></w:settings>")),
+    ]);
+    let docx = Docx::from_bytes(&bytes).unwrap();
+    let story = |id: &str| {
+        docx.stories[id]
+            .iter()
+            .map(|b| match b {
+                Block::Paragraph(p) => p.text(),
+                Block::Table(_) => "table".to_owned(),
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(docx.stories.keys().collect::<Vec<_>>(), ["rId1", "rId2", "rId3"]);
+    assert_eq!(
+        (story("rId1"), story("rId2"), story("rId3")),
+        (vec!["running head".to_owned()], vec!["title page".to_owned()], vec!["1".to_owned()])
+    );
+    // The part that is not there costs a warning, not the document.
+    assert_eq!(docx.warnings.len(), 1, "{:?}", docx.warnings);
+    assert!(docx.settings.even_and_odd_headers);
+
+    let first = docx.document.paragraphs()[0].section_break.as_ref().unwrap();
+    assert_eq!((first.headers.default.as_deref(), first.headers.first.as_deref()), (Some("rId1"), None));
+    assert_eq!((first.footers.even.as_deref(), first.footers.default.as_deref()), (Some("rId3"), None));
+    assert!(!first.title_page);
+    let last = &docx.document.section;
+    assert_eq!((last.headers.first.as_deref(), last.footers.default.as_deref()), (Some("rId2"), Some("rId3")));
+    assert_eq!((last.header, last.footer, last.title_page), (567, 850, true));
+    assert_eq!((last.page_number_start, last.page_number_format.as_deref()), (Some(5), Some("lowerRoman")));
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
 fn reads_iso_strict_documents() {
     let strict = r#"xmlns:w="http://purl.oclc.org/ooxml/wordprocessingml/main""#;
     let strict_rels = "http://purl.oclc.org/ooxml/officeDocument/relationships";

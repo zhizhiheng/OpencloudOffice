@@ -288,6 +288,11 @@ impl Builder<'_> {
                 RunContent::Break(_) => push(self, '\n', Kind::PageBreak, None),
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
                 RunContent::PageBreakHint => {}
+                // What Word last showed; a header or footer has the real
+                // number put in before it is laid out.
+                RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
+                    shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
+                }
             }
         }
     }

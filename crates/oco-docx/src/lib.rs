@@ -24,6 +24,7 @@ mod theme;
 mod values;
 mod xml;
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -36,7 +37,7 @@ pub use error::{Error, OtherFormat, Result};
 pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering, Suffix};
 pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
 pub use resolve::Resolver;
-pub use section::{DocGrid, GridKind, Section, SectionStart};
+pub use section::{DocGrid, GridKind, Section, SectionStart, StoryRefs};
 pub use statistics::Statistics;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use table::{CellMargins, CellProps, RowProps, TableProps, VerticalMerge};
@@ -53,6 +54,9 @@ pub struct Docx {
     pub theme: Option<ThemeFonts>,
     pub numbering: Numbering,
     pub settings: Settings,
+    /// The content of the headers and footers, by the relationship id that
+    /// a section names them with ([`Section::headers`], [`Section::footers`]).
+    pub stories: BTreeMap<String, Vec<Block>>,
     /// Page, line and character counts recorded by the application that
     /// last saved the document.
     pub recorded: Statistics,
@@ -164,6 +168,30 @@ impl Docx {
             })
             .unwrap_or_default();
 
+        // Headers and footers. One that cannot be read is left out, and the
+        // pages that would have shown it go without.
+        let mut stories = BTreeMap::new();
+        for relationship in &relationships {
+            let kind = relationship.rel_type.rsplit('/').next().unwrap_or_default();
+            if relationship.external || !matches!(kind, "header" | "footer") {
+                continue;
+            }
+            let read = package.read_xml(&relationship.target).map_err(|error| error.to_string()).and_then(|xml| {
+                let mut seen = Coverage::default();
+                let xml = xml.ok_or_else(|| format!("the {kind} part {} is missing", relationship.target))?;
+                let blocks = Document::parse_story(&xml, &mut seen)
+                    .map_err(|error| format!("the {kind} part is malformed and was ignored: {error}"))?;
+                Ok((blocks, seen))
+            });
+            match read {
+                Ok((blocks, seen)) => {
+                    coverage.merge(seen);
+                    stories.insert(relationship.id.clone(), blocks);
+                }
+                Err(warning) => warnings.push(warning),
+            }
+        }
+
         // Statistics are a convenience; a missing or damaged part is no cause for a warning.
         let recorded = package_relationships
             .iter()
@@ -173,7 +201,7 @@ impl Docx {
         let recorded =
             package.read_xml(&recorded).ok().flatten().and_then(|xml| Statistics::parse(&xml).ok()).unwrap_or_default();
 
-        Ok(Docx { document, styles, theme, numbering, settings, recorded, coverage, warnings })
+        Ok(Docx { document, styles, theme, numbering, settings, stories, recorded, coverage, warnings })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {

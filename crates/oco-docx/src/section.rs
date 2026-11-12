@@ -21,6 +21,28 @@ pub struct Section {
     pub columns: i32,
     pub grid: DocGrid,
     pub start: SectionStart,
+    /// The headers and footers the section names, by relationship id; see
+    /// [`crate::Docx::stories`]. One it does not name is the same as in the
+    /// section before.
+    pub headers: StoryRefs,
+    pub footers: StoryRefs,
+    /// `w:titlePg`: the first page of the section has its own header and footer.
+    pub title_page: bool,
+    /// `w:pgNumType`: the number the section's first page takes, when it
+    /// does not simply carry on, and the format page numbers are shown in.
+    pub page_number_start: Option<i32>,
+    pub page_number_format: Option<String>,
+}
+
+/// The header or footer for each kind of page, by relationship id.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct StoryRefs {
+    /// For every page that has none of its own.
+    pub default: Option<String>,
+    /// For the first page, when the section has a title page.
+    pub first: Option<String>,
+    /// For even pages, when the document tells odd and even pages apart.
+    pub even: Option<String>,
 }
 
 impl Default for Section {
@@ -40,6 +62,11 @@ impl Default for Section {
             columns: 1,
             grid: DocGrid::default(),
             start: SectionStart::NextPage,
+            headers: StoryRefs::default(),
+            footers: StoryRefs::default(),
+            title_page: false,
+            page_number_start: None,
+            page_number_format: None,
         }
     }
 }
@@ -124,6 +151,23 @@ impl Section {
                     if section.columns > 1 {
                         coverage.note("w:sectPr/w:cols (more than one column)");
                     }
+                }
+                Some(kind @ ("headerReference" | "footerReference")) => {
+                    let id = child
+                        .attributes()
+                        .find(|attribute| attribute.name() == "id" && attribute.namespace().is_some())
+                        .map(|attribute| attribute.value().to_owned());
+                    let refs = if kind == "headerReference" { &mut section.headers } else { &mut section.footers };
+                    match w_attr(child, "type") {
+                        Some("first") => refs.first = id,
+                        Some("even") => refs.even = id,
+                        _ => refs.default = id,
+                    }
+                }
+                Some("titlePg") => section.title_page = crate::xml::on_off(child),
+                Some("pgNumType") => {
+                    section.page_number_start = int(w_attr(child, "start"));
+                    section.page_number_format = w_attr(child, "fmt").map(str::to_owned);
                 }
                 // Editing aids with no effect on layout.
                 Some("formProt" | "rsid" | "noEndnote" | "bidi" | "rtlGutter") => {}
