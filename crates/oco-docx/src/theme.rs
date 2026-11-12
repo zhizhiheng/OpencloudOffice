@@ -43,9 +43,7 @@ impl ThemeFonts {
         let mut theme = ThemeFonts::default();
         // DrawingML also has Transitional and Strict namespaces; inside a theme
         // part the local names are unambiguous, so match on those.
-        let scheme = doc
-            .descendants()
-            .find(|n| n.is_element() && n.tag_name().name() == "fontScheme");
+        let scheme = doc.descendants().find(|n| n.is_element() && n.tag_name().name() == "fontScheme");
         for set_node in scheme.into_iter().flat_map(elements) {
             let set = match set_node.tag_name().name() {
                 "majorFont" => &mut theme.major,
@@ -53,17 +51,13 @@ impl ThemeFonts {
                 _ => continue,
             };
             for font in elements(set_node) {
-                let typeface = font
-                    .attribute("typeface")
-                    .filter(|t| !t.is_empty())
-                    .map(str::to_owned);
+                let typeface = font.attribute("typeface").filter(|t| !t.is_empty()).map(str::to_owned);
                 match font.tag_name().name() {
                     "latin" => set.latin = typeface,
                     "ea" => set.east_asia = typeface,
                     "cs" => set.complex = typeface,
                     "font" => {
-                        if let (Some(script), Some(typeface)) = (font.attribute("script"), typeface)
-                        {
+                        if let (Some(script), Some(typeface)) = (font.attribute("script"), typeface) {
                             set.by_script.insert(script.to_owned(), typeface);
                         }
                     }
@@ -86,10 +80,7 @@ impl ThemeFonts {
         };
         match category {
             "Ascii" | "HAnsi" => set.latin.as_deref(),
-            "EastAsia" => set
-                .east_asia
-                .as_deref()
-                .or_else(|| for_lang(&lang.east_asia)),
+            "EastAsia" => set.east_asia.as_deref().or_else(|| for_lang(&lang.east_asia)),
             "Bidi" => set.complex.as_deref().or_else(|| for_lang(&lang.bidi)),
             _ => None,
         }
@@ -103,11 +94,7 @@ impl ThemeFontLang {
         Ok(lang
             .map(|n| {
                 let get = |name| w_attr(n, name).map(str::to_owned);
-                ThemeFontLang {
-                    latin: get("val"),
-                    east_asia: get("eastAsia"),
-                    bidi: get("bidi"),
-                }
+                ThemeFontLang { latin: get("val"), east_asia: get("eastAsia"), bidi: get("bidi") }
             })
             .unwrap_or_default())
     }

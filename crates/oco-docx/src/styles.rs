@@ -46,9 +46,7 @@ impl StyleSheet {
         for node in elements(doc.root_element()) {
             match w_name(node) {
                 Some("docDefaults") => {
-                    let props_of = |wrapper: &str, inner: &str| {
-                        w_child(node, wrapper).and_then(|n| w_child(n, inner))
-                    };
+                    let props_of = |wrapper: &str, inner: &str| w_child(node, wrapper).and_then(|n| w_child(n, inner));
                     if let Some(rpr) = props_of("rPrDefault", "rPr") {
                         sheet.default_run = RunProps::parse(rpr, coverage);
                     }
@@ -91,9 +89,7 @@ impl StyleSheet {
                 Some("pPr") => style.para = ParaProps::parse(child, coverage),
                 Some("rPr") => style.run = RunProps::parse(child, coverage),
                 // Table formatting is not modelled yet; report it.
-                Some("tblPr" | "trPr" | "tcPr" | "tblStylePr") => {
-                    coverage.miss(Some("w:style"), child)
-                }
+                Some("tblPr" | "trPr" | "tcPr" | "tblStylePr") => coverage.miss(Some("w:style"), child),
                 // Everything else is UI metadata (next, link, uiPriority, qFormat, ...).
                 _ => {}
             }

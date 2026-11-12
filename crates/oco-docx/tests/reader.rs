@@ -3,7 +3,10 @@
 
 use std::io::{Cursor, Write};
 
-use oco_docx::{Block, BreakKind, Docx, Error, FontRef, RevisionKind, RunContent, RunProps};
+use oco_docx::{
+    Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, RevisionKind, RunContent, RunProps,
+    Underline, VertAlign,
+};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -36,14 +39,8 @@ fn docx(body: &str, styles: &str) -> Docx {
                 r#"<Relationships xmlns="{PKG_RELS}"><Relationship Id="rId1" Type="{DOC_RELS}/styles" Target="styles.xml"/></Relationships>"#
             ),
         ),
-        (
-            "word/document.xml",
-            format!("<w:document {W}><w:body>{body}</w:body></w:document>"),
-        ),
-        (
-            "word/styles.xml",
-            format!("<w:styles {W}>{styles}</w:styles>"),
-        ),
+        ("word/document.xml", format!("<w:document {W}><w:body>{body}</w:body></w:document>")),
+        ("word/styles.xml", format!("<w:styles {W}>{styles}</w:styles>")),
     ]);
     Docx::from_bytes(&bytes).unwrap()
 }
@@ -54,12 +51,7 @@ fn resolved_runs(docx: &Docx) -> Vec<RunProps> {
     docx.document
         .paragraphs()
         .into_iter()
-        .flat_map(|p| {
-            p.runs
-                .iter()
-                .map(|r| resolver.run(p.props.style_id.as_deref(), &r.props))
-                .collect::<Vec<_>>()
-        })
+        .flat_map(|p| p.runs.iter().map(|r| resolver.run(p.props.style_id.as_deref(), &r.props)).collect::<Vec<_>>())
         .collect()
 }
 
@@ -99,18 +91,12 @@ fn layers_defaults_style_chain_and_direct_formatting() {
     let para = resolver.paragraph(&paragraphs[0].props);
     assert_eq!(para.style_id.as_deref(), Some("Derived"));
     assert_eq!(para.justification.as_deref(), Some("right"));
-    assert_eq!(
-        (para.spacing.before, para.spacing.after, para.spacing.line),
-        (Some(240), Some(0), Some(259))
-    );
+    assert_eq!((para.spacing.before, para.spacing.after, para.spacing.line), (Some(240), Some(0), Some(259)));
 
     // A paragraph naming no style uses the default paragraph style.
     let plain = resolver.paragraph(&paragraphs[1].props);
     assert_eq!(plain.style_id.as_deref(), Some("Normal"));
-    assert_eq!(
-        (plain.justification, plain.spacing.after),
-        (None, Some(160))
-    );
+    assert_eq!((plain.justification, plain.spacing.after), (None, Some(160)));
 
     let runs = resolved_runs(&docx);
     assert_eq!((runs[0].size, runs[0].italic), (Some(32), Some(true)));
@@ -139,10 +125,7 @@ fn toggle_properties_flip_between_paragraph_and_character_styles() {
         run(char_style),
         run(""),
     );
-    let bold: Vec<_> = resolved_runs(&docx(&body, styles))
-        .into_iter()
-        .map(|r| r.bold)
-        .collect();
+    let bold: Vec<_> = resolved_runs(&docx(&body, styles)).into_iter().map(|r| r.bold).collect();
     assert_eq!(
         bold,
         [
@@ -157,12 +140,27 @@ fn toggle_properties_flip_between_paragraph_and_character_styles() {
 }
 
 #[test]
-fn toggle_property_on_in_document_defaults_stays_on() {
+fn document_default_toggles_apply_only_when_no_style_speaks() {
+    // Read off Word's own PDF of these cases. As we read the standard, the
+    // second and third would stay bold.
     let styles = r#"
         <w:docDefaults><w:rPrDefault><w:rPr><w:b/></w:rPr></w:rPrDefault></w:docDefaults>
-        <w:style w:type="paragraph" w:styleId="BoldPara"><w:rPr><w:b/></w:rPr></w:style>"#;
-    let body = r#"<w:p><w:pPr><w:pStyle w:val="BoldPara"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>"#;
-    assert_eq!(resolved_runs(&docx(body, styles))[0].bold, Some(true));
+        <w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>
+        <w:style w:type="paragraph" w:styleId="Bold"><w:rPr><w:b/></w:rPr></w:style>
+        <w:style w:type="paragraph" w:styleId="Unbold"><w:rPr><w:b w:val="0"/></w:rPr></w:style>
+        <w:style w:type="character" w:styleId="Colour"><w:rPr><w:color w:val="FF0000"/></w:rPr></w:style>"#;
+    let paragraph = |style: &str, rpr: &str| {
+        format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t>x</w:t></w:r></w:p>"#)
+    };
+    let body = [
+        paragraph("Normal", ""),
+        paragraph("Unbold", ""),
+        paragraph("Unbold", r#"<w:rStyle w:val="Colour"/>"#),
+        paragraph("Bold", ""),
+    ]
+    .concat();
+    let bold: Vec<_> = resolved_runs(&docx(&body, styles)).into_iter().map(|r| r.bold).collect();
+    assert_eq!(bold, [Some(true), Some(false), Some(false), Some(true)]);
 }
 
 #[test]
@@ -170,14 +168,8 @@ fn first_line_and_hanging_indents_replace_each_other() {
     let styles = r#"<w:style w:type="paragraph" w:styleId="List"><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:style>"#;
     let body = r#"<w:p><w:pPr><w:pStyle w:val="List"/><w:ind w:firstLine="420" w:firstLineChars="200"/></w:pPr></w:p>"#;
     let docx = docx(body, styles);
-    let indent = docx
-        .resolver()
-        .paragraph(&docx.document.paragraphs()[0].props)
-        .indent;
-    assert_eq!(
-        (indent.left, indent.hanging, indent.first_line),
-        (Some(720), None, Some(420))
-    );
+    let indent = docx.resolver().paragraph(&docx.document.paragraphs()[0].props).indent;
+    assert_eq!((indent.left, indent.hanging, indent.first_line), (Some(720), None, Some(420)));
     assert_eq!(indent.first_line_chars, Some(200));
 }
 
@@ -203,11 +195,7 @@ fn reads_tracked_changes() {
         </w:p>"#;
     let docx = docx(body, "");
     let paragraph = docx.document.paragraphs()[0];
-    let kinds: Vec<_> = paragraph
-        .runs
-        .iter()
-        .map(|r| r.revision.as_ref().map(|rev| rev.kind))
-        .collect();
+    let kinds: Vec<_> = paragraph.runs.iter().map(|r| r.revision.as_ref().map(|rev| rev.kind)).collect();
     assert_eq!(
         kinds,
         [
@@ -267,27 +255,12 @@ fn descends_into_wrappers_and_reports_what_it_skips() {
            <w:sectPr/>"#
     );
     let docx = docx(&body, "");
-    let texts: Vec<_> = docx
-        .document
-        .paragraphs()
-        .iter()
-        .map(|p| p.text())
-        .collect();
+    let texts: Vec<_> = docx.document.paragraphs().iter().map(|p| p.text()).collect();
     assert_eq!(texts, ["link-sdt-fallback-pic", "cell"]);
-    assert!(
-        matches!(&docx.document.body[1], Block::Table(t) if t.rows.len() == 1 && t.rows[0].cells.len() == 1)
-    );
+    assert!(matches!(&docx.document.body[1], Block::Table(t) if t.rows.len() == 1 && t.rows[0].cells.len() == 1));
 
     let skipped: Vec<_> = docx.coverage.ranked().into_iter().collect();
-    assert_eq!(
-        skipped,
-        [
-            ("w:r/w:drawing", 1),
-            ("w:sectPr", 1),
-            ("w:tbl/w:tblPr", 1),
-            ("w:tc/w:tcPr", 1)
-        ]
-    );
+    assert_eq!(skipped, [("w:r/w:drawing", 1), ("w:sectPr", 1), ("w:tbl/w:tblPr", 1), ("w:tc/w:tcPr", 1)]);
 }
 
 #[test]
@@ -315,19 +288,427 @@ fn reads_iso_strict_documents() {
 
 #[test]
 fn rejects_files_that_are_not_documents() {
-    assert!(matches!(
-        Docx::from_bytes(b"plain text"),
-        Err(Error::Zip(_))
-    ));
+    assert!(matches!(Docx::from_bytes(b"plain text"), Err(Error::Zip(_))));
     let no_document = zip(&[("unrelated.txt", "hello".to_owned())]);
-    assert!(matches!(
-        Docx::from_bytes(&no_document),
-        Err(Error::NoMainDocument)
-    ));
+    assert!(matches!(Docx::from_bytes(&no_document), Err(Error::NoMainDocument)));
     let broken = zip(&[("word/document.xml", "<w:document".to_owned())]);
-    assert!(
-        matches!(Docx::from_bytes(&broken), Err(Error::Xml { part, .. }) if part == "word/document.xml")
+    assert!(matches!(Docx::from_bytes(&broken), Err(Error::Xml { part, .. }) if part == "word/document.xml"));
+}
+
+// ------------------------------------------------------ how Word reads things
+// Each test below pins a behaviour of Word 365 that differs from what the
+// schema alone suggests. Sources are listed in docs/word-behaviour.md.
+
+/// One run per given `w:rPr` content, each in a paragraph of its own that
+/// uses paragraph style `Base`.
+fn runs_over_base_style(styles: &str, run_props: &[&str]) -> Vec<RunProps> {
+    let body: String = run_props
+        .iter()
+        .map(|rpr| {
+            format!(r#"<w:p><w:pPr><w:pStyle w:val="Base"/></w:pPr><w:r><w:rPr>{rpr}</w:rPr><w:t>x</w:t></w:r></w:p>"#)
+        })
+        .collect();
+    resolved_runs(&docx(&body, styles))
+}
+
+#[test]
+fn invalid_property_values_leave_the_style_value_in_place() {
+    let styles = r#"<w:style w:type="paragraph" w:styleId="Base"><w:rPr>
+        <w:color w:val="00FF00"/><w:u w:val="double"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>
+    </w:rPr></w:style>"#;
+    let green = Some(Color::Rgb(0, 0xFF, 0));
+
+    let colors: Vec<_> = runs_over_base_style(
+        styles,
+        &[
+            r#"<w:color w:val="ff0000"/>"#,
+            r##"<w:color w:val="#FF0000"/>"##,
+            r#"<w:color w:val=" FF0000 "/>"#,
+            r#"<w:color w:val="auto"/>"#,
+            r#"<w:color w:val="Auto"/>"#,
+            r#"<w:color w:val=" auto"/>"#,
+            r#"<w:color w:val="F00"/>"#,
+            r#"<w:color w:val="0xFF0000"/>"#,
+            r#"<w:color/>"#,
+        ],
+    )
+    .into_iter()
+    .map(|r| r.color)
+    .collect();
+    let red = Some(Color::Rgb(0xFF, 0, 0));
+    assert_eq!(colors, [red, red, red, Some(Color::Auto), green, green, green, green, green]);
+
+    let underlines: Vec<_> = runs_over_base_style(
+        styles,
+        &[
+            r#"<w:u w:val="single"/>"#,
+            r#"<w:u w:val="none"/>"#,
+            // Not in the enumeration, or in the wrong case: as if absent.
+            r#"<w:u w:val="Single"/>"#,
+            r#"<w:u w:val="bogus"/>"#,
+            r#"<w:u w:val=""/>"#,
+            r#"<w:u/>"#,
+            r#"<w:u w:color="FF0000"/>"#,
+            // The on/off words, even the "on" ones, mean no underline.
+            r#"<w:u w:val="true"/>"#,
+            r#"<w:u w:val="off"/>"#,
+            r#"<w:u w:val="True"/>"#,
+        ],
+    )
+    .into_iter()
+    .map(|r| r.underline)
+    .collect();
+    let (double, none) = (Some(Underline::Double), Some(Underline::None));
+    assert_eq!(underlines, [Some(Underline::Single), none, double, double, double, double, double, none, none, double]);
+
+    let others = runs_over_base_style(
+        styles,
+        &[
+            r#"<w:highlight w:val="YELLOW"/><w:vertAlign w:val="Superscript"/>"#,
+            r#"<w:highlight w:val="green"/><w:vertAlign w:val="baseline"/>"#,
+        ],
     );
+    assert_eq!((others[0].highlight, others[0].vert_align), (Some(Highlight::Yellow), Some(VertAlign::Superscript)));
+    assert_eq!((others[1].highlight, others[1].vert_align), (Some(Highlight::Green), Some(VertAlign::Baseline)));
+}
+
+#[test]
+fn on_off_is_off_only_for_three_exact_spellings() {
+    let run = |value: &str| format!(r#"<w:r><w:rPr><w:b w:val="{value}"/></w:rPr><w:t>x</w:t></w:r>"#);
+    let values = ["false", "off", "0", "true", "on", "1", "", "FALSE", "Off", " false", "no"];
+    let body = format!("<w:p>{}</w:p>", values.iter().map(|v| run(v)).collect::<String>());
+    let bold: Vec<_> = resolved_runs(&docx(&body, "")).into_iter().map(|r| r.bold == Some(true)).collect();
+    assert_eq!(bold, [false, false, false, true, true, true, true, true, true, true, true]);
+}
+
+#[test]
+fn a_character_style_contributes_no_highlight() {
+    let styles = r#"
+        <w:style w:type="character" w:styleId="Marked"><w:rPr><w:b/><w:highlight w:val="yellow"/></w:rPr></w:style>
+        <w:style w:type="paragraph" w:styleId="Noted"><w:rPr><w:highlight w:val="cyan"/></w:rPr></w:style>"#;
+    let body = r#"
+        <w:p><w:r><w:rPr><w:rStyle w:val="Marked"/></w:rPr><w:t>a</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pStyle w:val="Noted"/></w:pPr><w:r><w:t>b</w:t></w:r></w:p>
+        <w:p><w:r><w:rPr><w:rStyle w:val="Marked"/><w:highlight w:val="green"/></w:rPr><w:t>c</w:t></w:r></w:p>"#;
+    let runs = resolved_runs(&docx(body, styles));
+    assert_eq!((runs[0].bold, runs[0].highlight), (Some(true), None));
+    assert_eq!(runs[1].highlight, Some(Highlight::Cyan));
+    assert_eq!(runs[2].highlight, Some(Highlight::Green));
+}
+
+#[test]
+fn reads_lengths_written_with_units() {
+    // ISO Strict documents saved by Word write "36pt" where Transitional has 720.
+    let body = r#"<w:p>
+        <w:pPr><w:ind w:start="36pt" w:hanging="0.25in"/><w:spacing w:before="10pt" w:after="2.54cm" w:line="276"/></w:pPr>
+        <w:r><w:rPr><w:sz w:val="12pt"/></w:rPr><w:t>x</w:t></w:r>
+    </w:p>"#;
+    let docx = docx(body, "");
+    let props = &docx.document.paragraphs()[0].props;
+    assert_eq!((props.indent.left, props.indent.hanging), (Some(720), Some(360)));
+    assert_eq!((props.spacing.before, props.spacing.after, props.spacing.line), (Some(200), Some(1440), Some(276)));
+    assert_eq!(resolved_runs(&docx)[0].size, Some(24));
+}
+
+#[test]
+fn a_line_height_without_a_rule_resets_the_rule() {
+    let styles = r#"<w:style w:type="paragraph" w:styleId="Exact"><w:pPr><w:spacing w:line="480" w:lineRule="exact"/></w:pPr></w:style>"#;
+    let paragraph = |spacing: &str| format!(r#"<w:p><w:pPr><w:pStyle w:val="Exact"/>{spacing}</w:pPr></w:p>"#);
+    let body = [paragraph(r#"<w:spacing w:after="0"/>"#), paragraph(r#"<w:spacing w:line="240"/>"#)].concat();
+    let docx = docx(&body, styles);
+    let spacing: Vec<_> = docx
+        .document
+        .paragraphs()
+        .iter()
+        .map(|p| docx.resolver().paragraph(&p.props).spacing)
+        .map(|s| (s.line, s.line_rule))
+        .collect();
+    // Stating only `after` keeps the style's exact line height; stating a
+    // line height alone makes it a multiple of single spacing again.
+    assert_eq!(spacing, [(Some(480), Some("exact".to_owned())), (Some(240), None)]);
+}
+
+#[test]
+fn reads_integers_as_word_does() {
+    let ind = |value: &str| format!(r#"<w:p><w:pPr><w:ind w:left="{value}"/></w:pPr></w:p>"#);
+    let values = ["240", "+240", "-240", "120.5", "-121.5", "120.", "", "-", ".5", "1e3", "0x10", "12 0"];
+    let body: String = values.iter().map(|v| ind(v)).collect();
+    let left: Vec<_> = docx(&body, "").document.paragraphs().iter().map(|p| p.props.indent.left).collect();
+    assert_eq!(
+        left,
+        [
+            Some(240),
+            Some(240),
+            Some(-240),
+            Some(120),
+            Some(-121),
+            Some(120),
+            Some(0),
+            Some(0),
+            Some(0),
+            None,
+            None,
+            None
+        ]
+    );
+}
+
+#[test]
+fn reads_automatic_paragraph_spacing() {
+    let body =
+        r#"<w:p><w:pPr><w:spacing w:before="100" w:beforeAutospacing="1" w:afterAutospacing="0"/></w:pPr></w:p>"#;
+    let spacing = &docx(body, "").document.paragraphs()[0].props.spacing.clone();
+    assert_eq!((spacing.before, spacing.before_auto, spacing.after_auto), (Some(100), Some(true), Some(false)));
+}
+
+#[test]
+fn content_controls_can_wrap_rows_and_cells() {
+    // Word stores a form field that fills a table cell as a control around the cell.
+    let cell = |text: &str| format!("<w:tc><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:tc>");
+    let body = format!(
+        r#"<w:tbl>
+             <w:tr>{}<w:sdt><w:sdtPr/><w:sdtContent>{}</w:sdtContent></w:sdt>{}</w:tr>
+             <w:sdt><w:sdtContent><w:tr>{}</w:tr></w:sdtContent></w:sdt>
+             <w:customXml><w:tr><w:customXml>{}</w:customXml></w:tr></w:customXml>
+           </w:tbl>"#,
+        cell("a"),
+        cell("b"),
+        cell("c"),
+        cell("d"),
+        cell("e"),
+    );
+    let docx = docx(&body, "");
+    let Block::Table(table) = &docx.document.body[0] else { panic!("expected a table") };
+    let shape: Vec<_> = table.rows.iter().map(|r| r.cells.len()).collect();
+    assert_eq!(shape, [3, 1, 1]);
+    let texts: Vec<_> = docx.document.paragraphs().iter().map(|p| p.text()).collect();
+    assert_eq!(texts, ["a", "b", "c", "d", "e"]);
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
+fn takes_the_first_compatibility_choice_word_understands() {
+    let ns = r#"xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+                xmlns:future="urn:example:not-invented-yet""#;
+    let run = |text: &str| format!("<w:r><w:t>{text}</w:t></w:r>");
+    let body = format!(
+        r#"<w:p>
+             <mc:AlternateContent {ns}>
+               <mc:Choice Requires="w14">{}</mc:Choice><mc:Fallback>{}</mc:Fallback>
+             </mc:AlternateContent>
+             <mc:AlternateContent {ns}>
+               <mc:Choice Requires="future">{}</mc:Choice>
+               <mc:Choice Requires="w14">{}</mc:Choice>
+               <mc:Fallback>{}</mc:Fallback>
+             </mc:AlternateContent>
+             <mc:AlternateContent {ns}>
+               <mc:Choice Requires="w14 future">{}</mc:Choice><mc:Fallback>{}</mc:Fallback>
+             </mc:AlternateContent>
+             <mc:AlternateContent {ns}><mc:Choice Requires="future">{}</mc:Choice></mc:AlternateContent>
+           </w:p>
+           <mc:AlternateContent {ns}>
+             <mc:Choice Requires="w14"><w:p>{}</w:p></mc:Choice><mc:Fallback><w:p>{}</w:p></mc:Fallback>
+           </mc:AlternateContent>"#,
+        run("[new]"),
+        run("[old]"),
+        run("[unknown]"),
+        run("[second]"),
+        run("[old]"),
+        run("[partly unknown]"),
+        run("[fallback]"),
+        run("[nothing]"),
+        run("block choice"),
+        run("block fallback"),
+    );
+    let texts: Vec<_> = docx(&body, "").document.paragraphs().iter().map(|p| p.text()).collect();
+    assert_eq!(texts, ["[new][second][fallback]", "block choice"]);
+}
+
+#[test]
+fn reads_through_unknown_elements_of_the_main_namespace() {
+    let body = r#"
+        <w:p><w:r><w:t>a</w:t></w:r><w:madeUp><w:r><w:t>b</w:t></w:r><w:other><w:r><w:t>c</w:t></w:r></w:other></w:madeUp></w:p>
+        <w:madeUp><w:p><w:r><w:t>d</w:t></w:r></w:p></w:madeUp>
+        <w:tbl><w:madeUp><w:tr><w:madeUp><w:tc><w:p><w:r><w:madeUp><w:t>e</w:t></w:madeUp></w:r></w:p></w:tc></w:madeUp></w:tr></w:madeUp></w:tbl>
+        <w:p><w:emptyMadeUp/><x:foreign xmlns:x="urn:example"><w:r><w:t>hidden</w:t></w:r></x:foreign></w:p>"#;
+    let docx = docx(body, "");
+    let texts: Vec<_> = docx.document.paragraphs().iter().map(|p| p.text()).collect();
+    assert_eq!(texts, ["abc", "d", "e", ""]);
+    // What held no content is still reported; what was read through is not.
+    assert_eq!(docx.coverage.ranked(), [("w:p/w:emptyMadeUp", 1), ("w:p/{urn:example}foreign", 1)]);
+}
+
+#[test]
+fn merges_what_should_appear_once_but_appears_twice() {
+    let bytes = zip(&[(
+        "word/document.xml",
+        format!(
+            r#"<w:document {W}>
+                 <w:body><w:p>
+                   <w:pPr><w:jc w:val="center"/></w:pPr><w:pPr><w:keepNext/></w:pPr>
+                   <w:r><w:rPr><w:b/></w:rPr><w:rPr><w:i/></w:rPr><w:t>first</w:t></w:r>
+                   <w:sdt><w:sdtContent><w:r><w:t>+one</w:t></w:r></w:sdtContent><w:sdtContent><w:r><w:t>+two</w:t></w:r></w:sdtContent></w:sdt>
+                 </w:p></w:body>
+                 <w:body><w:p><w:r><w:t>second body</w:t></w:r></w:p></w:body>
+               </w:document>"#
+        ),
+    )]);
+    let docx = Docx::from_bytes(&bytes).unwrap();
+    let paragraphs = docx.document.paragraphs();
+    assert_eq!(paragraphs[0].text(), "first+one+two");
+    assert_eq!(paragraphs[1].text(), "second body");
+    assert_eq!(
+        (paragraphs[0].props.justification.as_deref(), paragraphs[0].props.keep_next),
+        (Some("center"), Some(true))
+    );
+    let run = &paragraphs[0].runs[0].props;
+    assert_eq!((run.bold, run.italic), (Some(true), Some(true)));
+}
+
+#[test]
+fn reads_run_content_placed_outside_a_run() {
+    let body = r#"<w:p><w:r><w:t>before</w:t></w:r><w:br/><w:hyperlink><w:tab/><w:r><w:t>after</w:t></w:r></w:hyperlink></w:p>"#;
+    assert_eq!(docx(body, "").document.paragraphs()[0].text(), "before\n\tafter");
+}
+
+#[test]
+fn reads_breaks_and_text_nested_inside_text() {
+    let body = r#"<w:p><w:r><w:t xml:space="preserve">a <w:br/>b<w:t>c</w:t><w:tab/><w:madeUp>dropped</w:madeUp></w:t></w:r></w:p>"#;
+    let docx = docx(body, "");
+    assert_eq!(
+        docx.document.paragraphs()[0].runs[0].content,
+        [RunContent::Text("a ".into()), RunContent::Break(BreakKind::Line), RunContent::Text("bc".into())]
+    );
+}
+
+#[test]
+fn reads_colour_names() {
+    let run = |value: &str| format!(r#"<w:r><w:rPr><w:color w:val="{value}"/></w:rPr><w:t>x</w:t></w:r>"#);
+    let values = ["red", "DarkRed", " ORANGE ", "lightgrey", "lightgray", "grey", "dark red"];
+    let body = format!("<w:p>{}</w:p>", values.iter().map(|v| run(v)).collect::<String>());
+    let colors: Vec<_> = resolved_runs(&docx(&body, "")).into_iter().map(|r| r.color.map(|c| c.to_string())).collect();
+    let hex = |value: &str| Some(value.to_owned());
+    assert_eq!(colors, [hex("FF0000"), hex("8B0000"), hex("FFA500"), hex("D3D3D3"), None, None, None]);
+}
+
+#[test]
+fn reads_main_parts_with_an_unusual_root() {
+    let mc = r#"xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml""#;
+    let paragraph = |text: &str| format!("<w:p><w:r><w:t>{text}</w:t></w:r></w:p>");
+    let read = |root: String| {
+        let docx = Docx::from_bytes(&zip(&[("word/document.xml", root)])).unwrap();
+        docx.document.paragraphs().iter().map(|p| p.text()).collect::<Vec<_>>().join("|")
+    };
+    // Compatibility markup around the document element, with two documents in the branch taken.
+    let choice = format!("<w:document><w:body>{}</w:body></w:document>", paragraph("new"));
+    let second = format!("<w:document><w:body>{}</w:body></w:document>", paragraph("more"));
+    let fallback = format!("<w:document><w:body>{}</w:body></w:document>", paragraph("old"));
+    assert_eq!(
+        read(format!(
+            r#"<mc:AlternateContent {W} {mc}><mc:Choice Requires="w14">{choice}{second}</mc:Choice><mc:Fallback>{fallback}</mc:Fallback></mc:AlternateContent>"#
+        )),
+        "new|more"
+    );
+    // A body, a paragraph, or an unknown element standing in for the document element.
+    assert_eq!(read(format!("<w:body {W}>{}{}</w:body>", paragraph("a"), paragraph("b"))), "a|b");
+    assert_eq!(read(format!("<w:p {W}><w:r><w:t>alone</w:t></w:r></w:p>")), "alone");
+    assert_eq!(
+        read(format!("<w:madeUp {W}><w:body>{}</w:body>{}</w:madeUp>", paragraph("in"), paragraph("out"))),
+        "in|out"
+    );
+    // A body inside a body reads through.
+    assert_eq!(
+        read(format!("<w:document {W}><w:body><w:body>{}</w:body></w:body></w:document>", paragraph("nested"))),
+        "nested"
+    );
+}
+
+#[test]
+fn reads_symbol_characters() {
+    let body = r#"<w:p><w:r><w:t>tick </w:t><w:sym w:font="Wingdings" w:char="F0FC"/><w:sym w:char="zz"/></w:r></w:p>"#;
+    let docx = docx(body, "");
+    let run = &docx.document.paragraphs()[0].runs[0];
+    assert_eq!(run.content[1], RunContent::Symbol { font: Some("Wingdings".into()), character: '\u{F0FC}' });
+    assert_eq!(run.text(), "tick\u{F0FC}");
+    assert_eq!(docx.coverage.ranked(), [("w:r/w:sym", 1)]);
+}
+
+#[test]
+fn the_last_main_document_relationship_wins() {
+    let part =
+        |text: &str| format!("<w:document {W}><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>");
+    let bytes = zip(&[
+        (
+            "_rels/.rels",
+            format!(
+                r#"<Relationships xmlns="{PKG_RELS}">
+                     <Relationship Id="rId1" Type="{DOC_RELS}/officeDocument" Target="word/document.xml"/>
+                     <Relationship Id="rId2" Type="{DOC_RELS}/officeDocument" Target="word/other.xml"/>
+                   </Relationships>"#
+            ),
+        ),
+        ("word/document.xml", part("first")),
+        ("word/other.xml", part("last")),
+    ]);
+    assert_eq!(Docx::from_bytes(&bytes).unwrap().document.paragraphs()[0].text(), "last");
+}
+
+// ------------------------------------------------------------ damaged input
+
+#[test]
+fn opens_with_a_warning_when_an_optional_part_is_damaged() {
+    let rels = |target_type: &str, target: &str| {
+        format!(
+            r#"<Relationships xmlns="{PKG_RELS}"><Relationship Id="rId1" Type="{DOC_RELS}/{target_type}" Target="{target}"/></Relationships>"#
+        )
+    };
+    let bytes = zip(&[
+        ("_rels/.rels", rels("officeDocument", "word/document.xml")),
+        ("word/_rels/document.xml.rels", rels("styles", "styles.xml")),
+        (
+            "word/document.xml",
+            format!(
+                r#"<w:document {W}><w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>still here</w:t></w:r></w:p></w:body></w:document>"#
+            ),
+        ),
+        (
+            "word/styles.xml",
+            format!(r#"<w:styles {W}><w:style w:type="paragraph" w:styleId="Normal"><w:rPr><w:rPrChange"#),
+        ),
+    ]);
+    let docx = Docx::from_bytes(&bytes).unwrap();
+    assert_eq!(docx.document.paragraphs()[0].text(), "still here");
+    assert_eq!(resolved_runs(&docx)[0].bold, Some(true));
+    assert!(docx.styles.is_empty());
+    assert_eq!(docx.warnings.len(), 1);
+    assert!(docx.warnings[0].contains("styles"), "{}", docx.warnings[0]);
+    // Nothing half-read from the damaged part is left in the report.
+    assert!(docx.coverage.unsupported.is_empty());
+}
+
+#[test]
+fn says_what_a_file_is_when_it_is_not_a_docx() {
+    let ole = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0, 0, 0];
+    assert!(matches!(Docx::from_bytes(&ole), Err(Error::OtherFormat(OtherFormat::OleCompoundFile))));
+    let odt = zip(&[
+        ("mimetype", "application/vnd.oasis.opendocument.text".to_owned()),
+        ("content.xml", "<office:document-content/>".to_owned()),
+    ]);
+    assert!(matches!(Docx::from_bytes(&odt), Err(Error::OtherFormat(OtherFormat::OpenDocument))));
+}
+
+#[test]
+fn reports_tables_nested_beyond_the_limit_instead_of_overflowing() {
+    let depth = 200;
+    let body = format!(
+        "{}<w:p><w:r><w:t>deep</w:t></w:r></w:p>{}",
+        "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>level</w:t></w:r></w:p>".repeat(depth),
+        "</w:tc></w:tr></w:tbl>".repeat(depth)
+    );
+    let docx = docx(&body, "");
+    assert_eq!(docx.document.paragraphs().len(), 64);
+    assert_eq!(docx.coverage.unsupported.get("w:tbl (nested too deeply, dropped)"), Some(&1));
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -342,68 +723,34 @@ fn word_template_fixture() {
     let docx = fixture("word-template.docx");
     let resolver = docx.resolver();
     let paragraphs = docx.document.paragraphs();
-    let run = |p: usize, r: usize| {
-        resolver.run(
-            paragraphs[p].props.style_id.as_deref(),
-            &paragraphs[p].runs[r].props,
-        )
-    };
+    let run = |p: usize, r: usize| resolver.run(paragraphs[p].props.style_id.as_deref(), &paragraphs[p].runs[r].props);
 
     // Heading 1 takes its fonts from the theme's major (heading) slots; the
     // East Asian one is picked by the document's `zh-CN` theme language.
     let heading = resolver.paragraph(&paragraphs[0].props);
-    assert_eq!(
-        (heading.style_id.as_deref(), heading.outline_level),
-        (Some("Heading1"), Some(0))
-    );
-    assert_eq!(
-        docx.styles.get("Heading1").unwrap().name.as_deref(),
-        Some("heading 1")
-    );
+    assert_eq!((heading.style_id.as_deref(), heading.outline_level), (Some("Heading1"), Some(0)));
+    assert_eq!(docx.styles.get("Heading1").unwrap().name.as_deref(), Some("heading 1"));
     let title = run(0, 0);
-    assert_eq!(
-        (title.size, title.bold, title.color.as_deref()),
-        (Some(28), Some(true), Some("365F91"))
-    );
-    assert_eq!(
-        (title.fonts.ascii, title.fonts.east_asia),
-        (name("Calibri"), name("宋体"))
-    );
+    assert_eq!((title.size, title.bold, title.color), (Some(28), Some(true), Some(Color::Rgb(0x36, 0x5F, 0x91))));
+    assert_eq!((title.fonts.ascii, title.fonts.east_asia), (name("Calibri"), name("宋体")));
     // The "Strong" character style is bold, and so is Heading 1: they cancel.
     assert_eq!(run(0, 1).bold, Some(false));
 
     // Body text falls back to document defaults and the minor (body) fonts.
     let body = run(1, 0);
-    assert_eq!(
-        (body.size, body.bold, body.fonts.ascii),
-        (Some(22), None, name("Cambria"))
-    );
+    assert_eq!((body.size, body.bold, body.fonts.ascii), (Some(22), None, name("Cambria")));
     assert_eq!(run(1, 1).bold, Some(true));
     assert_eq!(run(1, 2).italic, Some(true));
-    assert_eq!(
-        (run(1, 3).size, run(1, 3).color.as_deref()),
-        (Some(32), Some("C00000"))
-    );
+    assert_eq!((run(1, 3).size, run(1, 3).color), (Some(32), Some(Color::Rgb(0xC0, 0, 0))));
 
-    assert_eq!(
-        resolver
-            .paragraph(&paragraphs[2].props)
-            .indent
-            .first_line_chars,
-        Some(200)
-    );
+    assert_eq!(resolver.paragraph(&paragraphs[2].props).indent.first_line_chars, Some(200));
 
-    assert!(
-        matches!(&docx.document.body[3], Block::Table(t) if t.rows.len() == 2 && t.rows[1].cells.len() == 2)
-    );
+    assert!(matches!(&docx.document.body[3], Block::Table(t) if t.rows.len() == 2 && t.rows[1].cells.len() == 2));
     assert_eq!(paragraphs[6].text(), "单元格 1,1");
 
     let tracked = paragraphs[7];
     assert_eq!(tracked.text(), "修订：保留新增");
-    assert_eq!(
-        tracked.runs[2].revision.as_ref().unwrap().author.as_deref(),
-        Some("张三")
-    );
+    assert_eq!(tracked.runs[2].revision.as_ref().unwrap().author.as_deref(), Some("张三"));
 }
 
 #[test]
@@ -412,17 +759,8 @@ fn libreoffice_fixture() {
     let resolver = docx.resolver();
     let paragraphs = docx.document.paragraphs();
     assert_eq!(paragraphs[0].text(), "LibreOffice 导出");
-    assert_eq!(
-        resolver.paragraph(&paragraphs[0].props).style_id.as_deref(),
-        Some("Heading1")
-    );
-    assert_eq!(
-        resolver
-            .paragraph(&paragraphs[2].props)
-            .justification
-            .as_deref(),
-        Some("center")
-    );
+    assert_eq!(resolver.paragraph(&paragraphs[0].props).style_id.as_deref(), Some("Heading1"));
+    assert_eq!(resolver.paragraph(&paragraphs[2].props).justification.as_deref(), Some("center"));
 
     let flagged = |get: fn(&RunProps) -> bool| -> String {
         paragraphs[1]
@@ -434,10 +772,7 @@ fn libreoffice_fixture() {
     };
     assert_eq!(flagged(|p| p.bold == Some(true)), "粗体");
     assert_eq!(flagged(|p| p.italic == Some(true)), "斜体");
-    assert_eq!(
-        flagged(|p| p.underline.as_deref() == Some("single")),
-        "下划线"
-    );
+    assert_eq!(flagged(|p| p.underline == Some(Underline::Single)), "下划线");
 
     let cells: Vec<_> = paragraphs[3..7].iter().map(|p| p.text()).collect();
     assert_eq!(cells, ["甲", "乙", "丙", "丁"]);

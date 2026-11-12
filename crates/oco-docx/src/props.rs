@@ -7,7 +7,8 @@ use roxmltree::Node;
 use serde::Serialize;
 
 use crate::coverage::Coverage;
-use crate::xml::{elements, int, on_off, val, w_attr, w_name};
+use crate::values::{Color, Highlight, Underline, VertAlign};
+use crate::xml::{elements, half_points, int, on_off, on_off_attr, twips, val, w_attr, w_name};
 
 /// Copies every field that `$over` specifies onto `$base`.
 macro_rules! overlay {
@@ -74,15 +75,12 @@ pub struct RunProps {
     pub strike: Option<bool>,
     /// Hidden text.
     pub vanish: Option<bool>,
-    /// Underline pattern (`single`, `double`, `none`, ...).
-    pub underline: Option<String>,
+    pub underline: Option<Underline>,
     /// Font size in half-points (`w:sz`).
     pub size: Option<u32>,
-    /// `RRGGBB` or `auto`.
-    pub color: Option<String>,
-    pub highlight: Option<String>,
-    /// `superscript`, `subscript` or `baseline`.
-    pub vert_align: Option<String>,
+    pub color: Option<Color>,
+    pub highlight: Option<Highlight>,
+    pub vert_align: Option<VertAlign>,
     pub fonts: Fonts,
 }
 
@@ -99,26 +97,35 @@ impl RunProps {
 
     pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
         let mut p = RunProps::default();
+        p.read(node, coverage);
+        p
+    }
+
+    /// Reads a `w:rPr` on top of what is already here. A run with two
+    /// `w:rPr` elements is invalid, and Word merges them rather than keeping
+    /// only one.
+    pub(crate) fn read(&mut self, node: Node, coverage: &mut Coverage) {
+        let p = self;
         for child in elements(node) {
-            let text = || val(child).map(str::to_owned);
             match w_name(child) {
-                Some("rStyle") => p.style_id = text(),
+                Some("rStyle") => p.style_id = val(child).map(str::to_owned),
                 Some("b") => p.bold = Some(on_off(child)),
                 Some("i") => p.italic = Some(on_off(child)),
                 Some("caps") => p.caps = Some(on_off(child)),
                 Some("smallCaps") => p.small_caps = Some(on_off(child)),
                 Some("strike") => p.strike = Some(on_off(child)),
                 Some("vanish") => p.vanish = Some(on_off(child)),
-                Some("u") => p.underline = text(),
-                Some("sz") => p.size = int(val(child)).and_then(|v| u32::try_from(v).ok()),
-                Some("color") => p.color = text(),
-                Some("highlight") => p.highlight = text(),
-                Some("vertAlign") => p.vert_align = text(),
-                Some("rFonts") => p.fonts = Fonts::parse(child),
+                // For these four an invalid value means "not specified here",
+                // so it must not overwrite a value read earlier.
+                Some("u") => p.underline = Underline::parse(val(child)).or(p.underline),
+                Some("color") => p.color = val(child).and_then(Color::parse).or(p.color),
+                Some("highlight") => p.highlight = val(child).and_then(Highlight::from_exact).or(p.highlight),
+                Some("vertAlign") => p.vert_align = val(child).and_then(VertAlign::from_exact).or(p.vert_align),
+                Some("sz") => p.size = half_points(val(child)),
+                Some("rFonts") => p.fonts.apply(&Fonts::parse(child)),
                 _ => coverage.miss(Some("w:rPr"), child),
             }
         }
-        p
     }
 }
 
@@ -153,17 +160,18 @@ impl Indent {
     }
 
     fn parse(node: Node) -> Self {
-        let get = |name: &str| int(w_attr(node, name));
+        let get = |name: &str| twips(w_attr(node, name));
+        let chars = |name: &str| int(w_attr(node, name));
         Indent {
             // `start`/`end` are the bidi-neutral spellings of `left`/`right`.
             left: get("left").or_else(|| get("start")),
             right: get("right").or_else(|| get("end")),
             first_line: get("firstLine"),
             hanging: get("hanging"),
-            left_chars: get("leftChars").or_else(|| get("startChars")),
-            right_chars: get("rightChars").or_else(|| get("endChars")),
-            first_line_chars: get("firstLineChars"),
-            hanging_chars: get("hangingChars"),
+            left_chars: chars("leftChars").or_else(|| chars("startChars")),
+            right_chars: chars("rightChars").or_else(|| chars("endChars")),
+            first_line_chars: chars("firstLineChars"),
+            hanging_chars: chars("hangingChars"),
         }
     }
 }
@@ -180,22 +188,38 @@ pub struct Spacing {
     /// Hundredths of a line; takes precedence over `before` when present.
     pub before_lines: Option<i32>,
     pub after_lines: Option<i32>,
+    /// "Auto" spacing, as HTML paragraphs have: when on, the application
+    /// picks the gap and `before`/`after` are ignored.
+    pub before_auto: Option<bool>,
+    pub after_auto: Option<bool>,
 }
 
 impl Spacing {
     pub fn apply(&mut self, over: &Spacing) {
-        overlay!(self, over; before, after, line, line_rule, before_lines, after_lines);
+        overlay!(self, over; before, after, before_lines, after_lines, before_auto, after_auto);
+        // The rule belongs to the line height it was written with: a level
+        // that states `w:line` alone means "auto", whatever rule a lower
+        // level had. A level that states neither changes neither.
+        if over.line.is_some() {
+            self.line = over.line;
+            self.line_rule = over.line_rule.clone();
+        } else if over.line_rule.is_some() {
+            self.line_rule = over.line_rule.clone();
+        }
     }
 
     fn parse(node: Node) -> Self {
-        let get = |name: &str| int(w_attr(node, name));
+        let get = |name: &str| twips(w_attr(node, name));
+        let lines = |name: &str| int(w_attr(node, name));
         Spacing {
             before: get("before"),
             after: get("after"),
             line: get("line"),
             line_rule: w_attr(node, "lineRule").map(str::to_owned),
-            before_lines: get("beforeLines"),
-            after_lines: get("afterLines"),
+            before_lines: lines("beforeLines"),
+            after_lines: lines("afterLines"),
+            before_auto: on_off_attr(node, "beforeAutospacing"),
+            after_auto: on_off_attr(node, "afterAutospacing"),
         }
     }
 }
@@ -235,33 +259,32 @@ impl ParaProps {
 
     pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
         let mut p = ParaProps::default();
+        p.read(node, coverage);
+        p
+    }
+
+    /// Reads a `w:pPr` on top of what is already here; see [`RunProps::read`].
+    pub(crate) fn read(&mut self, node: Node, coverage: &mut Coverage) {
+        let p = self;
         for child in elements(node) {
             match w_name(child) {
                 Some("pStyle") => p.style_id = val(child).map(str::to_owned),
                 Some("jc") => p.justification = val(child).map(str::to_owned),
-                Some("ind") => p.indent = Indent::parse(child),
-                Some("spacing") => p.spacing = Spacing::parse(child),
+                Some("ind") => p.indent.apply(&Indent::parse(child)),
+                Some("spacing") => p.spacing.apply(&Spacing::parse(child)),
                 Some("keepNext") => p.keep_next = Some(on_off(child)),
                 Some("keepLines") => p.keep_lines = Some(on_off(child)),
                 Some("pageBreakBefore") => p.page_break_before = Some(on_off(child)),
                 Some("widowControl") => p.widow_control = Some(on_off(child)),
                 Some("outlineLvl") => p.outline_level = int(val(child)),
                 Some("numPr") => {
-                    let get = |name| {
-                        elements(child)
-                            .find(|n| w_name(*n) == Some(name))
-                            .and_then(|n| int(val(n)))
-                    };
-                    p.numbering = Some(NumRef {
-                        num_id: get("numId"),
-                        level: get("ilvl"),
-                    });
+                    let get = |name| elements(child).find(|n| w_name(*n) == Some(name)).and_then(|n| int(val(n)));
+                    p.numbering = Some(NumRef { num_id: get("numId"), level: get("ilvl") });
                 }
                 // The paragraph mark's run properties; the caller reads them.
                 Some("rPr") => {}
                 _ => coverage.miss(Some("w:pPr"), child),
             }
         }
-        p
     }
 }

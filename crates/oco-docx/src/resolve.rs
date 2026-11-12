@@ -24,9 +24,7 @@ impl Resolver<'_> {
     /// `style_id` in the result is the style actually used, which is the
     /// default paragraph style when the paragraph names none.
     pub fn paragraph(&self, direct: &ParaProps) -> ParaProps {
-        let chain = self
-            .styles
-            .chain(direct.style_id.as_deref(), StyleKind::Paragraph);
+        let chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Paragraph);
         let mut out = self.styles.default_para.clone();
         for style in &chain {
             out.apply(&style.para);
@@ -41,11 +39,11 @@ impl Resolver<'_> {
     pub fn run(&self, paragraph_style: Option<&str>, direct: &RunProps) -> RunProps {
         let defaults = &self.styles.default_run;
         let from_paragraph = flatten(&self.styles.chain(paragraph_style, StyleKind::Paragraph));
-        let from_character = flatten(
-            &self
-                .styles
-                .chain(direct.style_id.as_deref(), StyleKind::Character),
-        );
+        let character_chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Character);
+        let mut from_character = flatten(&character_chain);
+        // Word does not draw a highlight that comes from a character style,
+        // although it does draw one from a paragraph style.
+        from_character.highlight = None;
 
         let mut out = defaults.clone();
         out.apply(&from_paragraph);
@@ -60,12 +58,7 @@ impl Resolver<'_> {
         out.strike = toggle(|p| p.strike, defaults, &levels, direct);
         out.vanish = toggle(|p| p.vanish, defaults, &levels, direct);
 
-        for slot in [
-            &mut out.fonts.ascii,
-            &mut out.fonts.h_ansi,
-            &mut out.fonts.east_asia,
-            &mut out.fonts.cs,
-        ] {
+        for slot in [&mut out.fonts.ascii, &mut out.fonts.h_ansi, &mut out.fonts.east_asia, &mut out.fonts.cs] {
             self.resolve_theme_font(slot);
         }
         out
@@ -96,10 +89,16 @@ fn flatten(chain: &[&Style]) -> RunProps {
 /// Toggle properties (§17.7.3) do not simply override across style levels.
 ///
 /// - Direct formatting sets the state outright.
-/// - Otherwise, if the document defaults turn the property on, it is on.
-/// - Otherwise each style level that turns it on *flips* the state, so bold
-///   text in a character style comes out non-bold inside a bold paragraph
-///   style. This is what makes "emphasis" visible inside a bold heading.
+/// - Otherwise each style level that turns the property on *flips* the
+///   state, so bold text in a character style comes out non-bold inside a
+///   bold paragraph style. This is what makes "emphasis" visible inside a
+///   bold heading. A level that states "off" leaves the state alone.
+/// - The document defaults apply only when no style level says anything.
+///
+/// The last point is Word's behaviour, read off its own PDF output. As we
+/// read the standard, a property the defaults turn on should stay on whatever
+/// the styles say; Word nevertheless draws regular text for bold defaults
+/// under a paragraph style with `<w:b w:val="0"/>`, and Word is what counts.
 fn toggle(
     get: impl Fn(&RunProps) -> Option<bool>,
     defaults: &RunProps,
@@ -108,9 +107,6 @@ fn toggle(
 ) -> Option<bool> {
     if let Some(value) = get(direct) {
         return Some(value);
-    }
-    if get(defaults) == Some(true) {
-        return Some(true);
     }
     let specified: Vec<bool> = style_levels.iter().filter_map(|level| get(level)).collect();
     if specified.is_empty() {

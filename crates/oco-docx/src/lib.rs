@@ -17,22 +17,23 @@ mod props;
 mod resolve;
 mod styles;
 mod theme;
+mod values;
 mod xml;
 
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read, Seek};
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
 pub use coverage::Coverage;
 pub use document::{
-    Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table,
-    TableCell, TableRow,
+    Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell, TableRow,
 };
-pub use error::{Error, Result};
+pub use error::{Error, OtherFormat, Result};
 pub use props::{FontRef, Fonts, Indent, NumRef, ParaProps, RunProps, Spacing};
 pub use resolve::Resolver;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use theme::{ThemeFontLang, ThemeFonts};
+pub use values::{Color, Highlight, Underline, VertAlign};
 
 use opc::Package;
 
@@ -45,6 +46,9 @@ pub struct Docx {
     pub theme_lang: ThemeFontLang,
     /// Markup that was encountered but is not modelled yet.
     pub coverage: Coverage,
+    /// Problems that did not prevent opening, such as an unreadable styles
+    /// part. The document is usable but may not look as its author intended.
+    pub warnings: Vec<String>,
 }
 
 impl Docx {
@@ -56,76 +60,86 @@ impl Docx {
         Self::from_reader(Cursor::new(bytes))
     }
 
-    pub fn from_reader<R: Read + Seek>(reader: R) -> Result<Self> {
+    pub fn from_reader<R: Read + Seek>(mut reader: R) -> Result<Self> {
+        const OLE_MAGIC: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        let mut magic = [0; 8];
+        let is_ole = reader.read_exact(&mut magic).is_ok() && magic == OLE_MAGIC;
+        reader.seek(SeekFrom::Start(0))?;
+        if is_ole {
+            return Err(Error::OtherFormat(OtherFormat::OleCompoundFile));
+        }
+
         let mut package = Package::new(reader)?;
         let mut coverage = Coverage::default();
+        let mut warnings = Vec::new();
 
         // The main part is found through the package relationships; its name
         // is conventional, not fixed. Tolerate packages that omit them.
         let main = package
             .relationships(None)?
             .into_iter()
-            .find(|r| !r.external && r.rel_type.ends_with("/officeDocument"))
+            // Word takes the last one when a package wrongly has several.
+            .rfind(|r| !r.external && r.rel_type.ends_with("/officeDocument"))
             .map(|r| r.target)
-            .or_else(|| {
-                package
-                    .has_part("word/document.xml")
-                    .then(|| "word/document.xml".to_owned())
-            })
-            .ok_or(Error::NoMainDocument)?;
-        let relationships = package.relationships(Some(&main))?;
-        let related = |kind: &str| {
-            relationships
-                .iter()
-                .find(|r| !r.external && r.rel_type.ends_with(kind))
-                .map(|r| r.target.clone())
-        };
-        let xml_error = |part: &str| {
-            let part = part.to_owned();
-            move |source| Error::Xml { part, source }
+            .or_else(|| package.has_part("word/document.xml").then(|| "word/document.xml".to_owned()));
+        let Some(main) = main else {
+            let is_odf = package.has_part("mimetype") && package.has_part("content.xml");
+            return Err(if is_odf { Error::OtherFormat(OtherFormat::OpenDocument) } else { Error::NoMainDocument });
         };
 
-        let xml = package
-            .read_xml(&main)?
-            .ok_or_else(|| Error::MissingPart(main.clone()))?;
-        let document = Document::parse(&xml, &mut coverage).map_err(xml_error(&main))?;
+        let xml = package.read_xml(&main)?.ok_or_else(|| Error::MissingPart(main.clone()))?;
+        let document =
+            Document::parse(&xml, &mut coverage).map_err(|source| Error::Xml { part: main.clone(), source })?;
 
-        // The remaining parts are optional: a document without them still opens.
-        let mut read_related = |kind: &str| -> Result<Option<(String, String)>> {
-            let Some(part) = related(kind) else {
-                return Ok(None);
-            };
-            Ok(package.read_xml(&part)?.map(|xml| (part, xml)))
-        };
-        let styles = match read_related("/styles")? {
-            Some((part, xml)) => {
-                StyleSheet::parse(&xml, &mut coverage).map_err(xml_error(&part))?
+        // Everything else is optional. A document whose styles or settings are
+        // missing or damaged still opens, with defaults and a warning: showing
+        // the text plainly beats refusing to show it.
+        let relationships = package.relationships(Some(&main)).unwrap_or_else(|error| {
+            warnings.push(error.to_string());
+            Vec::new()
+        });
+        let mut read_related = |kind: &str| -> Option<String> {
+            let part = &relationships.iter().find(|r| !r.external && r.rel_type.ends_with(kind))?.target;
+            match package.read_xml(part) {
+                Ok(xml) => xml,
+                Err(error) => {
+                    warnings.push(error.to_string());
+                    None
+                }
             }
-            None => StyleSheet::default(),
         };
-        let theme = match read_related("/theme")? {
-            Some((part, xml)) => Some(ThemeFonts::parse(&xml).map_err(xml_error(&part))?),
-            None => None,
-        };
-        let theme_lang = match read_related("/settings")? {
-            Some((part, xml)) => ThemeFontLang::parse_settings(&xml).map_err(xml_error(&part))?,
-            None => ThemeFontLang::default(),
-        };
+        let styles_xml = read_related("/styles");
+        let theme_xml = read_related("/theme");
+        let settings_xml = read_related("/settings");
 
-        Ok(Docx {
-            document,
-            styles,
-            theme,
-            theme_lang,
-            coverage,
-        })
+        let mut parsed = |kind: &str, error: roxmltree::Error| {
+            warnings.push(format!("the {kind} part is malformed and was ignored: {error}"));
+        };
+        let styles = styles_xml
+            .and_then(|xml| {
+                // A half-read style sheet must not leave its tallies behind.
+                let mut seen = Coverage::default();
+                match StyleSheet::parse(&xml, &mut seen) {
+                    Ok(styles) => {
+                        coverage.merge(seen);
+                        Some(styles)
+                    }
+                    Err(error) => {
+                        parsed("styles", error);
+                        None
+                    }
+                }
+            })
+            .unwrap_or_default();
+        let theme = theme_xml.and_then(|xml| ThemeFonts::parse(&xml).map_err(|e| parsed("theme", e)).ok());
+        let theme_lang = settings_xml
+            .and_then(|xml| ThemeFontLang::parse_settings(&xml).map_err(|e| parsed("settings", e)).ok())
+            .unwrap_or_default();
+
+        Ok(Docx { document, styles, theme, theme_lang, coverage, warnings })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {
-        Resolver {
-            styles: &self.styles,
-            theme: self.theme.as_ref(),
-            theme_lang: &self.theme_lang,
-        }
+        Resolver { styles: &self.styles, theme: self.theme.as_ref(), theme_lang: &self.theme_lang }
     }
 }

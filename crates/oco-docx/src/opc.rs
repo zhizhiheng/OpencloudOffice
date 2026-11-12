@@ -48,19 +48,14 @@ impl<R: Read + Seek> Package<R> {
         let Some(&i) = self.index.get(&normalize(name)) else {
             return Ok(None);
         };
-        let too_large = || Error::PartTooLarge {
-            part: name.to_owned(),
-            limit: MAX_PART_SIZE,
-        };
+        let too_large = || Error::PartTooLarge { part: name.to_owned(), limit: MAX_PART_SIZE };
         let mut file = self.archive.by_index(i)?;
         if file.size() > MAX_PART_SIZE {
             return Err(too_large());
         }
         // The declared size is attacker-controlled, so cap the actual read too.
         let mut bytes = Vec::new();
-        (&mut file)
-            .take(MAX_PART_SIZE + 1)
-            .read_to_end(&mut bytes)?;
+        (&mut file).take(MAX_PART_SIZE + 1).read_to_end(&mut bytes)?;
         if bytes.len() as u64 > MAX_PART_SIZE {
             return Err(too_large());
         }
@@ -72,9 +67,7 @@ impl<R: Read + Seek> Package<R> {
         let Some(bytes) = self.read_part(name)? else {
             return Ok(None);
         };
-        decode_xml(bytes)
-            .map(Some)
-            .ok_or_else(|| Error::Encoding(name.to_owned()))
+        decode_xml(bytes).map(Some).ok_or_else(|| Error::Encoding(name.to_owned()))
     }
 
     /// Relationships of `source`, or of the package itself when `source` is `None`.
@@ -90,10 +83,7 @@ impl<R: Read + Seek> Package<R> {
         let Some(xml) = self.read_xml(&rels_part)? else {
             return Ok(Vec::new());
         };
-        let doc = roxmltree::Document::parse(&xml).map_err(|source| Error::Xml {
-            part: rels_part.clone(),
-            source,
-        })?;
+        let doc = roxmltree::Document::parse(&xml).map_err(|source| Error::Xml { part: rels_part.clone(), source })?;
         let base_dir = source.map(|s| split_dir(s).0).unwrap_or("");
         let relationships = doc
             .root_element()
@@ -105,11 +95,7 @@ impl<R: Read + Seek> Package<R> {
                 Some(Relationship {
                     id: n.attribute("Id").unwrap_or_default().to_owned(),
                     rel_type: n.attribute("Type").unwrap_or_default().to_owned(),
-                    target: if external {
-                        raw_target.to_owned()
-                    } else {
-                        resolve_target(base_dir, raw_target)
-                    },
+                    target: if external { raw_target.to_owned() } else { resolve_target(base_dir, raw_target) },
                     external,
                 })
             })
@@ -121,9 +107,7 @@ impl<R: Read + Seek> Package<R> {
 /// Part names compare case-insensitively (Part 2 §6.2.2.3), and some producers
 /// write backslashes or a leading slash into zip entry names.
 fn normalize(name: &str) -> String {
-    name.trim_start_matches(['/', '\\'])
-        .replace('\\', "/")
-        .to_ascii_lowercase()
+    name.trim_start_matches(['/', '\\']).replace('\\', "/").to_ascii_lowercase()
 }
 
 /// Splits `word/document.xml` into (`word/`, `document.xml`).
@@ -177,37 +161,19 @@ mod tests {
     #[test]
     fn resolves_relationship_targets() {
         assert_eq!(resolve_target("word/", "styles.xml"), "word/styles.xml");
-        assert_eq!(
-            resolve_target("word/", "theme/theme1.xml"),
-            "word/theme/theme1.xml"
-        );
-        assert_eq!(
-            resolve_target("word/", "../customXml/item1.xml"),
-            "customXml/item1.xml"
-        );
-        assert_eq!(
-            resolve_target("word/", "/word/styles.xml"),
-            "word/styles.xml"
-        );
+        assert_eq!(resolve_target("word/", "theme/theme1.xml"), "word/theme/theme1.xml");
+        assert_eq!(resolve_target("word/", "../customXml/item1.xml"), "customXml/item1.xml");
+        assert_eq!(resolve_target("word/", "/word/styles.xml"), "word/styles.xml");
         assert_eq!(resolve_target("", "word/document.xml"), "word/document.xml");
         assert_eq!(resolve_target("", "../../escape.xml"), "escape.xml");
     }
 
     #[test]
     fn decodes_utf16_parts() {
-        let le: Vec<u8> = [0xFF, 0xFE]
-            .into_iter()
-            .chain("<a/>".encode_utf16().flat_map(u16::to_le_bytes))
-            .collect();
-        let be: Vec<u8> = [0xFE, 0xFF]
-            .into_iter()
-            .chain("<a/>".encode_utf16().flat_map(u16::to_be_bytes))
-            .collect();
+        let le: Vec<u8> = [0xFF, 0xFE].into_iter().chain("<a/>".encode_utf16().flat_map(u16::to_le_bytes)).collect();
+        let be: Vec<u8> = [0xFE, 0xFF].into_iter().chain("<a/>".encode_utf16().flat_map(u16::to_be_bytes)).collect();
         assert_eq!(decode_xml(le).as_deref(), Some("<a/>"));
         assert_eq!(decode_xml(be).as_deref(), Some("<a/>"));
-        assert_eq!(
-            decode_xml(b"\xEF\xBB\xBF<a/>".to_vec()).as_deref(),
-            Some("<a/>")
-        );
+        assert_eq!(decode_xml(b"\xEF\xBB\xBF<a/>".to_vec()).as_deref(), Some("<a/>"));
     }
 }

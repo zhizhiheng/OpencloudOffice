@@ -9,10 +9,7 @@ use serde::Serialize;
 
 use crate::coverage::Coverage;
 use crate::props::{ParaProps, RunProps};
-use crate::xml::{
-    elements, is_mc_alternate_content, mc_fallback, preserves_space, text_of, w_attr, w_child,
-    w_name,
-};
+use crate::xml::{elements, mc_branch, preserves_space, text_of, w_attr, w_name};
 
 /// Tables nested deeper than this are dropped rather than risking the stack on
 /// a hostile file. Word itself stops far earlier.
@@ -55,6 +52,11 @@ pub enum RunContent {
     Text(String),
     Tab,
     Break(BreakKind),
+    /// `w:sym`: one character drawn in `font` whatever the run's own font is.
+    Symbol {
+        font: Option<String>,
+        character: char,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -112,9 +114,10 @@ impl Run {
         self.content
             .iter()
             .map(|c| match c {
-                RunContent::Text(t) => t.as_str(),
-                RunContent::Tab => "\t",
-                RunContent::Break(_) => "\n",
+                RunContent::Text(t) => t.clone(),
+                RunContent::Tab => "\t".to_owned(),
+                RunContent::Break(_) => "\n".to_owned(),
+                RunContent::Symbol { character, .. } => character.to_string(),
             })
             .collect()
     }
@@ -125,11 +128,7 @@ impl Paragraph {
     pub fn text(&self) -> String {
         self.runs
             .iter()
-            .filter(|r| {
-                !r.revision
-                    .as_ref()
-                    .is_some_and(|rev| rev.kind.removes_content())
-            })
+            .filter(|r| !r.revision.as_ref().is_some_and(|rev| rev.kind.removes_content()))
             .map(Run::text)
             .collect()
     }
@@ -138,9 +137,8 @@ impl Paragraph {
 impl Document {
     pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
         let doc = roxmltree::Document::parse(xml)?;
-        let body = w_child(doc.root_element(), "body")
-            .map(|body| parse_blocks(body, 0, coverage))
-            .unwrap_or_default();
+        let mut body = Vec::new();
+        read_root(doc.root_element(), &mut body, coverage);
         Ok(Document { body })
     }
 
@@ -181,78 +179,173 @@ fn is_ignorable(name: &str) -> bool {
     )
 }
 
-fn parse_blocks(parent: Node, depth: usize, coverage: &mut Coverage) -> Vec<Block> {
-    let mut blocks = Vec::new();
+/// Calls `f` for each child element, after resolving compatibility markup:
+/// an `mc:AlternateContent` is replaced by the children of the branch a
+/// consumer of our vintage takes.
+fn for_each_child<'a, 'i>(parent: Node<'a, 'i>, f: &mut dyn FnMut(Node<'a, 'i>)) {
     for child in elements(parent) {
-        match w_name(child) {
-            Some("p") => blocks.push(Block::Paragraph(parse_paragraph(child, coverage))),
-            Some("tbl") if depth < MAX_NESTING => {
-                blocks.push(Block::Table(parse_table(child, depth + 1, coverage)));
-            }
-            // Wrappers whose content is ordinary block content.
-            Some("sdt") => {
-                if let Some(content) = w_child(child, "sdtContent") {
-                    blocks.extend(parse_blocks(content, depth, coverage));
+        match mc_branch(child) {
+            Some(branch) => {
+                if let Some(branch) = branch {
+                    for_each_child(branch, f);
                 }
             }
-            Some("customXml") => blocks.extend(parse_blocks(child, depth, coverage)),
-            // Cell properties, met when `parent` is a table cell.
-            Some("tcPr") => coverage.miss(Some("w:tc"), child),
-            Some(name) if is_ignorable(name) => {}
-            None if is_mc_alternate_content(child) => {
-                if let Some(fallback) = mc_fallback(child) {
-                    blocks.extend(parse_blocks(fallback, depth, coverage));
-                }
-            }
-            _ => coverage.miss(None, child),
+            None => f(child),
         }
     }
-    blocks
+}
+
+/// Reads an element this context does not recognise.
+///
+/// Word does not skip an unknown element in the WordprocessingML namespace:
+/// it reads straight through it, as if its children stood in its place. So
+/// `read` is given the element as a parent, into scratch storage; if that
+/// turns up content the element was a wrapper and the content is kept.
+/// Otherwise, and for elements of any other namespace, the element is
+/// reported as unmodelled.
+fn read_unknown<T>(
+    node: Node,
+    context: Option<&str>,
+    out: &mut Vec<T>,
+    coverage: &mut Coverage,
+    read: impl FnOnce(&mut Vec<T>, &mut Coverage),
+) {
+    if w_name(node).is_some() {
+        let mut found = Vec::new();
+        let mut seen = Coverage::default();
+        read(&mut found, &mut seen);
+        if !found.is_empty() {
+            out.append(&mut found);
+            coverage.merge(seen);
+            return;
+        }
+    }
+    coverage.miss(context, node);
+}
+
+/// Reads the root element of the main part. Normally that is `w:document`
+/// holding one `w:body`; Word also copes with compatibility markup at the
+/// root, with several documents or bodies (it joins them), and with body
+/// content standing where the document element should be.
+fn read_root(node: Node, body: &mut Vec<Block>, coverage: &mut Coverage) {
+    match mc_branch(node) {
+        Some(branch) => {
+            for child in branch.into_iter().flat_map(elements) {
+                read_root(child, body, coverage);
+            }
+        }
+        None => match w_name(node) {
+            Some("document") => for_each_child(node, &mut |child| {
+                if w_name(child) == Some("body") {
+                    parse_blocks(child, 0, body, coverage);
+                }
+            }),
+            Some(_) => parse_block(node, false, 0, body, coverage),
+            None => {}
+        },
+    }
+}
+
+fn parse_blocks(parent: Node, depth: usize, blocks: &mut Vec<Block>, coverage: &mut Coverage) {
+    let in_cell = w_name(parent) == Some("tc");
+    for_each_child(parent, &mut |child| parse_block(child, in_cell, depth, blocks, coverage));
+}
+
+fn parse_block(child: Node, in_cell: bool, depth: usize, blocks: &mut Vec<Block>, coverage: &mut Coverage) {
+    match w_name(child) {
+        Some("p") => blocks.push(Block::Paragraph(parse_paragraph(child, coverage))),
+        Some("tbl") if depth < MAX_NESTING => {
+            blocks.push(Block::Table(parse_table(child, depth + 1, coverage)));
+        }
+        Some("tbl") => coverage.note("w:tbl (nested too deeply, dropped)"),
+        // Wrappers whose content is ordinary block content.
+        Some("sdt") => for_each_child(child, &mut |part| {
+            if w_name(part) == Some("sdtContent") {
+                parse_blocks(part, depth, blocks, coverage);
+            }
+        }),
+        Some("customXml") => parse_blocks(child, depth, blocks, coverage),
+        // Not modelled yet. Named so that they are not mistaken for wrappers.
+        Some("sectPr" | "tcPr" | "altChunk" | "customXmlPr") => coverage.miss(in_cell.then_some("w:tc"), child),
+        Some(name) if is_ignorable(name) => {}
+        _ => read_unknown(child, None, blocks, coverage, |found, seen| {
+            parse_blocks(child, depth, found, seen);
+        }),
+    }
 }
 
 fn parse_table(node: Node, depth: usize, coverage: &mut Coverage) -> Table {
     let mut table = Table::default();
-    for child in elements(node) {
-        match w_name(child) {
-            Some("tr") => {
-                let mut row = TableRow::default();
-                for cell in elements(child) {
-                    match w_name(cell) {
-                        Some("tc") => row.cells.push(TableCell {
-                            blocks: parse_blocks(cell, depth, coverage),
-                        }),
-                        Some(name) if is_ignorable(name) => {}
-                        _ => coverage.miss(Some("w:tr"), cell),
-                    }
-                }
-                table.rows.push(row);
-            }
-            Some(name) if is_ignorable(name) => {}
-            _ => coverage.miss(Some("w:tbl"), child),
-        }
-    }
+    parse_rows(node, depth, &mut table.rows, coverage);
     table
+}
+
+fn parse_rows(parent: Node, depth: usize, rows: &mut Vec<TableRow>, coverage: &mut Coverage) {
+    for_each_child(parent, &mut |child| match w_name(child) {
+        Some("tr") => {
+            let mut row = TableRow::default();
+            parse_cells(child, depth, &mut row.cells, coverage);
+            rows.push(row);
+        }
+        // A content control or custom XML element can wrap whole rows.
+        Some("sdt") => for_each_child(child, &mut |part| {
+            if w_name(part) == Some("sdtContent") {
+                parse_rows(part, depth, rows, coverage);
+            }
+        }),
+        Some("customXml") => parse_rows(child, depth, rows, coverage),
+        Some("tblPr" | "tblGrid" | "tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tbl"), child),
+        Some(name) if is_ignorable(name) => {}
+        _ => read_unknown(child, Some("w:tbl"), rows, coverage, |found, seen| {
+            parse_rows(child, depth, found, seen);
+        }),
+    });
+}
+
+fn parse_cells(parent: Node, depth: usize, cells: &mut Vec<TableCell>, coverage: &mut Coverage) {
+    for_each_child(parent, &mut |child| match w_name(child) {
+        Some("tc") => {
+            let mut cell = TableCell::default();
+            parse_blocks(child, depth, &mut cell.blocks, coverage);
+            cells.push(cell);
+        }
+        // ... and so can whole cells, which is how Word stores a form field
+        // that occupies a table cell.
+        Some("sdt") => for_each_child(child, &mut |part| {
+            if w_name(part) == Some("sdtContent") {
+                parse_cells(part, depth, cells, coverage);
+            }
+        }),
+        Some("customXml") => parse_cells(child, depth, cells, coverage),
+        Some("trPr" | "tblPrEx" | "customXmlPr") => coverage.miss(Some("w:tr"), child),
+        Some(name) if is_ignorable(name) => {}
+        _ => read_unknown(child, Some("w:tr"), cells, coverage, |found, seen| {
+            parse_cells(child, depth, found, seen);
+        }),
+    });
 }
 
 fn parse_paragraph(node: Node, coverage: &mut Coverage) -> Paragraph {
     let mut paragraph = Paragraph::default();
-    if let Some(ppr) = w_child(node, "pPr") {
-        paragraph.props = ParaProps::parse(ppr, coverage);
-        if let Some(rpr) = w_child(ppr, "rPr") {
-            paragraph.mark_props = RunProps::parse(rpr, coverage);
+    // Repeated `w:pPr` elements are invalid; Word merges them.
+    for ppr in elements(node).filter(|n| w_name(*n) == Some("pPr")) {
+        paragraph.props.read(ppr, coverage);
+        for rpr in elements(ppr).filter(|n| w_name(*n) == Some("rPr")) {
+            paragraph.mark_props.read(rpr, coverage);
         }
     }
     parse_inlines(node, None, &mut paragraph.runs, coverage);
     paragraph
 }
 
-fn parse_inlines(
-    parent: Node,
-    revision: Option<&Revision>,
-    runs: &mut Vec<Run>,
-    coverage: &mut Coverage,
-) {
-    for child in elements(parent) {
+/// Elements that belong inside a run. Word also honours them when they sit
+/// directly in a paragraph, as some generators write them.
+fn is_run_content(name: &str) -> bool {
+    matches!(name, "t" | "delText" | "tab" | "br" | "cr" | "sym" | "noBreakHyphen" | "softHyphen")
+}
+
+fn parse_inlines(parent: Node, revision: Option<&Revision>, runs: &mut Vec<Run>, coverage: &mut Coverage) {
+    for_each_child(parent, &mut |child| {
         let tracked = |kind| Revision {
             kind,
             author: w_attr(child, "author").map(str::to_owned),
@@ -262,78 +355,147 @@ fn parse_inlines(
         match w_name(child) {
             Some("r") => runs.push(parse_run(child, revision, coverage)),
             Some("pPr") => {}
-            Some("ins") => parse_inlines(
-                child,
-                Some(&tracked(RevisionKind::Inserted)),
-                runs,
-                coverage,
-            ),
-            Some("del") => {
-                parse_inlines(child, Some(&tracked(RevisionKind::Deleted)), runs, coverage)
-            }
-            Some("moveFrom") => parse_inlines(
-                child,
-                Some(&tracked(RevisionKind::MovedFrom)),
-                runs,
-                coverage,
-            ),
-            Some("moveTo") => {
-                parse_inlines(child, Some(&tracked(RevisionKind::MovedTo)), runs, coverage)
-            }
+            Some("ins") => parse_inlines(child, Some(&tracked(RevisionKind::Inserted)), runs, coverage),
+            Some("del") => parse_inlines(child, Some(&tracked(RevisionKind::Deleted)), runs, coverage),
+            Some("moveFrom") => parse_inlines(child, Some(&tracked(RevisionKind::MovedFrom)), runs, coverage),
+            Some("moveTo") => parse_inlines(child, Some(&tracked(RevisionKind::MovedTo)), runs, coverage),
             // Wrappers whose content is ordinary inline content.
             Some("hyperlink" | "smartTag" | "customXml" | "fldSimple" | "dir" | "bdo") => {
                 parse_inlines(child, revision, runs, coverage);
             }
-            Some("sdt") => {
-                if let Some(content) = w_child(child, "sdtContent") {
-                    parse_inlines(content, revision, runs, coverage);
+            Some("sdt") => for_each_child(child, &mut |part| {
+                if w_name(part) == Some("sdtContent") {
+                    parse_inlines(part, revision, runs, coverage);
                 }
+            }),
+            Some(name) if is_run_content(name) => {
+                let mut run = Run { revision: revision.cloned(), ..Run::default() };
+                read_run_content(child, name, &mut run.content, coverage);
+                runs.push(run);
             }
+            // Not modelled yet. Named so that they are not mistaken for wrappers.
+            Some(
+                "commentRangeStart"
+                | "commentRangeEnd"
+                | "customXmlPr"
+                | "smartTagPr"
+                | "subDoc"
+                | "oMath"
+                | "oMathPara"
+                | "customXmlInsRangeStart"
+                | "customXmlInsRangeEnd"
+                | "customXmlDelRangeStart"
+                | "customXmlDelRangeEnd"
+                | "customXmlMoveFromRangeStart"
+                | "customXmlMoveFromRangeEnd"
+                | "customXmlMoveToRangeStart"
+                | "customXmlMoveToRangeEnd",
+            ) => coverage.miss(Some("w:p"), child),
             Some(name) if is_ignorable(name) => {}
-            None if is_mc_alternate_content(child) => {
-                if let Some(fallback) = mc_fallback(child) {
-                    parse_inlines(fallback, revision, runs, coverage);
-                }
+            _ => read_unknown(child, Some("w:p"), runs, coverage, |found, seen| {
+                parse_inlines(child, revision, found, seen);
+            }),
+        }
+    });
+}
+
+fn parse_run(node: Node, revision: Option<&Revision>, coverage: &mut Coverage) -> Run {
+    let mut run = Run { revision: revision.cloned(), ..Run::default() };
+    parse_run_children(node, &mut run, coverage);
+    run
+}
+
+fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
+    for_each_child(node, &mut |child| match w_name(child) {
+        Some("rPr") => run.props.read(child, coverage),
+        Some(name) if is_run_content(name) => read_run_content(child, name, &mut run.content, coverage),
+        Some(name) if is_ignorable(name) => {}
+        // Not modelled yet. Named so that they are not mistaken for wrappers.
+        Some(
+            "drawing"
+            | "pict"
+            | "object"
+            | "fldChar"
+            | "instrText"
+            | "delInstrText"
+            | "footnoteReference"
+            | "endnoteReference"
+            | "commentReference"
+            | "footnoteRef"
+            | "endnoteRef"
+            | "annotationRef"
+            | "separator"
+            | "continuationSeparator"
+            | "ruby"
+            | "ptab"
+            | "pgNum"
+            | "dayShort"
+            | "dayLong"
+            | "monthShort"
+            | "monthLong"
+            | "yearShort"
+            | "yearLong"
+            | "contentPart",
+        ) => coverage.miss(Some("w:r"), child),
+        _ => {
+            let before = run.content.len();
+            let mut seen = Coverage::default();
+            if w_name(child).is_some() {
+                parse_run_children(child, run, &mut seen);
             }
-            _ => coverage.miss(Some("w:p"), child),
+            if run.content.len() > before {
+                coverage.merge(seen);
+            } else {
+                coverage.miss(Some("w:r"), child);
+            }
+        }
+    });
+}
+
+fn read_run_content(node: Node, name: &str, content: &mut Vec<RunContent>, coverage: &mut Coverage) {
+    match name {
+        // `w:delText` is the text of a run inside a deletion.
+        "t" | "delText" => read_text(node, content),
+        "tab" => content.push(RunContent::Tab),
+        "cr" => content.push(RunContent::Break(BreakKind::Line)),
+        "br" => content.push(RunContent::Break(break_kind(node))),
+        "noBreakHyphen" => push_text(content, "\u{2011}"),
+        "softHyphen" => push_text(content, "\u{00AD}"),
+        // A character addressed by code point in a named (usually symbol)
+        // font, e.g. a Wingdings tick.
+        "sym" => match w_attr(node, "char").and_then(|c| u32::from_str_radix(c, 16).ok()).and_then(char::from_u32) {
+            Some(character) => {
+                content.push(RunContent::Symbol { font: w_attr(node, "font").map(str::to_owned), character });
+            }
+            None => coverage.miss(Some("w:r"), node),
+        },
+        _ => unreachable!("is_run_content and read_run_content list the same names"),
+    }
+}
+
+/// Text of a `w:t`. It should hold only characters; Word also honours a
+/// break or another text element nested inside it, and drops anything else.
+fn read_text(node: Node, content: &mut Vec<RunContent>) {
+    if !node.children().any(|child| child.is_element()) {
+        let text = text_of(node);
+        return push_text(content, if preserves_space(node) { &text } else { text.trim() });
+    }
+    for child in node.children() {
+        match w_name(child) {
+            _ if child.is_text() => push_text(content, child.text().unwrap_or_default()),
+            Some("br") => content.push(RunContent::Break(break_kind(child))),
+            Some("t" | "delText") => read_text(child, content),
+            _ => {}
         }
     }
 }
 
-fn parse_run(node: Node, revision: Option<&Revision>, coverage: &mut Coverage) -> Run {
-    let mut run = Run {
-        revision: revision.cloned(),
-        ..Run::default()
-    };
-    for child in elements(node) {
-        match w_name(child) {
-            Some("rPr") => run.props = RunProps::parse(child, coverage),
-            // `w:delText` is the text of a run inside a deletion.
-            Some("t" | "delText") => {
-                let text = text_of(child);
-                let text = if preserves_space(child) {
-                    text
-                } else {
-                    text.trim().to_owned()
-                };
-                push_text(&mut run.content, &text);
-            }
-            Some("tab") => run.content.push(RunContent::Tab),
-            Some("cr") => run.content.push(RunContent::Break(BreakKind::Line)),
-            Some("br") => run
-                .content
-                .push(RunContent::Break(match w_attr(child, "type") {
-                    Some("page") => BreakKind::Page,
-                    Some("column") => BreakKind::Column,
-                    _ => BreakKind::Line,
-                })),
-            Some("noBreakHyphen") => push_text(&mut run.content, "\u{2011}"),
-            Some("softHyphen") => push_text(&mut run.content, "\u{00AD}"),
-            Some(name) if is_ignorable(name) => {}
-            _ => coverage.miss(Some("w:r"), child),
-        }
+fn break_kind(node: Node) -> BreakKind {
+    match w_attr(node, "type") {
+        Some("page") => BreakKind::Page,
+        Some("column") => BreakKind::Column,
+        _ => BreakKind::Line,
     }
-    run
 }
 
 fn push_text(content: &mut Vec<RunContent>, text: &str) {

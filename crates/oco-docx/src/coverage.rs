@@ -25,13 +25,20 @@ impl Coverage {
         *self.unsupported.entry(key).or_default() += 1;
     }
 
+    /// Records something other than a single unmodelled element.
+    pub(crate) fn note(&mut self, what: &str) {
+        *self.unsupported.entry(what.to_owned()).or_default() += 1;
+    }
+
+    pub(crate) fn merge(&mut self, other: Coverage) {
+        for (name, count) in other.unsupported {
+            *self.unsupported.entry(name).or_default() += count;
+        }
+    }
+
     /// Entries sorted by descending count, then by name.
     pub fn ranked(&self) -> Vec<(&str, usize)> {
-        let mut entries: Vec<_> = self
-            .unsupported
-            .iter()
-            .map(|(k, v)| (k.as_str(), *v))
-            .collect();
+        let mut entries: Vec<_> = self.unsupported.iter().map(|(k, v)| (k.as_str(), *v)).collect();
         entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
         entries
     }
