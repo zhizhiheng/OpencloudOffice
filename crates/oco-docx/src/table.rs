@@ -211,11 +211,25 @@ pub struct CellProps {
     pub merge: Option<VerticalMerge>,
     /// Margins of this cell alone, over the table's.
     pub margins: CellMargins,
+    /// `w:vAlign`: where the content stands in a cell taller than it:
+    /// `top` (as when nothing is said), `center` or `bottom`.
+    pub vertical_align: Option<String>,
+    /// `w:hideMark`: an empty cell does not make its row as tall as its
+    /// paragraph mark.
+    pub hide_mark: bool,
 }
 
 impl Default for CellProps {
     fn default() -> Self {
-        CellProps { width: None, width_share: None, grid_span: 1, merge: None, margins: CellMargins::default() }
+        CellProps {
+            width: None,
+            width_share: None,
+            grid_span: 1,
+            merge: None,
+            margins: CellMargins::default(),
+            vertical_align: None,
+            hide_mark: false,
+        }
     }
 }
 
@@ -236,6 +250,8 @@ impl CellProps {
                     });
                 }
                 Some("tcMar") => props.margins = CellMargins::parse(child),
+                Some("vAlign") => props.vertical_align = val(child).map(str::to_owned),
+                Some("hideMark") => props.hide_mark = on_off(child),
                 // Drawn by the table as a whole for now.
                 Some("tcBorders") => {}
                 _ => coverage.miss(Some("w:tcPr"), child),

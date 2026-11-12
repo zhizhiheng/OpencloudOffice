@@ -4066,16 +4066,16 @@
     },
     "corpus-word/docx4j/table-hidemark.docx": {
      "dx": 0.02,
-     "dy": 88.77,
+     "dy": 12.24,
      "lines": 24,
      "missing_fonts": [],
      "page_starts": 0,
      "page_starts_equal": 0,
      "pages": [
       1,
-      2
+      1
      ],
-     "placed": 4,
+     "placed": 6,
      "plain": false,
      "same": 24
     },
@@ -5138,8 +5138,8 @@
    "multipage_pages_equal": 455,
    "multipage_pages_within_one": 579,
    "page_starts": 2041,
-   "page_starts_equal": 378,
-   "page_starts_same_paragraph": 511
+   "page_starts_equal": 383,
+   "page_starts_same_paragraph": 526
   },
   "covered": {
    "documents": 537,
@@ -5182,8 +5182,8 @@
     "lines": 7059,
     "page_starts": 193,
     "page_starts_equal": 160,
-    "pages_equal": 118,
-    "placed": 4847,
+    "pages_equal": 119,
+    "placed": 4849,
     "same": 6365
    },
    "covered": {

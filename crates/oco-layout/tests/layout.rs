@@ -1358,3 +1358,154 @@ fn automatic_spacing_depends_on_where_the_paragraph_stands() {
     let cells = steps(plain("above") + &table(&[4000], "", &[&[&first], &[&second]]) + &plain("below"));
     assert!(close_to(&cells, &[14.3, 27.8, 14.3, 13.8 + 14.0 + 0.5]), "{cells:?}");
 }
+
+/// A fixed table with half-point borders whose cells are given with their
+/// properties (the content of `w:tcPr`) and whose rows with theirs.
+fn cells(grid: &[u32], rows: &[(&str, &[(&str, &str)])]) -> String {
+    let plain: Vec<&[&str]> = Vec::new();
+    let shell = table(grid, "", &plain);
+    let rows: String = rows
+        .iter()
+        .map(|(row_props, cells)| {
+            let cells: String = cells
+                .iter()
+                .map(|(props, content)| format!("<w:tc><w:tcPr>{props}</w:tcPr>{content}</w:tc>"))
+                .collect();
+            format!("<w:tr><w:trPr>{row_props}</w:trPr>{cells}</w:tr>")
+        })
+        .collect();
+    shell.replace("</w:tbl>", &format!("{rows}</w:tbl>"))
+}
+
+#[test]
+fn a_cell_merged_down_a_column_runs_through_its_rows() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    // The empty paragraph a merged cell has to have, in the size of the text.
+    let mark = format!("<w:p><w:pPr><w:rPr>{}</w:rPr></w:pPr></w:p>", font("Liberation Serif", 24));
+    let (restart, on) = (r#"<w:vMerge w:val="restart"/>"#, "<w:vMerge/>");
+    let lay = |body: String| pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let at = |page: &Page, text: &str| {
+        page.lines.iter().find(|l| l.text == text).unwrap_or_else(|| panic!("{text}")).baseline
+    };
+
+    // As measured in Word (docx4j's probe `tables-banding-merged-row`): a
+    // row made up only of cells that run on from the row above is as tall
+    // as the empty paragraphs the file has in them: here a line of 13.8 pt
+    // under its half-point rule, like the rows around it.
+    let (one, merged, four) = (cell("one"), cell("merged"), cell("four"));
+    let page = lay(cells(
+        &[4000],
+        &[("", &[("", &one)]), ("", &[(restart, &merged)]), ("", &[(on, &mark)]), ("", &[("", &four)])],
+    ));
+    assert!(close(at(&page, "merged") - at(&page, "one"), 14.3, 0.01));
+    assert!(
+        close(at(&page, "four") - at(&page, "merged"), 2.0 * 14.3, 0.01),
+        "{}",
+        at(&page, "four") - at(&page, "merged")
+    );
+
+    // The content runs on through the rows the cell covers, which are as
+    // tall as their other cells make them; where it needs more than all of
+    // them give, the last row is the taller for it. Three lines beside two
+    // rows of one line each:
+    let three = cell("first") + &cell("second") + &cell("third");
+    let (a, b) = (cell("beside a"), cell("beside b"));
+    let body =
+        cells(&[2000, 2000], &[("", &[(restart, &three), ("", &a)]), ("", &[(on, &mark), ("", &b)])]) + &cell("after");
+    let page = lay(body);
+    let first = at(&page, "first");
+    assert!(close(at(&page, "beside a"), first, 0.01) && close(at(&page, "beside b") - first, 14.3, 0.01));
+    assert!(close(at(&page, "second") - first, 13.8, 0.01) && close(at(&page, "third") - first, 27.6, 0.01));
+    // Below the third line, the table's last rule, then the next paragraph.
+    assert!(
+        close(at(&page, "after") - at(&page, "third"), 13.8 + 0.5, 0.02),
+        "{}",
+        at(&page, "after") - at(&page, "third")
+    );
+    // Without the merge the first row holds all three lines.
+    let apart = lay(cells(&[2000, 2000], &[("", &[("", &three), ("", &a)]), ("", &[("", &mark), ("", &b)])]));
+    assert!(close(at(&apart, "beside b") - at(&apart, "first"), 3.0 * 13.8 + 0.5, 0.01));
+}
+
+#[test]
+fn content_stands_in_its_cell_as_the_cell_says() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Three lines in the first cell make the row 41.4 pt tall inside; one
+    // line in the second stands at the top of that, in the middle or at the
+    // bottom (`w:vAlign`).
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let tall = cell("first") + &cell("second") + &cell("third");
+    let lowered = |align: &str| {
+        let short = cell("short");
+        let body = cells(&[2000, 2000], &[("", &[("", &tall), (align, &short)])]);
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        let at = |text: &str| page.lines.iter().find(|l| l.text == text).unwrap().baseline;
+        at("short") - at("first")
+    };
+    assert!(close(lowered(""), 0.0, 0.01));
+    assert!(close(lowered(r#"<w:vAlign w:val="top"/>"#), 0.0, 0.01));
+    assert!(
+        close(lowered(r#"<w:vAlign w:val="center"/>"#), 13.8, 0.01),
+        "{}",
+        lowered(r#"<w:vAlign w:val="center"/>"#)
+    );
+    assert!(close(lowered(r#"<w:vAlign w:val="bottom"/>"#), 27.6, 0.01));
+}
+
+#[test]
+fn a_hidden_mark_does_not_make_its_row_taller() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-hidemark`): a row whose
+    // cells are empty and say `w:hideMark` is as tall as its rule and its
+    // cell margins, none here; one with text beside the empty cell is not
+    // changed.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let mark = format!("<w:p><w:pPr><w:rPr>{}</w:rPr></w:pPr></w:p>", font("Liberation Serif", 24));
+    let step = |middle: &[(&str, &str)]| {
+        let (above, below) = (cell("above"), cell("below"));
+        let body = cells(
+            &[2000, 2000],
+            &[("", &[("", &above), ("", &mark)]), ("", middle), ("", &[("", &below), ("", &mark)])],
+        );
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        let at = |text: &str| page.lines.iter().find(|l| l.text == text).unwrap().baseline;
+        at("below") - at("above")
+    };
+    let hide = "<w:hideMark/>";
+    assert!(close(step(&[("", &mark), ("", &mark)]), 2.0 * 14.3, 0.01));
+    assert!(
+        close(step(&[(hide, &mark), (hide, &mark)]), 14.3 + 0.5, 0.01),
+        "{}",
+        step(&[(hide, &mark), (hide, &mark)])
+    );
+    assert!(close(step(&[(hide, &mark), ("", &mark)]), 2.0 * 14.3, 0.01));
+    let text = cell("text");
+    assert!(close(step(&[(hide, &text), (hide, &mark)]), 2.0 * 14.3, 0.01));
+}
+
+#[test]
+fn heading_rows_come_again_at_the_top_of_each_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Rows of exactly 20 pt lines under half-point rules: 34 fit a page.
+    let exact = r#"<w:spacing w:line="400" w:lineRule="exact"/>"#;
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), exact, text);
+    let first_lines = |heading: &str| {
+        let texts: Vec<String> =
+            (0..80).map(|n| if n == 0 { cell("heading") } else { cell(&format!("row {n}")) }).collect();
+        let rows: Vec<(&str, Vec<(&str, &str)>)> = texts
+            .iter()
+            .enumerate()
+            .map(|(n, text)| (if n == 0 { heading } else { "" }, vec![("", text.as_str())]))
+            .collect();
+        let rows: Vec<(&str, &[(&str, &str)])> = rows.iter().map(|(props, cells)| (*props, cells.as_slice())).collect();
+        let body = cells(&[4000], &rows);
+        let pages = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word);
+        pages.iter().map(|page| (page.lines[0].text.clone(), page.lines.len())).collect::<Vec<_>>()
+    };
+    let shown =
+        |pairs: &[(&str, usize)]| pairs.iter().map(|(text, count)| (text.to_string(), *count)).collect::<Vec<_>>();
+    assert_eq!(first_lines(""), shown(&[("heading", 34), ("row 34", 34), ("row 68", 12)]));
+    // The heading row takes a line of each page after the first.
+    assert_eq!(first_lines("<w:tblHeader/>"), shown(&[("heading", 34), ("heading", 34), ("heading", 14)]));
+}
