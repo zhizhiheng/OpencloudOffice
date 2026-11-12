@@ -69,6 +69,9 @@ pub struct TableProps {
     /// `w:tblpPr`: the table floats, out of the flow of the text. Where it
     /// floats is not read.
     pub floating: bool,
+    /// `w:tblCellSpacing`: the cells stand apart, each within rules of its
+    /// own; this much blank, in twips, is on every side of each.
+    pub cell_spacing: Option<i32>,
 }
 
 /// The width of the widest line a set of borders (`w:tblBorders`) draws,
@@ -114,6 +117,7 @@ impl TableProps {
                 Some("tblLayout") => props.fixed_layout = Some(w_attr(child, "type") == Some("fixed")),
                 Some("tblCellMar") => props.cell_margins = CellMargins::parse(child),
                 Some("tblBorders") => props.borders = Some(widest_border(child)),
+                Some("tblCellSpacing") => props.cell_spacing = length(child).filter(|w| *w > 0),
                 Some("tblpPr") => {
                     props.floating = true;
                     // Its position is not modelled.
@@ -141,6 +145,7 @@ impl TableProps {
         self.cell_margins.apply(&over.cell_margins);
         self.borders = over.borders.or(self.borders);
         self.floating |= over.floating;
+        self.cell_spacing = over.cell_spacing.or(self.cell_spacing);
     }
 }
 

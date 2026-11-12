@@ -1509,3 +1509,35 @@ fn heading_rows_come_again_at_the_top_of_each_page() {
     // The heading row takes a line of each page after the first.
     assert_eq!(first_lines("<w:tblHeader/>"), shown(&[("heading", 34), ("heading", 34), ("heading", 14)]));
 }
+
+#[test]
+fn cells_that_stand_apart_keep_their_columns_and_have_rules_of_their_own() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-cellspacing`): with a cell
+    // spacing of 3.6 pt and half-point rules, a table of two columns of
+    // 150 pt has the text of its first cell 13.35 pt in from the margin
+    // (twice the spacing and half a rule to the cell's own rule, then that
+    // rule and the cell margin of 5.4 pt), that of the second 146.43 pt
+    // further on; and each row is lower by twice the spacing and a rule.
+    let cell = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let lay = |apart: bool| {
+        let (a, b, c) = (cell("first"), cell("second"), cell("below"));
+        let spacing = if apart { r#"<w:tblCellSpacing w:w="72" w:type="dxa"/>"# } else { "" };
+        let body = cell("above")
+            + &table(&[3000, 3000], "", &[&[&a, &b], &[&c, &c]]).replace("<w:tblPr>", &format!("<w:tblPr>{spacing}"))
+            + &cell("after");
+        pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0)
+    };
+    let at = |page: &Page, text: &str| page.lines.iter().find(|l| l.text.starts_with(text)).unwrap().baseline;
+    let (plain, apart) = (lay(false), lay(true));
+    assert!(close(starts(&apart, "first"), 85.34, 0.03), "{}", starts(&apart, "first"));
+    assert!(close(starts(&apart, "second"), 231.77, 0.03), "{}", starts(&apart, "second"));
+    assert!(close(starts(&plain, "first"), 77.65, 0.03) && close(starts(&plain, "second"), 227.65, 0.03));
+    // Down the page: 7.7 pt more before each row, and once more after the
+    // last, before the table's own rule.
+    let step = |page: &Page, from: &str, to: &str| at(page, to) - at(page, from);
+    assert!(close(step(&plain, "above", "first"), 14.3, 0.02) && close(step(&plain, "first", "below"), 14.3, 0.02));
+    assert!(close(step(&apart, "above", "first"), 14.3 + 7.7, 0.02), "{}", step(&apart, "above", "first"));
+    assert!(close(step(&apart, "first", "below"), 14.3 + 7.7, 0.02));
+    assert!(close(step(&apart, "below", "after") - step(&plain, "below", "after"), 7.7, 0.02));
+}

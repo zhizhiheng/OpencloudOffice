@@ -259,6 +259,20 @@ struct Row {
     /// What the row is taller by than its own cells ask, for the content
     /// of a cell merged down to it that needs more than its rows give.
     stretch: f32,
+    /// Where the cells stand apart (`w:tblCellSpacing`): the blank between
+    /// the rule under one row's cells and the rule over the next row's,
+    /// which is also the blank between the table's rule and its first and
+    /// last rows; the sides of each cell's own rules; the sides of the
+    /// table's; and whether this is the table's first row.
+    apart: Option<Apart>,
+}
+
+#[derive(Clone)]
+struct Apart {
+    gap: f32,
+    cells: Vec<(f32, f32)>,
+    sides: (f32, f32),
+    first: bool,
 }
 
 #[derive(Clone)]
@@ -316,8 +330,24 @@ impl Row {
 
     /// How far down from the top of its room the content of `cell` begins,
     /// in a row `height` tall that is placed whole.
+    /// From the top of the row to where the content of its cells begins:
+    /// the rule, the top margin, and the blank above cells that stand apart.
+    fn head(&self) -> f32 {
+        self.gap() + self.border + self.padding.0
+    }
+
+    /// From where the content of the cells ends to the bottom of the row:
+    /// the bottom margin and, in the last row, the rule under the table.
+    fn foot(&self) -> f32 {
+        self.padding.1 + if self.last { self.border + self.gap() } else { 0.0 }
+    }
+
+    fn gap(&self) -> f32 {
+        self.apart.as_ref().map_or(0.0, |apart| apart.gap)
+    }
+
     fn lowered(&self, cell: &RowCell, height: f32) -> f32 {
-        let room = height - self.border - self.padding.0 - self.padding.1 - if self.last { self.border } else { 0.0 };
+        let room = height - self.head() - self.foot();
         if cell.merged {
             0.0
         } else {
@@ -335,7 +365,9 @@ impl Row {
         // one of exactly 30 pt is 30 pt.)
         let least = if first_part { self.min_height } else { 0.0 };
         let natural = self.border + (content + self.padding.0 + self.padding.1).max(least);
-        self.exact_height.unwrap_or(natural + self.stretch) + if self.last { self.border } else { 0.0 }
+        self.gap()
+            + self.exact_height.unwrap_or(natural + self.stretch)
+            + if self.last { self.border + self.gap() } else { 0.0 }
     }
 
     /// Puts the lines `ranges` names of each cell on `page`, the row's top
@@ -345,7 +377,7 @@ impl Row {
     fn place(&self, ranges: &[(usize, usize)], whole: bool, left: f32, top: f32, bottom: f32, page: &mut Page) {
         for (cell, (from, to)) in self.cells.iter().zip(ranges) {
             let lowered = if whole { self.lowered(cell, bottom - top) } else { 0.0 };
-            let mut y = top + self.border + self.padding.0 + lowered;
+            let mut y = top + self.head() + lowered;
             for part in &cell.lines[*from..*to] {
                 y += part.gap;
                 for item in &part.line.items {
@@ -357,13 +389,41 @@ impl Row {
                 y += part.line.height;
             }
         }
-        if self.border > 0.0 {
-            let open: Vec<(bool, bool)> = self.cells.iter().map(|cell| cell.open).collect();
-            for mut item in boxes(&self.edges, &open, top, bottom, self.border) {
-                item.translate(left, 0.0);
-                page.items.push(item);
-            }
+        for mut item in self.rules(top, bottom, whole) {
+            item.translate(left, 0.0);
+            page.items.push(item);
         }
+    }
+
+    /// The rules of the row, or of the part of it between `top` and
+    /// `bottom`; `whole` if that is all of the row there is left.
+    fn rules(&self, top: f32, bottom: f32, whole: bool) -> Vec<Item> {
+        if self.border <= 0.0 {
+            return Vec::new();
+        }
+        let open: Vec<(bool, bool)> = self.cells.iter().map(|cell| cell.open).collect();
+        let Some(apart) = &self.apart else {
+            return boxes(&self.edges, &open, top, bottom, self.border);
+        };
+        // Cells that stand apart have each their own four rules, and the
+        // table has its own around them all.
+        let rule =
+            |x1, y1, x2, y2| Item::Rule { x1, y1, x2, y2, width: self.border, color: [0, 0, 0], dash: [0.0, 0.0] };
+        let (left, right) = apart.sides;
+        let mut items = vec![rule(left, top, left, bottom), rule(right, top, right, bottom)];
+        if apart.first {
+            items.push(rule(left, top, right, top));
+        }
+        let ends = whole && self.last;
+        if ends {
+            items.push(rule(left, bottom, right, bottom));
+        }
+        let (over, under) = (top + apart.gap, if ends { bottom - apart.gap - self.border } else { bottom });
+        for (cell, sides) in apart.cells.iter().enumerate() {
+            let (above, below) = open.get(cell).copied().unwrap_or((false, false));
+            items.extend(boxes(&[sides.0, sides.1], &[(above, below || !whole)], over, under, self.border));
+        }
+        items
     }
 
     /// The row as one line that cannot break, for a table inside a cell.
@@ -372,9 +432,9 @@ impl Row {
         let mut line = paragraph::Line { height, needed: height, ..paragraph::Line::default() };
         let mut texts = Vec::new();
         let lowered: Vec<f32> = self.cells.iter().map(|cell| self.lowered(cell, height)).collect();
-        let open: Vec<(bool, bool)> = self.cells.iter().map(|cell| cell.open).collect();
+        let (rules, head) = (self.rules(0.0, height, true), self.head());
         for (cell, lowered) in self.cells.into_iter().zip(lowered) {
-            let mut y = self.border + self.padding.0 + lowered;
+            let mut y = head + lowered;
             for mut part in cell.lines {
                 y += part.gap;
                 for item in &mut part.line.items {
@@ -398,9 +458,7 @@ impl Row {
                 y += part.line.height;
             }
         }
-        if self.border > 0.0 {
-            line.items.extend(boxes(&self.edges, &open, 0.0, height, self.border));
-        }
+        line.items.extend(rules);
         line.text = texts.join(" ");
         line
     }
@@ -657,6 +715,9 @@ impl Builder<'_> {
         let mut share: Vec<Option<f32>> = vec![None; count];
         let mut spanning = Vec::new();
         let grid = |i: usize| table.grid.get(i).map_or(0.0, |w| (*w).max(0) as f32 * TWIP);
+        let border = props.borders.unwrap_or(0).max(0) as f32 / 8.0;
+        let spacing = points(props.cell_spacing).max(0.0);
+        let apart = (spacing > 0.0).then_some((spacing + border / 2.0, 2.0 * spacing + border / 2.0));
         self.depth += 1;
         for row in &table.rows {
             // Columns the row leaves empty at either end are as wide as it says.
@@ -675,8 +736,19 @@ impl Builder<'_> {
                 if column >= count {
                     break;
                 }
+                // Beside its margins a cell that stands apart needs the
+                // blank and the rules that part it from its neighbours.
+                let around = match apart {
+                    Some((beside, at_edge)) => {
+                        (if column == 0 { at_edge } else { beside })
+                            + (if column + span >= count { at_edge } else { beside })
+                            + border
+                    }
+                    None => 0.0,
+                };
                 let margins = points(cell.props.margins.left.or(props.cell_margins.left))
-                    + points(cell.props.margins.right.or(props.cell_margins.right));
+                    + points(cell.props.margins.right.or(props.cell_margins.right))
+                    + around;
                 let extent = self.extent(&cell.blocks, section);
                 let (mut least, most) = (extent.min + margins, extent.max + margins);
                 let mut width = cell.props.width.map(|w| w as f32 * TWIP);
@@ -947,23 +1019,46 @@ impl Builder<'_> {
             continues.push(own_continues);
         }
 
+        // Cells that stand apart (`w:tblCellSpacing`). As measured in Word
+        // (docx4j's probes `table-cellspacing` and `table-hidemark`): the
+        // columns keep their widths, and each cell stands inside its
+        // column, its own rules twice the spacing and a rule's width from
+        // the rules of the cell beside it, and twice the spacing and half a
+        // rule's width from the table's own. Down the page the blank is
+        // twice the spacing and a rule's width everywhere. The text keeps
+        // clear of the whole of its cell's rule.
+        let spacing = points(props.cell_spacing).max(0.0);
+        let stands_apart = spacing > 0.0;
+        let (beside, at_edge) = (spacing + border / 2.0, 2.0 * spacing + border / 2.0);
+
         let mut rows: Vec<(Row, bool)> = Vec::with_capacity(table.rows.len());
         for (number, row) in table.rows.iter().enumerate() {
             let mut cells = Vec::with_capacity(row.cells.len());
             let skipped = row.props.grid_before as usize;
             let start = origin + widths.iter().take(skipped).sum::<f32>();
             let mut edges = vec![start];
+            let mut boxes_of_cells = Vec::with_capacity(row.cells.len());
             let (mut x, mut column) = (start, skipped);
             for (index, cell) in row.cells.iter().enumerate() {
                 let span = (cell.props.grid_span as usize).max(1);
-                let cell_width: f32 = widths.iter().skip(column).take(span).sum();
+                let column_width: f32 = widths.iter().skip(column).take(span).sum();
                 let (left, right) = (
                     points(cell.props.margins.left.or(margins.left)),
                     points(cell.props.margins.right.or(margins.right)),
                 );
+                // Where the cell itself begins and ends within its columns.
+                let (before, after) = match stands_apart {
+                    true => (
+                        if column == 0 { at_edge } else { beside },
+                        if column + span >= widths.len() { at_edge } else { beside },
+                    ),
+                    false => (0.0, 0.0),
+                };
+                let (cell_x, cell_width) = (x + before, column_width - before - after);
+                boxes_of_cells.push((cell_x, cell_x + cell_width));
                 // The cell's margin is measured from the middle of its border,
                 // and the text never stands on the border itself.
-                let inset = (border / 2.0).max(border - left);
+                let inset = if stands_apart { border } else { (border / 2.0).max(border - left) };
                 // A cell has to end with a paragraph. Where that paragraph
                 // is empty and comes right after a table, it is there for
                 // the file's sake only and takes no room. (Word, docx4j's
@@ -1023,7 +1118,7 @@ impl Builder<'_> {
                         // of them fits.)
                         let breakable =
                             number == 0 || !keep_lines && (!widow_control || number >= 2 && count - number >= 2);
-                        lines.push(CellLine { line, gap, x: x + left + inset, breakable });
+                        lines.push(CellLine { line, gap, x: cell_x + left + inset, breakable });
                         gap = 0.0;
                     }
                 }
@@ -1044,7 +1139,7 @@ impl Builder<'_> {
                     cell.lines.clear();
                 }
                 cells.push(cell);
-                x += cell_width;
+                x += column_width;
                 column += span;
                 edges.push(x);
             }
@@ -1069,6 +1164,12 @@ impl Builder<'_> {
                     border,
                     last: number + 1 == table.rows.len(),
                     stretch: 0.0,
+                    apart: stands_apart.then_some(Apart {
+                        gap: 2.0 * spacing + border,
+                        cells: boxes_of_cells,
+                        sides: (origin, origin + table_width),
+                        first: number == 0,
+                    }),
                 },
                 keeps,
             ));
@@ -1109,8 +1210,7 @@ impl Builder<'_> {
                 }
                 let needed: f32 = content.iter().map(|part| part.gap + part.line.height).sum::<f32>() + tail;
                 let heights: Vec<f32> = rows[first..=last].iter().map(|(row, _)| row.height()).collect();
-                let above = rows[first].0.border + rows[first].0.padding.0;
-                let below = rows[last].0.padding.1 + if rows[last].0.last { rows[last].0.border } else { 0.0 };
+                let (above, below) = (rows[first].0.head(), rows[last].0.foot());
                 let mut room = heights.iter().sum::<f32>() - above - below;
                 if needed > room && rows[last].0.exact_height.is_none() {
                     rows[last].0.stretch += needed - room;
@@ -1122,7 +1222,7 @@ impl Builder<'_> {
                 let mut top = 0.0;
                 for (offset, height) in heights.iter().enumerate() {
                     let row = &rows[first + offset].0;
-                    tops.push(top + row.border + row.padding.0);
+                    tops.push(top + row.head());
                     top += height;
                 }
                 let mut y = above + align * (room - needed).max(0.0);
@@ -1507,7 +1607,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                     .fold(0.0, f32::max);
                 let height = row.part_height(content, first_part);
                 // How many more lines of each cell the page has room for.
-                let room = bottom - y - row.border - row.padding.0;
+                let room = bottom - y - row.head();
                 let takes: Vec<usize> = row
                     .cells
                     .iter()
