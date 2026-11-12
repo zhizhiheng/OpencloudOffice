@@ -70,6 +70,12 @@ exact_values! {
     VertAlign { Baseline = "baseline", Superscript = "superscript", Subscript = "subscript" }
 }
 
+exact_values! {
+    /// Emphasis mark (`ST_Em`), drawn above or below each character. `Dot`
+    /// is the 着重号 of Chinese text, drawn below.
+    Emphasis { None = "none", Dot = "dot", Comma = "comma", Circle = "circle", UnderDot = "underDot" }
+}
+
 impl Underline {
     /// Reads `w:u/@w:val`. `None` means "not specified": a missing value, or
     /// one outside the enumeration, leaves any style's underline in place.

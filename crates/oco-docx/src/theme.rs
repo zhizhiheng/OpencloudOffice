@@ -88,15 +88,74 @@ impl ThemeFonts {
 }
 
 impl ThemeFontLang {
-    pub(crate) fn parse_settings(xml: &str) -> Result<Self, roxmltree::Error> {
+    fn parse(node: roxmltree::Node) -> Self {
+        let get = |name| w_attr(node, name).map(str::to_owned);
+        ThemeFontLang { latin: get("val"), east_asia: get("eastAsia"), bidi: get("bidi") }
+    }
+}
+
+/// Document-wide settings (`word/settings.xml`) that affect how text is laid out.
+#[derive(Debug, Clone, Serialize)]
+pub struct Settings {
+    pub theme_lang: ThemeFontLang,
+    /// Spacing of the default tab stops, in twips.
+    pub default_tab_stop: i32,
+    /// Squeeze adjacent full-width punctuation (`compressPunctuation`), the
+    /// default in Chinese editions of Word.
+    pub compress_punctuation: bool,
+    /// Underline spaces at the end of a line (`ulTrailSpace`), which is what
+    /// makes the blanks in "签字：______" visible.
+    pub underline_trailing_spaces: bool,
+    /// Do not treat a hanging indent as a tab stop (`noTabHangInd`).
+    pub no_tab_hang_indent: bool,
+    /// The Word version whose layout rules the document asks for; 15 is
+    /// current, and a document that does not say gets 12.
+    pub compatibility_mode: i32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            theme_lang: ThemeFontLang::default(),
+            default_tab_stop: 720,
+            compress_punctuation: false,
+            underline_trailing_spaces: false,
+            no_tab_hang_indent: false,
+            compatibility_mode: 12,
+        }
+    }
+}
+
+impl Settings {
+    pub(crate) fn parse(xml: &str) -> Result<Self, roxmltree::Error> {
         let doc = roxmltree::Document::parse(xml)?;
-        let lang = elements(doc.root_element()).find(|n| w_name(*n) == Some("themeFontLang"));
-        Ok(lang
-            .map(|n| {
-                let get = |name| w_attr(n, name).map(str::to_owned);
-                ThemeFontLang { latin: get("val"), east_asia: get("eastAsia"), bidi: get("bidi") }
-            })
-            .unwrap_or_default())
+        let mut settings = Settings::default();
+        for node in elements(doc.root_element()) {
+            match w_name(node) {
+                Some("themeFontLang") => settings.theme_lang = ThemeFontLang::parse(node),
+                Some("defaultTabStop") => {
+                    settings.default_tab_stop = crate::xml::twips(crate::xml::val(node)).unwrap_or(720).max(1);
+                }
+                Some("characterSpacingControl") => {
+                    settings.compress_punctuation =
+                        crate::xml::val(node).is_some_and(|v| v.starts_with("compressPunctuation"));
+                }
+                Some("compat") => {
+                    for flag in elements(node) {
+                        match w_name(flag) {
+                            Some("ulTrailSpace") => settings.underline_trailing_spaces = crate::xml::on_off(flag),
+                            Some("noTabHangInd") => settings.no_tab_hang_indent = crate::xml::on_off(flag),
+                            Some("compatSetting") if w_attr(flag, "name") == Some("compatibilityMode") => {
+                                settings.compatibility_mode = crate::xml::int(crate::xml::val(flag)).unwrap_or(12);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(settings)
     }
 }
 

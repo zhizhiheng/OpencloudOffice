@@ -12,9 +12,11 @@
 mod coverage;
 mod document;
 mod error;
+mod numbering;
 pub mod opc;
 mod props;
 mod resolve;
+mod section;
 mod styles;
 mod theme;
 mod values;
@@ -29,11 +31,13 @@ pub use document::{
     Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell, TableRow,
 };
 pub use error::{Error, OtherFormat, Result};
-pub use props::{FontRef, Fonts, Indent, NumRef, ParaProps, RunProps, Spacing};
+pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering, Suffix};
+pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
 pub use resolve::Resolver;
+pub use section::{DocGrid, GridKind, Section, SectionStart};
 pub use styles::{Style, StyleKind, StyleSheet};
-pub use theme::{ThemeFontLang, ThemeFonts};
-pub use values::{Color, Highlight, Underline, VertAlign};
+pub use theme::{Settings, ThemeFontLang, ThemeFonts};
+pub use values::{Color, Emphasis, Highlight, Underline, VertAlign};
 
 use opc::Package;
 
@@ -43,7 +47,8 @@ pub struct Docx {
     pub document: Document,
     pub styles: StyleSheet,
     pub theme: Option<ThemeFonts>,
-    pub theme_lang: ThemeFontLang,
+    pub numbering: Numbering,
+    pub settings: Settings,
     /// Markup that was encountered but is not modelled yet.
     pub coverage: Coverage,
     /// Problems that did not prevent opening, such as an unreadable styles
@@ -111,6 +116,7 @@ impl Docx {
         let styles_xml = read_related("/styles");
         let theme_xml = read_related("/theme");
         let settings_xml = read_related("/settings");
+        let numbering_xml = read_related("/numbering");
 
         let mut parsed = |kind: &str, error: roxmltree::Error| {
             warnings.push(format!("the {kind} part is malformed and was ignored: {error}"));
@@ -132,14 +138,34 @@ impl Docx {
             })
             .unwrap_or_default();
         let theme = theme_xml.and_then(|xml| ThemeFonts::parse(&xml).map_err(|e| parsed("theme", e)).ok());
-        let theme_lang = settings_xml
-            .and_then(|xml| ThemeFontLang::parse_settings(&xml).map_err(|e| parsed("settings", e)).ok())
+        let settings = settings_xml
+            .and_then(|xml| Settings::parse(&xml).map_err(|e| parsed("settings", e)).ok())
+            .unwrap_or_default();
+        let numbering = numbering_xml
+            .and_then(|xml| {
+                let mut seen = Coverage::default();
+                match Numbering::parse(&xml, &mut seen) {
+                    Ok(numbering) => {
+                        coverage.merge(seen);
+                        Some(numbering)
+                    }
+                    Err(error) => {
+                        parsed("numbering", error);
+                        None
+                    }
+                }
+            })
             .unwrap_or_default();
 
-        Ok(Docx { document, styles, theme, theme_lang, coverage, warnings })
+        Ok(Docx { document, styles, theme, numbering, settings, coverage, warnings })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {
-        Resolver { styles: &self.styles, theme: self.theme.as_ref(), theme_lang: &self.theme_lang }
+        Resolver {
+            styles: &self.styles,
+            theme: self.theme.as_ref(),
+            theme_lang: &self.settings.theme_lang,
+            numbering: &self.numbering,
+        }
     }
 }

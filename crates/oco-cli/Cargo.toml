@@ -12,5 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 oco-docx.workspace = true
+oco-layout.workspace = true
 serde.workspace = true
 serde_json.workspace = true

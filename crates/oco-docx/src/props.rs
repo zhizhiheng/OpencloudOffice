@@ -7,7 +7,7 @@ use roxmltree::Node;
 use serde::Serialize;
 
 use crate::coverage::Coverage;
-use crate::values::{Color, Highlight, Underline, VertAlign};
+use crate::values::{Color, Emphasis, Highlight, Underline, VertAlign};
 use crate::xml::{elements, half_points, int, on_off, on_off_attr, twips, val, w_attr, w_name};
 
 /// Copies every field that `$over` specifies onto `$base`.
@@ -75,13 +75,73 @@ pub struct RunProps {
     pub strike: Option<bool>,
     /// Hidden text.
     pub vanish: Option<bool>,
+    // The remaining toggles are rare; they are read so that the model is
+    // complete, and drawn as plain text for now.
+    pub outline: Option<bool>,
+    pub shadow: Option<bool>,
+    pub emboss: Option<bool>,
+    pub imprint: Option<bool>,
+    /// Bold and italic for complex-script text (Arabic, Hebrew, ...).
+    pub bold_cs: Option<bool>,
+    pub italic_cs: Option<bool>,
+    pub double_strike: Option<bool>,
     pub underline: Option<Underline>,
+    /// `None` means the underline takes the text colour.
+    pub underline_color: Option<Color>,
     /// Font size in half-points (`w:sz`).
     pub size: Option<u32>,
+    /// Font size for complex-script text, in half-points (`w:szCs`).
+    pub size_cs: Option<u32>,
     pub color: Option<Color>,
     pub highlight: Option<Highlight>,
+    /// Background fill behind the text (`w:shd`); `Auto` means none.
+    pub shade: Option<Color>,
+    pub border: Option<Border>,
     pub vert_align: Option<VertAlign>,
+    pub emphasis: Option<Emphasis>,
+    /// Extra space after each character in twips; negative condenses.
+    pub char_spacing: Option<i32>,
+    /// Horizontal scaling of the glyphs in percent (`w:w`).
+    pub scale: Option<i32>,
+    /// Raise (positive) or lower the text, in half-points.
+    pub position: Option<i32>,
+    /// Kern pairs at and above this size in half-points; 0 turns kerning off.
+    pub kern: Option<u32>,
+    /// The run is complex-script or right-to-left text and uses the `cs` font.
+    pub complex: Option<bool>,
     pub fonts: Fonts,
+}
+
+/// One edge of a border, or the box around a run (`w:bdr`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Border {
+    /// Line style: `single`, `double`, `dashed`, ... or `nil`/`none` for no line.
+    pub style: String,
+    /// Line width in eighths of a point.
+    pub size: i32,
+    /// Gap between the line and the text, in points.
+    pub space: i32,
+    pub color: Option<Color>,
+}
+
+impl Border {
+    fn parse(node: Node) -> Self {
+        Border {
+            style: val(node).unwrap_or("single").to_owned(),
+            size: int(w_attr(node, "sz")).unwrap_or(4),
+            space: int(w_attr(node, "space")).unwrap_or(0),
+            color: w_attr(node, "color").and_then(Color::parse),
+        }
+    }
+
+    pub fn is_visible(&self) -> bool {
+        !matches!(self.style.as_str(), "nil" | "none")
+    }
+}
+
+/// The fill of a `w:shd`. A pattern other than a plain fill is not modelled.
+fn shade(node: Node) -> Option<Color> {
+    w_attr(node, "fill").and_then(Color::parse)
 }
 
 impl RunProps {
@@ -90,8 +150,9 @@ impl RunProps {
     /// which the resolver handles.
     pub fn apply(&mut self, over: &RunProps) {
         overlay!(self, over;
-            style_id, bold, italic, caps, small_caps, strike, vanish,
-            underline, size, color, highlight, vert_align);
+            style_id, bold, italic, caps, small_caps, strike, vanish, outline, shadow, emboss, imprint,
+            bold_cs, italic_cs, double_strike, underline, underline_color, size, size_cs, color, highlight,
+            shade, border, vert_align, emphasis, char_spacing, scale, position, kern, complex);
         self.fonts.apply(&over.fonts);
     }
 
@@ -115,9 +176,30 @@ impl RunProps {
                 Some("smallCaps") => p.small_caps = Some(on_off(child)),
                 Some("strike") => p.strike = Some(on_off(child)),
                 Some("vanish") => p.vanish = Some(on_off(child)),
-                // For these four an invalid value means "not specified here",
-                // so it must not overwrite a value read earlier.
-                Some("u") => p.underline = Underline::parse(val(child)).or(p.underline),
+                Some("outline") => p.outline = Some(on_off(child)),
+                Some("shadow") => p.shadow = Some(on_off(child)),
+                Some("emboss") => p.emboss = Some(on_off(child)),
+                Some("imprint") => p.imprint = Some(on_off(child)),
+                Some("bCs") => p.bold_cs = Some(on_off(child)),
+                Some("iCs") => p.italic_cs = Some(on_off(child)),
+                Some("dstrike") => p.double_strike = Some(on_off(child)),
+                Some("cs" | "rtl") => p.complex = Some(on_off(child) || p.complex == Some(true)),
+                // For these an invalid value means "not specified here", so
+                // it must not overwrite a value read earlier.
+                Some("u") => {
+                    p.underline = Underline::parse(val(child)).or(p.underline);
+                    p.underline_color = w_attr(child, "color").and_then(Color::parse).or(p.underline_color);
+                }
+                Some("em") => p.emphasis = val(child).and_then(Emphasis::from_exact).or(p.emphasis),
+                Some("szCs") => p.size_cs = half_points(val(child)),
+                Some("spacing") => p.char_spacing = twips(val(child)),
+                Some("w") => p.scale = int(val(child)),
+                Some("position") => p.position = int(val(child)),
+                Some("kern") => p.kern = half_points(val(child)),
+                Some("shd") => p.shade = shade(child).or(p.shade),
+                Some("bdr") => p.border = Some(Border::parse(child)),
+                // Proofing language and editing aids: no effect on how text looks.
+                Some("lang" | "noProof" | "webHidden" | "specVanish" | "effect" | "oMath") => {}
                 Some("color") => p.color = val(child).and_then(Color::parse).or(p.color),
                 Some("highlight") => p.highlight = val(child).and_then(Highlight::from_exact).or(p.highlight),
                 Some("vertAlign") => p.vert_align = val(child).and_then(VertAlign::from_exact).or(p.vert_align),
@@ -231,6 +313,64 @@ pub struct NumRef {
     pub level: Option<i32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TabKind {
+    Left,
+    Center,
+    Right,
+    Decimal,
+    Bar,
+    /// Removes a stop inherited from a style at the same position.
+    Clear,
+}
+
+/// A custom tab stop (`w:tab` inside `w:tabs`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TabStop {
+    pub kind: TabKind,
+    /// Distance from the left margin in twips.
+    pub position: i32,
+    /// Fill character leading up to the stop: `dot`, `hyphen`, `underscore`, ...
+    pub leader: Option<String>,
+}
+
+impl TabStop {
+    fn parse(node: Node) -> Option<Self> {
+        let kind = match val(node)? {
+            "center" => TabKind::Center,
+            "right" | "end" => TabKind::Right,
+            "decimal" => TabKind::Decimal,
+            "bar" => TabKind::Bar,
+            "clear" => TabKind::Clear,
+            // `num` is the legacy list tab; it behaves as a left tab.
+            _ => TabKind::Left,
+        };
+        Some(TabStop {
+            kind,
+            position: twips(w_attr(node, "pos"))?,
+            leader: w_attr(node, "leader").filter(|l| *l != "none").map(str::to_owned),
+        })
+    }
+}
+
+/// Borders around a paragraph (`w:pBdr`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ParaBorders {
+    pub top: Option<Border>,
+    pub left: Option<Border>,
+    pub bottom: Option<Border>,
+    pub right: Option<Border>,
+    /// Between consecutive paragraphs with identical borders.
+    pub between: Option<Border>,
+}
+
+impl ParaBorders {
+    pub fn apply(&mut self, over: &ParaBorders) {
+        overlay!(self, over; top, left, bottom, right, between);
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ParaProps {
     /// Paragraph style (`w:pStyle`).
@@ -246,15 +386,51 @@ pub struct ParaProps {
     /// Heading level for the document outline, 0-based.
     pub outline_level: Option<i32>,
     pub numbering: Option<NumRef>,
+    /// Custom tab stops, sorted by position.
+    pub tabs: Vec<TabStop>,
+    pub borders: ParaBorders,
+    /// Background fill of the paragraph; `Auto` means none.
+    pub shade: Option<Color>,
+    /// Align lines to the section's document grid. On unless turned off.
+    pub snap_to_grid: Option<bool>,
+    /// Drop the space between this paragraph and a neighbour of the same style.
+    pub contextual_spacing: Option<bool>,
+    /// Keep punctuation that may not start or end a line off those positions.
+    pub kinsoku: Option<bool>,
+    /// Let closing punctuation hang into the right margin.
+    pub overflow_punct: Option<bool>,
+    /// Compress punctuation at the start of a line.
+    pub top_line_punct: Option<bool>,
+    /// Add a little space between East Asian and Latin text / digits.
+    pub auto_space_de: Option<bool>,
+    pub auto_space_dn: Option<bool>,
+    /// Allow a Latin word to break anywhere when it must.
+    pub word_wrap: Option<bool>,
+    pub bidi: Option<bool>,
 }
 
 impl ParaProps {
     pub fn apply(&mut self, over: &ParaProps) {
         overlay!(self, over;
-            style_id, justification, keep_next, keep_lines, page_break_before,
-            widow_control, outline_level, numbering);
+            style_id, justification, keep_next, keep_lines, page_break_before, widow_control, outline_level,
+            shade, snap_to_grid, contextual_spacing, kinsoku, overflow_punct, top_line_punct, auto_space_de,
+            auto_space_dn, word_wrap, bidi);
         self.indent.apply(&over.indent);
         self.spacing.apply(&over.spacing);
+        self.borders.apply(&over.borders);
+        // The list and the level within it are inherited separately: a style
+        // may fix the list while the paragraph picks the level.
+        if let Some(over) = &over.numbering {
+            let mine = self.numbering.get_or_insert_with(NumRef::default);
+            overlay!(mine, over; num_id, level);
+        }
+        for stop in &over.tabs {
+            self.tabs.retain(|existing| existing.position != stop.position);
+            if stop.kind != TabKind::Clear {
+                self.tabs.push(stop.clone());
+            }
+        }
+        self.tabs.sort_by_key(|stop| stop.position);
     }
 
     pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
@@ -281,8 +457,39 @@ impl ParaProps {
                     let get = |name| elements(child).find(|n| w_name(*n) == Some(name)).and_then(|n| int(val(n)));
                     p.numbering = Some(NumRef { num_id: get("numId"), level: get("ilvl") });
                 }
-                // The paragraph mark's run properties; the caller reads them.
-                Some("rPr") => {}
+                // Stops are kept as written, `clear` included, so that a
+                // style layered on later can still remove an inherited stop.
+                Some("tabs") => {
+                    p.tabs.extend(elements(child).filter(|n| w_name(*n) == Some("tab")).filter_map(TabStop::parse))
+                }
+                Some("pBdr") => {
+                    for edge in elements(child) {
+                        let slot = match w_name(edge) {
+                            Some("top") => &mut p.borders.top,
+                            Some("left" | "start") => &mut p.borders.left,
+                            Some("bottom") => &mut p.borders.bottom,
+                            Some("right" | "end") => &mut p.borders.right,
+                            Some("between") => &mut p.borders.between,
+                            _ => continue,
+                        };
+                        *slot = Some(Border::parse(edge));
+                    }
+                }
+                Some("shd") => p.shade = shade(child).or(p.shade),
+                Some("snapToGrid") => p.snap_to_grid = Some(on_off(child)),
+                Some("contextualSpacing") => p.contextual_spacing = Some(on_off(child)),
+                Some("kinsoku") => p.kinsoku = Some(on_off(child)),
+                Some("overflowPunct") => p.overflow_punct = Some(on_off(child)),
+                Some("topLinePunct") => p.top_line_punct = Some(on_off(child)),
+                Some("autoSpaceDE") => p.auto_space_de = Some(on_off(child)),
+                Some("autoSpaceDN") => p.auto_space_dn = Some(on_off(child)),
+                Some("wordWrap") => p.word_wrap = Some(on_off(child)),
+                Some("bidi") => p.bidi = Some(on_off(child)),
+                // The paragraph mark's run properties and a section break;
+                // the caller reads both.
+                Some("rPr" | "sectPr") => {}
+                // Line numbering and hyphenation switches, and editing aids.
+                Some("suppressLineNumbers" | "suppressAutoHyphens" | "adjustRightInd" | "divId" | "cnfStyle") => {}
                 _ => coverage.miss(Some("w:pPr"), child),
             }
         }

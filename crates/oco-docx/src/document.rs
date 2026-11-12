@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::coverage::Coverage;
 use crate::props::{ParaProps, RunProps};
+use crate::section::Section;
 use crate::xml::{elements, mc_branch, preserves_space, text_of, w_attr, w_name};
 
 /// Tables nested deeper than this are dropped rather than risking the stack on
@@ -18,6 +19,9 @@ const MAX_NESTING: usize = 64;
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Document {
     pub body: Vec<Block>,
+    /// Page setup of the last section, or of the whole document when it has
+    /// no section breaks.
+    pub section: Section,
 }
 
 // Paragraphs are by far the common case, so boxing them to shrink the rarer
@@ -36,6 +40,9 @@ pub struct Paragraph {
     /// Formatting of the paragraph mark. It sets the height of an empty paragraph.
     pub mark_props: RunProps,
     pub runs: Vec<Run>,
+    /// Set on the last paragraph of a section other than the final one: the
+    /// page setup of the section that ends here.
+    pub section_break: Option<Section>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -137,9 +144,9 @@ impl Paragraph {
 impl Document {
     pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
         let doc = roxmltree::Document::parse(xml)?;
-        let mut body = Vec::new();
-        read_root(doc.root_element(), &mut body, coverage);
-        Ok(Document { body })
+        let mut document = Document::default();
+        read_root(doc.root_element(), &mut document, coverage);
+        Ok(document)
     }
 
     /// Every paragraph in document order, including those inside tables.
@@ -227,22 +234,31 @@ fn read_unknown<T>(
 /// holding one `w:body`; Word also copes with compatibility markup at the
 /// root, with several documents or bodies (it joins them), and with body
 /// content standing where the document element should be.
-fn read_root(node: Node, body: &mut Vec<Block>, coverage: &mut Coverage) {
+fn read_root(node: Node, document: &mut Document, coverage: &mut Coverage) {
     match mc_branch(node) {
         Some(branch) => {
             for child in branch.into_iter().flat_map(elements) {
-                read_root(child, body, coverage);
+                read_root(child, document, coverage);
             }
         }
         None => match w_name(node) {
             Some("document") => for_each_child(node, &mut |child| {
                 if w_name(child) == Some("body") {
-                    parse_blocks(child, 0, body, coverage);
+                    read_body(child, document, coverage);
                 }
             }),
-            Some(_) => parse_block(node, false, 0, body, coverage),
+            Some("body") => read_body(node, document, coverage),
+            Some(_) => parse_block(node, false, 0, &mut document.body, coverage),
             None => {}
         },
+    }
+}
+
+fn read_body(body: Node, document: &mut Document, coverage: &mut Coverage) {
+    parse_blocks(body, 0, &mut document.body, coverage);
+    // The body's own `w:sectPr` describes the final section.
+    if let Some(section) = elements(body).filter(|n| w_name(*n) == Some("sectPr")).last() {
+        document.section = Section::parse(section, coverage);
     }
 }
 
@@ -266,6 +282,8 @@ fn parse_block(child: Node, in_cell: bool, depth: usize, blocks: &mut Vec<Block>
         }),
         Some("customXml") => parse_blocks(child, depth, blocks, coverage),
         // Not modelled yet. Named so that they are not mistaken for wrappers.
+        // The final section's properties; `read_body` reads them.
+        Some("sectPr") if !in_cell => {}
         Some("sectPr" | "tcPr" | "altChunk" | "customXmlPr") => coverage.miss(in_cell.then_some("w:tc"), child),
         Some(name) if is_ignorable(name) => {}
         _ => read_unknown(child, None, blocks, coverage, |found, seen| {
@@ -330,8 +348,12 @@ fn parse_paragraph(node: Node, coverage: &mut Coverage) -> Paragraph {
     // Repeated `w:pPr` elements are invalid; Word merges them.
     for ppr in elements(node).filter(|n| w_name(*n) == Some("pPr")) {
         paragraph.props.read(ppr, coverage);
-        for rpr in elements(ppr).filter(|n| w_name(*n) == Some("rPr")) {
-            paragraph.mark_props.read(rpr, coverage);
+        for child in elements(ppr) {
+            match w_name(child) {
+                Some("rPr") => paragraph.mark_props.read(child, coverage),
+                Some("sectPr") => paragraph.section_break = Some(Section::parse(child, coverage)),
+                _ => {}
+            }
         }
     }
     parse_inlines(node, None, &mut paragraph.runs, coverage);

@@ -4,12 +4,13 @@
 
 内核用 Rust 编写，编译成 WebAssembly 供浏览器使用，也可编译成原生库供 App 和服务端使用，各端排版结果一致。
 
-**当前状态：研究原型阶段。** 目前完成了第一个原型（读取 docx 并计算每段文字的最终格式），并用 4725 个公开测试文件做了全面测试。还不能渲染或编辑。
+**当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文排成页面并输出 SVG，行高与 Word 实测一致）。表格、页眉页脚、图片尚未排版，也还不能编辑。
 
 | 文档 | 内容 |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | 目标、技术决定、原型计划和进度 |
 | [docs/strategy.md](docs/strategy.md) | 如何做得比现有方案更好 |
+| [docs/layout.md](docs/layout.md) | 排版规则：行高、字号、缩进、编号、字体效果、标点，以及各自的依据 |
 | [docs/corpus-report.md](docs/corpus-report.md) | 语料测试的方法、数据和发现的问题 |
 | [docs/word-behaviour.md](docs/word-behaviour.md) | Word 的实际行为与规范不同的地方 |
 
@@ -36,14 +37,25 @@ Not modelled yet (16 kinds):
 
 加 `--json` 输出结构化结果。
 
+排版并输出页面（先运行 `tools/fonts/fetch.sh` 下载开源中文字体）：
+
+```sh
+cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out out/regulation
+```
+
+每页写成一个 SVG，字形以轮廓形式嵌入，用浏览器直接打开即可。
+
 ## 目录
 
 | 路径 | 内容 |
 |---|---|
-| `crates/oco-docx` | docx 读取：zip 容器、样式表、主题字体、格式继承计算 |
-| `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看单个文档，`corpus` 批量测试 |
-| `tools/corpus` | 语料测试：拉取公开测试集、与 LibreOffice 对比、与 Word 另存结果对照 |
-| `tools/gen_fixtures.py` | 重新生成单元测试用的 docx 文件 |
+| `crates/oco-docx` | docx 读取：容器、样式、主题字体、编号、页面设置、格式继承计算 |
+| `crates/oco-layout` | 排版：字体度量与替换、断行、行高、编号、分页，输出 SVG |
+| `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试 |
+| `testdata/zh` | 10 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
+| `tools/zh` | 生成中文测试文档，与 LibreOffice 的排版结果对比 |
+| `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照 |
+| `tools/fonts` | 下载开源字体；参照渲染用的字体映射 |
 | `docs` | 见上表 |
 
 ## 开发
@@ -51,7 +63,9 @@ Not modelled yet (16 kinds):
 ```sh
 cargo test                                               # 全部测试
 cargo clippy --all-targets                               # 静态检查
-cargo build -p oco-docx --target wasm32-unknown-unknown  # 确认内核可编译成 WASM
+cargo build -p oco-layout --target wasm32-unknown-unknown  # 确认内核可编译成 WASM
 ```
 
-语料测试的步骤见 [docs/corpus-report.md](docs/corpus-report.md) 的最后一节。
+排版测试需要字体：系统里的 Liberation、Carlito、DejaVu，以及 `tools/fonts/fetch.sh` 下载的中文字体。缺少字体时相关测试会打印提示并跳过。
+
+语料测试的步骤见 [docs/corpus-report.md](docs/corpus-report.md) 的最后一节；排版对比的步骤见 `tools/zh/compare.py` 开头的说明。

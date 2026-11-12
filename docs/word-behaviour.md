@@ -76,3 +76,11 @@
 - 开关属性的值为空串或 `FALSE` 时，LibreOffice 读作关，Word 读作开。
 - 域（如交叉引用）LibreOffice 会重新计算，目标不存在时显示错误文字；Word 打开时显示文件里保存的结果。
 - 主文档根部是兼容性标记或正文元素时，LibreOffice 读不出内容，Word 可以。
+
+排版方面的差异在做中文测试文档时发现，详见 [排版研究](layout.md)：
+
+- 替换字体后，LibreOffice 按替换字体自身的度量算行高。Word 中宋体的行高是字号的 1.3 倍（实测），思源宋体按自身度量是 1.44 倍，在文档网格下每行多占一格，行距翻倍。
+- 编号级别设置为"永不重新开始"时（规章里"条"的序号全文连续），LibreOffice 仍在每章重新编号。Word 的行为来自 docx4j 的测量记录。
+- 文档要求给行尾空格加下划线时（合同里的填空线），LibreOffice 不画。
+- `ordinal`、`cardinalText`、`decimalEnclosedParen` 三种数字格式，LibreOffice 的输出与规范描述不同。
+- 网格下的固定值行距，LibreOffice 排成了网格行距。Word 的行为未经验证。

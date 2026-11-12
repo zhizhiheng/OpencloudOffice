@@ -16,12 +16,15 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use oco_docx::{Docx, Error, OtherFormat};
+use oco_layout::FontDb;
 use serde::Serialize;
 
 pub struct Options {
     roots: Vec<PathBuf>,
     json: Option<PathBuf>,
     jobs: usize,
+    /// Also lay every document out, with the fonts in these directories.
+    layout: Option<Vec<PathBuf>>,
 }
 
 impl Options {
@@ -30,12 +33,16 @@ impl Options {
             roots: Vec::new(),
             json: None,
             jobs: std::thread::available_parallelism().map_or(1, usize::from),
+            layout: None,
         };
         let mut args = args.iter();
         while let Some(arg) = args.next() {
             match *arg {
                 "--json" => options.json = Some(PathBuf::from(args.next()?)),
                 "--jobs" => options.jobs = args.next()?.parse().ok().filter(|n| *n > 0)?,
+                "--layout" => {
+                    options.layout = Some(crate::render::DEFAULT_FONT_DIRS.iter().map(PathBuf::from).collect())
+                }
                 flag if flag.starts_with("--") => return None,
                 root => options.roots.push(PathBuf::from(root)),
             }
@@ -61,6 +68,10 @@ enum Outcome {
         runs: usize,
         chars: usize,
         tracked_runs: usize,
+        /// Pages the layout engine produced, when asked to lay out.
+        pages: Option<usize>,
+        /// Time spent on layout, out of `micros`.
+        layout_micros: u64,
         /// Time spent computing effective formatting, out of `micros`.
         resolve_micros: u64,
         /// Non-fatal problems, e.g. a damaged styles part that was ignored.
@@ -119,11 +130,16 @@ pub fn run(options: &Options) -> ExitCode {
     let started = Instant::now();
     let next = AtomicUsize::new(0);
     let results = Mutex::new(Vec::with_capacity(files.len()));
+    let fonts = options.layout.as_ref().map(|dirs| {
+        let mut fonts = FontDb::default();
+        dirs.iter().for_each(|dir| fonts.load_dir(dir));
+        fonts
+    });
     std::thread::scope(|scope| {
         for _ in 0..options.jobs.min(files.len()) {
             scope.spawn(|| {
                 while let Some(path) = files.get(next.fetch_add(1, Ordering::Relaxed)) {
-                    let report = examine(path);
+                    let report = examine(path, fonts.as_ref());
                     results.lock().unwrap().push(report);
                 }
             });
@@ -167,10 +183,10 @@ fn collect(path: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-fn examine(path: &Path) -> FileReport {
+fn examine(path: &Path, fonts: Option<&FontDb>) -> FileReport {
     let bytes = fs::metadata(path).map_or(0, |m| m.len());
     let started = Instant::now();
-    let outcome = match panic::catch_unwind(AssertUnwindSafe(|| open_and_resolve(path))) {
+    let outcome = match panic::catch_unwind(AssertUnwindSafe(|| open_and_resolve(path, fonts))) {
         Ok(Ok(outcome)) => outcome,
         Ok(Err(error)) => Outcome::Error { kind: error_kind(&error), message: error.to_string() },
         Err(payload) => Outcome::Panic {
@@ -186,8 +202,11 @@ fn examine(path: &Path) -> FileReport {
 
 /// Opens the document and resolves every paragraph and run, which is the work
 /// a layout engine would ask of the reader.
-fn open_and_resolve(path: &Path) -> Result<Outcome, Error> {
+fn open_and_resolve(path: &Path, fonts: Option<&FontDb>) -> Result<Outcome, Error> {
     let docx = Docx::open(path)?;
+    let laying_out = Instant::now();
+    let pages = fonts.map(|fonts| oco_layout::layout(&docx, fonts, &oco_layout::Options::default()).len());
+    let layout_micros = if pages.is_some() { laying_out.elapsed().as_micros() as u64 } else { 0 };
     let resolving = Instant::now();
     let resolver = docx.resolver();
     let paragraphs = docx.document.paragraphs();
@@ -206,6 +225,8 @@ fn open_and_resolve(path: &Path) -> Result<Outcome, Error> {
         runs,
         chars,
         tracked_runs,
+        pages,
+        layout_micros,
         resolve_micros: resolving.elapsed().as_micros() as u64,
         warnings: docx.warnings.clone(),
         unsupported: docx.coverage.unsupported.clone(),
@@ -315,6 +336,23 @@ fn summary(report: &Report) -> String {
     micros.sort_unstable();
     let at = |q: f64| micros[((micros.len() - 1) as f64 * q) as usize] as f64 / 1e3;
     line!("per file  median {:.2} ms, p95 {:.2} ms, p99 {:.2} ms, max {:.2} ms", at(0.5), at(0.95), at(0.99), at(1.0));
+    let laid: Vec<(usize, u64)> = report
+        .results
+        .iter()
+        .filter_map(|r| match &r.outcome {
+            Outcome::Ok { pages: Some(pages), layout_micros, .. } => Some((*pages, *layout_micros)),
+            _ => None,
+        })
+        .collect();
+    if !laid.is_empty() {
+        let total_pages: usize = laid.iter().map(|(pages, _)| pages).sum();
+        let seconds = laid.iter().map(|(_, micros)| micros).sum::<u64>() as f64 / 1e6;
+        line!(
+            "layout    {} documents, {total_pages} pages, {seconds:.2}s of the cpu time ({:.0} pages/s per core)",
+            laid.len(),
+            total_pages as f64 / seconds.max(1e-9)
+        );
+    }
     let mut slowest: Vec<&FileReport> = report.results.iter().collect();
     slowest.sort_by_key(|r| std::cmp::Reverse(r.micros));
     for result in slowest.iter().take(5) {

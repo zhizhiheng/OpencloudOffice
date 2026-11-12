@@ -3,13 +3,14 @@
 //!
 //! 1. document defaults
 //! 2. paragraph style, base style first
-//! 3. character style, base style first (runs only)
-//! 4. direct formatting
+//! 3. the list level, for a numbered paragraph (indents and tab stops)
+//! 4. character style, base style first (runs only)
+//! 5. direct formatting
 //!
-//! Table styles and numbering-level formatting also take part in the real
-//! hierarchy; they are not modelled yet.
+//! Table styles also take part in the real hierarchy; they are not modelled yet.
 
-use crate::props::{FontRef, ParaProps, RunProps};
+use crate::numbering::{Level, Numbering};
+use crate::props::{FontRef, Indent, NumRef, ParaProps, RunProps};
 use crate::styles::{Style, StyleKind, StyleSheet};
 use crate::theme::{ThemeFontLang, ThemeFonts};
 
@@ -17,21 +18,71 @@ pub struct Resolver<'a> {
     pub(crate) styles: &'a StyleSheet,
     pub(crate) theme: Option<&'a ThemeFonts>,
     pub(crate) theme_lang: &'a ThemeFontLang,
+    pub(crate) numbering: &'a Numbering,
 }
 
-impl Resolver<'_> {
+impl<'a> Resolver<'a> {
     /// Effective paragraph formatting for a paragraph with `direct` properties.
+    ///
     /// `style_id` in the result is the style actually used, which is the
-    /// default paragraph style when the paragraph names none.
+    /// default paragraph style when the paragraph names none. `numbering` is
+    /// `Some` only for a paragraph that really is a list item, with both the
+    /// list and the level filled in.
     pub fn paragraph(&self, direct: &ParaProps) -> ParaProps {
         let chain = self.styles.chain(direct.style_id.as_deref(), StyleKind::Paragraph);
         let mut out = self.styles.default_para.clone();
         for style in &chain {
             out.apply(&style.para);
         }
+        let from_styles = out.numbering.clone();
         out.apply(direct);
         out.style_id = chain.last().map(|s| s.id.clone());
+
+        let list = out.numbering.take().and_then(|n| Some((n.num_id.filter(|id| *id != 0)?, n.level)));
+        let direct_list = direct.numbering.as_ref().and_then(|n| n.num_id);
+        match list {
+            Some((num_id, stated_level)) => {
+                // A list named by a style uses the level that belongs to that
+                // style; this is how numbered headings find their depth.
+                let from_style = if direct_list.is_none() {
+                    chain.iter().rev().find_map(|style| self.numbering.level_for_style(num_id, &style.id))
+                } else {
+                    None
+                };
+                let ilvl = from_style.or(stated_level.and_then(|l| usize::try_from(l).ok())).unwrap_or(0).min(8);
+                if let Some(level) = self.numbering.level(num_id, ilvl) {
+                    // The level's indents beat the style's; direct formatting beats both.
+                    out.apply(&level.para);
+                    out.apply(direct);
+                    out.style_id = chain.last().map(|s| s.id.clone());
+                    out.numbering = Some(NumRef { num_id: Some(num_id), level: Some(ilvl as i32) });
+                }
+            }
+            // `numId` 0 takes a paragraph out of the list its style puts it
+            // in, and with the label go the indents that came with it.
+            None if direct_list == Some(0) && from_styles.is_some() => {
+                out.indent = Indent::default();
+                out.indent.apply(&direct.indent);
+                out.numbering = None;
+            }
+            None => out.numbering = None,
+        }
         out
+    }
+
+    /// The list level a resolved paragraph belongs to, if it is a list item.
+    pub fn list_level(&self, resolved: &ParaProps) -> Option<(i32, usize, &'a Level)> {
+        let list = resolved.numbering.as_ref()?;
+        let (num_id, ilvl) = (list.num_id?, usize::try_from(list.level?).ok()?);
+        Some((num_id, ilvl, self.numbering.level(num_id, ilvl)?))
+    }
+
+    /// Formatting of a list label: the paragraph mark's formatting with the
+    /// level's own character properties on top.
+    pub fn label(&self, paragraph_style: Option<&str>, mark: &RunProps, level: &Level) -> RunProps {
+        let mut direct = mark.clone();
+        direct.apply(&level.run);
+        self.run(paragraph_style, &direct)
     }
 
     /// Effective run formatting for a run with `direct` properties inside a
@@ -57,6 +108,12 @@ impl Resolver<'_> {
         out.small_caps = toggle(|p| p.small_caps, defaults, &levels, direct);
         out.strike = toggle(|p| p.strike, defaults, &levels, direct);
         out.vanish = toggle(|p| p.vanish, defaults, &levels, direct);
+        out.outline = toggle(|p| p.outline, defaults, &levels, direct);
+        out.shadow = toggle(|p| p.shadow, defaults, &levels, direct);
+        out.emboss = toggle(|p| p.emboss, defaults, &levels, direct);
+        out.imprint = toggle(|p| p.imprint, defaults, &levels, direct);
+        out.bold_cs = toggle(|p| p.bold_cs, defaults, &levels, direct);
+        out.italic_cs = toggle(|p| p.italic_cs, defaults, &levels, direct);
 
         for slot in [&mut out.fonts.ascii, &mut out.fonts.h_ansi, &mut out.fonts.east_asia, &mut out.fonts.cs] {
             self.resolve_theme_font(slot);

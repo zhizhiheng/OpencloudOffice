@@ -3,8 +3,8 @@
 use std::process::ExitCode;
 
 use oco_docx::{
-    Block, Color, Docx, FontRef, Highlight, ParaProps, Paragraph, Resolver, RevisionKind, RunProps, Underline,
-    VertAlign,
+    Block, Color, Counters, Docx, FontRef, Highlight, ParaProps, Paragraph, Resolver, RevisionKind, RunProps,
+    Underline, VertAlign,
 };
 use serde_json::{json, Value};
 
@@ -18,14 +18,15 @@ pub fn run(path: &str, as_json: bool) -> ExitCode {
     };
     if as_json {
         let mut value = json!({
-            "body": blocks_json(&docx.document.body, &docx.resolver()),
+            "section": docx.document.section,
+            "body": blocks_json(&docx.document.body, &docx, &mut Counters::default()),
             "unsupported": docx.coverage.unsupported,
         });
         strip_nulls(&mut value);
         println!("{}", serde_json::to_string(&value).expect("JSON values always serialise"));
     } else {
-        let mut counter = 0;
-        print_blocks(&docx.document.body, &docx, 0, &mut counter);
+        let mut state = (0, Counters::default());
+        print_blocks(&docx.document.body, &docx, 0, &mut state);
         print_coverage(&docx);
     }
     ExitCode::SUCCESS
@@ -33,13 +34,16 @@ pub fn run(path: &str, as_json: bool) -> ExitCode {
 
 // ---------------------------------------------------------------- text output
 
-fn print_blocks(blocks: &[Block], docx: &Docx, indent: usize, counter: &mut usize) {
+/// Paragraph number and running list counters while walking the document.
+type Progress = (usize, Counters);
+
+fn print_blocks(blocks: &[Block], docx: &Docx, indent: usize, state: &mut Progress) {
     let pad = "  ".repeat(indent);
     for block in blocks {
         match block {
             Block::Paragraph(paragraph) => {
-                *counter += 1;
-                print_paragraph(paragraph, docx, &pad, *counter);
+                state.0 += 1;
+                print_paragraph(paragraph, docx, &pad, state);
             }
             Block::Table(table) => {
                 let columns = table.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
@@ -47,7 +51,7 @@ fn print_blocks(blocks: &[Block], docx: &Docx, indent: usize, counter: &mut usiz
                 for (r, row) in table.rows.iter().enumerate() {
                     for (c, cell) in row.cells.iter().enumerate() {
                         println!("{pad}  cell [{r},{c}]");
-                        print_blocks(&cell.blocks, docx, indent + 2, counter);
+                        print_blocks(&cell.blocks, docx, indent + 2, state);
                     }
                 }
             }
@@ -55,10 +59,13 @@ fn print_blocks(blocks: &[Block], docx: &Docx, indent: usize, counter: &mut usiz
     }
 }
 
-fn print_paragraph(paragraph: &Paragraph, docx: &Docx, pad: &str, number: usize) {
+fn print_paragraph(paragraph: &Paragraph, docx: &Docx, pad: &str, state: &mut Progress) {
     let resolver = docx.resolver();
     let props = resolver.paragraph(&paragraph.props);
-    println!("{pad}#{number} P {}", describe_paragraph(&props, docx));
+    println!("{pad}#{} P {}", state.0, describe_paragraph(&props, docx));
+    if let Some(label) = label_of(&props, &resolver, docx, &mut state.1) {
+        println!("{pad}    label {label:?}");
+    }
     for run in &paragraph.runs {
         let props = resolver.run(paragraph.props.style_id.as_deref(), &run.props);
         let revision = match &run.revision {
@@ -175,7 +182,14 @@ fn print_coverage(docx: &Docx) {
 
 // ---------------------------------------------------------------- JSON output
 
-fn blocks_json(blocks: &[Block], resolver: &Resolver) -> Value {
+/// The text of a paragraph's list label, advancing the counters.
+fn label_of(props: &ParaProps, resolver: &Resolver, docx: &Docx, counters: &mut Counters) -> Option<String> {
+    let (num_id, ilvl, _) = resolver.list_level(props)?;
+    Some(counters.next(&docx.numbering, num_id, ilvl)?.text)
+}
+
+fn blocks_json(blocks: &[Block], docx: &Docx, counters: &mut Counters) -> Value {
+    let resolver = &docx.resolver();
     blocks
         .iter()
         .map(|block| match block {
@@ -191,13 +205,15 @@ fn blocks_json(blocks: &[Block], resolver: &Resolver) -> Value {
                         })
                     })
                     .collect();
-                json!({ "type": "paragraph", "props": resolver.paragraph(&paragraph.props), "runs": runs })
+                let props = resolver.paragraph(&paragraph.props);
+                let label = label_of(&props, resolver, docx, counters);
+                json!({ "type": "paragraph", "props": props, "label": label, "runs": runs })
             }
             Block::Table(table) => {
                 let rows: Vec<Value> = table
                     .rows
                     .iter()
-                    .map(|row| row.cells.iter().map(|cell| blocks_json(&cell.blocks, resolver)).collect())
+                    .map(|row| row.cells.iter().map(|cell| blocks_json(&cell.blocks, docx, counters)).collect())
                     .collect();
                 json!({ "type": "table", "rows": rows })
             }

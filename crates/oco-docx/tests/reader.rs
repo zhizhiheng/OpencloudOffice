@@ -260,7 +260,7 @@ fn descends_into_wrappers_and_reports_what_it_skips() {
     assert!(matches!(&docx.document.body[1], Block::Table(t) if t.rows.len() == 1 && t.rows[0].cells.len() == 1));
 
     let skipped: Vec<_> = docx.coverage.ranked().into_iter().collect();
-    assert_eq!(skipped, [("w:r/w:drawing", 1), ("w:sectPr", 1), ("w:tbl/w:tblPr", 1), ("w:tc/w:tcPr", 1)]);
+    assert_eq!(skipped, [("w:r/w:drawing", 1), ("w:tbl/w:tblPr", 1), ("w:tc/w:tcPr", 1)]);
 }
 
 #[test]
@@ -652,6 +652,197 @@ fn the_last_main_document_relationship_wins() {
         ("word/other.xml", part("last")),
     ]);
     assert_eq!(Docx::from_bytes(&bytes).unwrap().document.paragraphs()[0].text(), "last");
+}
+
+// --------------------------------------------------- numbering and page setup
+
+/// A package with a numbering part beside the document and styles.
+fn numbered(body: &str, styles: &str, numbering: &str) -> Docx {
+    let relationship = |id: u8, kind: &str, target: &str| {
+        format!(r#"<Relationship Id="rId{id}" Type="{DOC_RELS}/{kind}" Target="{target}"/>"#)
+    };
+    let bytes = zip(&[
+        (
+            "word/_rels/document.xml.rels",
+            format!(
+                r#"<Relationships xmlns="{PKG_RELS}">{}{}</Relationships>"#,
+                relationship(1, "styles", "styles.xml"),
+                relationship(2, "numbering", "numbering.xml")
+            ),
+        ),
+        ("word/document.xml", format!("<w:document {W}><w:body>{body}</w:body></w:document>")),
+        ("word/styles.xml", format!("<w:styles {W}>{styles}</w:styles>")),
+        ("word/numbering.xml", format!("<w:numbering {W}>{numbering}</w:numbering>")),
+    ]);
+    Docx::from_bytes(&bytes).unwrap()
+}
+
+/// The label of every paragraph, in order; `-` for an unnumbered one.
+fn labels(docx: &Docx) -> Vec<String> {
+    let resolver = docx.resolver();
+    let mut counters = oco_docx::Counters::default();
+    docx.document
+        .paragraphs()
+        .iter()
+        .map(|p| {
+            let props = resolver.paragraph(&p.props);
+            resolver
+                .list_level(&props)
+                .and_then(|(num_id, ilvl, _)| counters.next(&docx.numbering, num_id, ilvl))
+                .map_or("-".to_owned(), |label| label.text)
+        })
+        .collect()
+}
+
+fn item(num_id: i32, ilvl: i32) -> String {
+    format!(r#"<w:p><w:pPr><w:numPr><w:ilvl w:val="{ilvl}"/><w:numId w:val="{num_id}"/></w:numPr></w:pPr></w:p>"#)
+}
+
+fn level(ilvl: u8, format: &str, text: &str, extra: &str) -> String {
+    format!(
+        r#"<w:lvl w:ilvl="{ilvl}"><w:start w:val="1"/><w:numFmt w:val="{format}"/>{extra}<w:lvlText w:val="{text}"/></w:lvl>"#
+    )
+}
+
+#[test]
+fn lists_on_one_definition_share_a_count_until_restarted() {
+    // As measured in Word: every instance of a definition continues the same
+    // count; a start override takes effect once, when its instance is first used.
+    let numbering = format!(
+        r#"<w:abstractNum w:abstractNumId="0">{}</w:abstractNum>
+           <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+           <w:num w:numId="2"><w:abstractNumId w:val="0"/></w:num>
+           <w:num w:numId="3"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>"#,
+        level(0, "decimal", "（%1）", "")
+    );
+    let body = [item(1, 0), item(1, 0), item(2, 0), item(1, 0), item(3, 0), item(3, 0), item(2, 0)].concat();
+    assert_eq!(
+        labels(&numbered(&body, "", &numbering)),
+        ["（1）", "（2）", "（3）", "（4）", "（1）", "（2）", "（3）"]
+    );
+}
+
+#[test]
+fn deeper_levels_restart_unless_told_otherwise() {
+    // 第一章 / 第一条: articles keep counting through the chapters, because
+    // their level never restarts (`lvlRestart` 0). The third level restarts
+    // under each article as usual.
+    let numbering = format!(
+        r#"<w:abstractNum w:abstractNumId="0">{}{}{}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
+        level(0, "chineseCounting", "第%1章", ""),
+        level(1, "chineseCounting", "第%2条", r#"<w:lvlRestart w:val="0"/>"#),
+        level(2, "chineseCounting", "（%3）", ""),
+    );
+    let body: String = [0, 1, 1, 2, 2, 0, 1, 2, 1].iter().map(|ilvl| item(1, *ilvl)).collect();
+    assert_eq!(
+        labels(&numbered(&body, "", &numbering)),
+        ["第一章", "第一条", "第二条", "（一）", "（二）", "第二章", "第三条", "（一）", "第四条"]
+    );
+}
+
+#[test]
+fn legal_numbering_prints_inherited_numbers_as_decimals() {
+    let numbering = format!(
+        r#"<w:abstractNum w:abstractNumId="0">{}{}{}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
+        level(0, "upperRoman", "%1", ""),
+        level(1, "decimal", "%1.%2", "<w:isLgl/>"),
+        level(2, "lowerLetter", "%1.%2.%3", ""),
+    );
+    let body: String = [0, 0, 1, 2, 1].iter().map(|ilvl| item(1, *ilvl)).collect();
+    assert_eq!(labels(&numbered(&body, "", &numbering)), ["I", "II", "2.1", "II.1.a", "2.2"]);
+}
+
+#[test]
+fn a_numbered_heading_takes_its_level_and_indent_from_the_list() {
+    let numbering = format!(
+        r#"<w:abstractNum w:abstractNumId="0">{}{}</w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="0"/></w:num>"#,
+        r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="H1"/><w:lvlText w:val="%1"/><w:pPr><w:ind w:left="432" w:hanging="432"/></w:pPr></w:lvl>"#,
+        r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="H2"/><w:lvlText w:val="%1.%2"/><w:pPr><w:ind w:left="576" w:hanging="576"/></w:pPr></w:lvl>"#,
+    );
+    // Both styles name the list; neither says which level. The level is the
+    // one that names the style.
+    let styles = r#"
+        <w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>
+        <w:style w:type="paragraph" w:styleId="H1"><w:pPr><w:numPr><w:numId w:val="5"/></w:numPr><w:ind w:left="100"/></w:pPr></w:style>
+        <w:style w:type="paragraph" w:styleId="H2"><w:pPr><w:numPr><w:numId w:val="5"/></w:numPr></w:pPr></w:style>"#;
+    let heading = |style: &str, extra: &str| format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/>{extra}</w:pPr></w:p>"#);
+    let body = [
+        heading("H1", ""),
+        heading("H2", ""),
+        heading("H2", r#"<w:ind w:left="720"/>"#),
+        "<w:p/>".to_owned(),
+        // `numId` 0 takes a paragraph out of its style's list.
+        heading("H1", r#"<w:numPr><w:numId w:val="0"/></w:numPr>"#),
+        heading("H1", ""),
+        heading("H2", ""),
+    ]
+    .concat();
+    let docx = numbered(&body, styles, &numbering);
+    assert_eq!(labels(&docx), ["1", "1.1", "1.2", "-", "-", "2", "2.1"]);
+
+    let resolver = docx.resolver();
+    let indent = |index: usize| {
+        let indent = resolver.paragraph(&docx.document.paragraphs()[index].props).indent;
+        (indent.left, indent.hanging)
+    };
+    // The level's indent beats the style's; direct formatting beats both.
+    assert_eq!(indent(0), (Some(432), Some(432)));
+    assert_eq!(indent(1), (Some(576), Some(576)));
+    assert_eq!(indent(2), (Some(720), Some(576)));
+    assert_eq!(indent(4), (None, None));
+}
+
+#[test]
+fn reads_page_setup_and_section_breaks() {
+    let body = r#"
+        <w:p><w:pPr><w:sectPr><w:pgSz w:w="16838" w:h="11906"/><w:type w:val="continuous"/></w:sectPr></w:pPr></w:p>
+        <w:p/>
+        <w:sectPr>
+          <w:pgSz w:w="11906" w:h="16838"/>
+          <w:pgMar w:top="2098" w:right="1474" w:bottom="1984" w:left="1588" w:header="851" w:footer="992" w:gutter="0"/>
+          <w:docGrid w:type="lines" w:linePitch="312"/>
+        </w:sectPr>"#;
+    let docx = docx(body, "");
+    let last = &docx.document.section;
+    assert_eq!((last.page_width, last.page_height), (11906, 16838));
+    assert_eq!((last.margin_top, last.margin_right, last.margin_bottom, last.margin_left), (2098, 1474, 1984, 1588));
+    assert_eq!((last.grid.kind, last.grid.line_pitch), (oco_docx::GridKind::Lines, 312));
+    assert_eq!(last.text_width(), 11906 - 1588 - 1474);
+
+    let first = docx.document.paragraphs()[0].section_break.as_ref().expect("the first paragraph ends a section");
+    assert_eq!((first.page_width, first.start), (16838, oco_docx::SectionStart::Continuous));
+    assert_eq!(first.grid.kind, oco_docx::GridKind::None);
+    assert!(docx.document.paragraphs()[1].section_break.is_none());
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
+fn tab_stops_accumulate_through_styles_and_can_be_cleared() {
+    let styles = r#"<w:style w:type="paragraph" w:styleId="Tabbed"><w:pPr><w:tabs>
+        <w:tab w:val="left" w:pos="2000"/><w:tab w:val="right" w:pos="8000" w:leader="dot"/></w:tabs></w:pPr></w:style>"#;
+    let body = r#"<w:p><w:pPr><w:pStyle w:val="Tabbed"/><w:tabs>
+        <w:tab w:val="clear" w:pos="2000"/><w:tab w:val="center" w:pos="4000"/></w:tabs></w:pPr></w:p>"#;
+    let docx = docx(body, styles);
+    let tabs = docx.resolver().paragraph(&docx.document.paragraphs()[0].props).tabs;
+    let summary: Vec<_> = tabs.iter().map(|t| (t.position, t.kind, t.leader.as_deref())).collect();
+    assert_eq!(summary, [(4000, oco_docx::TabKind::Center, None), (8000, oco_docx::TabKind::Right, Some("dot"))]);
+}
+
+#[test]
+fn reads_character_effects() {
+    let body = r#"<w:p><w:r><w:rPr>
+        <w:dstrike/><w:em w:val="dot"/><w:spacing w:val="40"/><w:w w:val="150"/><w:position w:val="6"/>
+        <w:u w:val="wave" w:color="FF0000"/><w:shd w:val="clear" w:fill="D9D9D9"/><w:bdr w:val="single" w:sz="4"/>
+        <w:szCs w:val="28"/><w:lang w:val="en-US"/><w:em w:val="bogus"/>
+    </w:rPr><w:t>x</w:t></w:r></w:p>"#;
+    let docx = docx(body, "");
+    let run = &resolved_runs(&docx)[0];
+    assert_eq!((run.double_strike, run.emphasis), (Some(true), Some(oco_docx::Emphasis::Dot)));
+    assert_eq!((run.char_spacing, run.scale, run.position, run.size_cs), (Some(40), Some(150), Some(6), Some(28)));
+    assert_eq!((run.underline, run.underline_color), (Some(Underline::Wave), Some(Color::Rgb(0xFF, 0, 0))));
+    assert_eq!(run.shade, Some(Color::Rgb(0xD9, 0xD9, 0xD9)));
+    assert!(run.border.as_ref().is_some_and(|b| b.is_visible()));
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
 }
 
 // ------------------------------------------------------------ damaged input
