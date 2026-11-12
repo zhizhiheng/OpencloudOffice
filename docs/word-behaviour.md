@@ -59,8 +59,8 @@
 | 由样式带来的编号：级别取样式自己写的（没写为第一级），不取"指向该样式"的那一级；每一级只属于一个样式，其余样式的段落没有编号也不计数，但仍取该级的缩进 | PDF | `a_list_level_numbers_the_paragraphs_of_one_style_only` |
 | 文档没有主题部件时，西文的主题字体引用取 Office 主题的字体：正文 Calibri，标题 Cambria | PDF | `theme_fonts_fall_back_to_the_office_theme_when_there_is_no_theme_part` |
 | 表格样式的段落和字符格式排在文档默认值之后、段落样式之前。名为 Normal Table 的样式是内置的：左右单元格边距 108 缇，文件里的值不算数；不指向它的表格样式没有边距 | PDF | `normal_table_is_built_in_and_table_styles_format_paragraphs` |
-| 页码域（`PAGE`、`NUMPAGES`）显示的是排版时算出的页码和页数，文件里存的结果只是上次保存时的值。域的指令部分（包括嵌套在指令里的域）不显示 | 规范；尚未用 Word 的输出验证（探针里没有域） | `page_number_fields_are_told_from_the_results_stored_for_them`、`each_page_gets_the_header_meant_for_it_with_its_number` |
-| 节没有写明的页眉页脚沿用上一节的同一种（首页、偶数页、默认各自沿用）。"首页不同"按节设置，"奇偶页不同"按文档设置 | 首页、奇偶页的选用：PDF；沿用上一节：规范，未验证 | `each_page_gets_the_header_meant_for_it_with_its_number`、`a_section_without_a_header_of_its_own_has_the_one_before_and_may_renumber` |
+| 页码域（`PAGE`、`NUMPAGES`）显示的是排版时算出的页码和页数，文件里存的结果只是上次保存时的值。域的指令部分（包括嵌套在指令里的域）不显示。`NUMPAGES` 不随节的页码格式变化，始终是阿拉伯数字 | WPS 的输出（`testdata/zh-open/11-header-footer`）；Word 的探针里没有域 | `page_number_fields_are_told_from_the_results_stored_for_them`、`each_page_gets_the_header_meant_for_it_with_its_number` |
+| 节没有写明的页眉页脚沿用上一节的同一种（首页、偶数页、默认各自沿用）。"首页不同"按节设置，"奇偶页不同"按文档设置 | 首页、奇偶页的选用：PDF；沿用上一节：WPS 的输出 | `each_page_gets_the_header_meant_for_it_with_its_number`、`a_section_without_a_header_of_its_own_has_the_one_before_and_may_renumber` |
 | 上下边距写成负数时，取绝对值，并且正文不再给更高的页眉（页脚）让位 | 规范；语料中 Word 文档的分页记录 | `reads_headers_and_footers_and_which_pages_they_are_for`、`headers_and_footers_stand_at_their_distances_and_push_the_body` |
 
 ## 已知但尚未实现

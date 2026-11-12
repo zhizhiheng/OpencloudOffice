@@ -6,7 +6,7 @@
 
 **当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文、表格、页眉页脚和页码排成页面并输出 SVG，行高与 Word 实测一致）。图片、脚注尚未排版，表格的自动列宽和合并单元格尚未实现，也还不能编辑。
 
-还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 87.7% 的行断行相同、58.8% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.0%，页数全部一致。见 [docs/fidelity.md](docs/fidelity.md)。
+还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 87.7% 的行断行相同、58.8% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.2%，页数全部一致。见 [docs/fidelity.md](docs/fidelity.md)。
 
 | 文档 | 内容 |
 |---|---|
@@ -55,8 +55,8 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 | `crates/oco-docx` | docx 读取：容器、样式、主题字体、编号、页面设置、格式继承计算 |
 | `crates/oco-layout` | 排版：字体度量与替换、断行、行高、编号、分页，输出 SVG |
 | `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试，`score` 对照 Word 的分页记录打分 |
-| `testdata/zh` | 10 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
-| `testdata/zh-open` | 同样的 10 份，字体名换成开源字体，用于与 WPS 逐行对照；`wps/` 下是 WPS 的排版结果 |
+| `testdata/zh` | 11 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
+| `testdata/zh-open` | 同样的 11 份，字体名换成开源字体，用于与 WPS 逐行对照；`wps/` 下是 WPS 的排版结果 |
 | `tools/zh` | 生成中文测试文档，与 LibreOffice 的排版结果对比 |
 | `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照；生成带 Word PDF 的探针文档集 |
 | `tools/fidelity` | 还原度记分表和基线 |
