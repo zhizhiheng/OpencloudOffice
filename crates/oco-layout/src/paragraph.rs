@@ -681,9 +681,17 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                 (height, height - descent, height)
             }
             (_, Some(line), None) => {
-                // A multiple of single spacing: the extra goes below the text.
+                // A multiple of single spacing. Word leaves the text where
+                // single spacing has it and puts all the extra below
+                // (measured: after a single-spaced line, the first line of a
+                // paragraph at 1.08, 1.15, 1.5 or 2 lines comes one single
+                // pitch later). LibreOffice raises the ascent in proportion.
                 let height = single * line / 240.0;
-                (height, ascent.min(height - descent).max(ascent * height / single), single.min(height))
+                let baseline = match context.model {
+                    Model::Word if height >= single => ascent,
+                    _ => ascent.min(height - descent).max(ascent * height / single),
+                };
+                (height, baseline, single.min(height))
             }
             (_, None, None) => (single, ascent, single),
         };

@@ -154,6 +154,32 @@ fn single_line_pitch_matches_word() {
 }
 
 #[test]
+fn extra_leading_of_multiple_spacing_goes_below_the_text() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Measured from Word 365's PDF output (docx4j golden `line-auto`): the
+    // first baseline on the page is at 83.2 pt whatever the multiple, and
+    // after a single-spaced paragraph the first line of one at 1.15 lines
+    // comes 13.8 pt later, one single pitch, not 13.8 pt and a share of the
+    // extra. LibreOffice raises the ascent in proportion instead.
+    let spaced = |line: u32| {
+        paragraph(&font("Liberation Serif", 24), &format!(r#"<w:spacing w:line="{line}" w:lineRule="auto"/>"#), LOREM)
+    };
+    for line in [240, 276, 480] {
+        let pages = pages(&Source { body: &spaced(line), ..Source::default() }, &fonts, Model::Word);
+        assert!(close(pages[0].lines[0].baseline, 83.2, 0.03), "line={line}: {}", pages[0].lines[0].baseline);
+    }
+    let body = spaced(240) + &spaced(276);
+    let word = pitches(&pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word)[0]);
+    let single = word.iter().filter(|pitch| close(**pitch, 13.80, 0.03)).count();
+    let wide = word.iter().filter(|pitch| close(**pitch, 15.87, 0.03)).count();
+    assert_eq!(single + wide, word.len(), "{word:?}");
+    // The step from the first paragraph into the second is a single pitch.
+    assert_eq!(wide, word.len() / 2, "{word:?}");
+    let libreoffice = pitches(&pages(&Source { body: &body, ..Source::default() }, &fonts, Model::LibreOffice)[0]);
+    assert!(libreoffice.iter().any(|pitch| !close(*pitch, 13.80, 0.03) && !close(*pitch, 15.87, 0.03)));
+}
+
+#[test]
 fn exact_and_at_least_line_spacing() {
     let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
     for (rule, line, expected) in
