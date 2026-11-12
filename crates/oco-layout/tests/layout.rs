@@ -30,6 +30,9 @@ struct Source<'a> {
     /// Page setup; A4 with one-inch margins and no grid unless given.
     section: &'a str,
     settings: &'a str,
+    /// Headers and footers: the relationship id each is named by, whether it
+    /// is a `header` or a `footer`, and its content.
+    stories: &'a [(&'a str, &'a str, &'a str)],
 }
 
 impl Default for Source<'_> {
@@ -40,6 +43,7 @@ impl Default for Source<'_> {
             numbering: "",
             section: r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>"#,
             settings: r#"<w:compat><w:compatSetting w:name="compatibilityMode" w:val="15"/></w:compat>"#,
+            stories: &[],
         }
     }
 }
@@ -48,27 +52,36 @@ fn docx(source: &Source) -> Docx {
     let part = |kind: &str, target: &str, id: u8| {
         format!(r#"<Relationship Id="rId{id}" Type="{RELS}/{kind}" Target="{target}"/>"#)
     };
-    let parts = [
+    let story_relationships: String = source
+        .stories
+        .iter()
+        .map(|(id, kind, _)| format!(r#"<Relationship Id="{id}" Type="{RELS}/{kind}" Target="{id}.xml"/>"#))
+        .collect();
+    let mut parts = vec![
         (
-            "word/_rels/document.xml.rels",
+            "word/_rels/document.xml.rels".to_owned(),
             format!(
-                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{}{}{}</Relationships>"#,
+                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{}{}{}{story_relationships}</Relationships>"#,
                 part("styles", "styles.xml", 1),
                 part("numbering", "numbering.xml", 2),
                 part("settings", "settings.xml", 3)
             ),
         ),
         (
-            "word/document.xml",
+            "word/document.xml".to_owned(),
             format!(
-                "<w:document {W}><w:body>{}<w:sectPr>{}</w:sectPr></w:body></w:document>",
+                r#"<w:document {W} xmlns:r="{RELS}"><w:body>{}<w:sectPr>{}</w:sectPr></w:body></w:document>"#,
                 source.body, source.section
             ),
         ),
-        ("word/styles.xml", format!("<w:styles {W}>{}</w:styles>", source.styles)),
-        ("word/numbering.xml", format!("<w:numbering {W}>{}</w:numbering>", source.numbering)),
-        ("word/settings.xml", format!("<w:settings {W}>{}</w:settings>", source.settings)),
+        ("word/styles.xml".to_owned(), format!("<w:styles {W}>{}</w:styles>", source.styles)),
+        ("word/numbering.xml".to_owned(), format!("<w:numbering {W}>{}</w:numbering>", source.numbering)),
+        ("word/settings.xml".to_owned(), format!("<w:settings {W}>{}</w:settings>", source.settings)),
     ];
+    for (id, kind, content) in source.stories {
+        let root = if *kind == "header" { "hdr" } else { "ftr" };
+        parts.push((format!("word/{id}.xml"), format!("<w:{root} {W}>{content}</w:{root}>")));
+    }
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
     for (name, content) in parts {
@@ -648,4 +661,193 @@ fn an_empty_paragraph_is_a_line_of_its_own_font() {
     let body = "<w:p><w:r><w:t>above</w:t></w:r></w:p><w:p/><w:p/><w:p><w:r><w:t>below</w:t></w:r></w:p>";
     let page = &pages(&Source { body, styles, ..Source::default() }, &fonts, Model::Word)[0];
     assert!(close(page.lines[1].baseline - page.lines[0].baseline, 3.0 * 13.44, 0.03), "{:?}", pitches(page));
+}
+
+#[test]
+fn an_empty_paragraph_is_of_the_western_font_unless_its_mark_is_hinted_east_asian() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a'), ("Source Han Serif CN", '中')]) else { return };
+    // As measured in Word (docx4j's probe `firstheadernofooter`, among
+    // others): where the Western and the East Asian font differ, an empty
+    // paragraph is a line of the Western one, 13.8 pt for 12 pt Liberation
+    // Serif. Only a mark hinted as East Asian is a line of the other font,
+    // as tall as a line with a Chinese character in it.
+    let styles = r#"<w:docDefaults><w:rPrDefault><w:rPr>
+        <w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif" w:eastAsia="Source Han Serif CN"/>
+        <w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults>"#;
+    let step = |middle: &str| {
+        let body = format!("<w:p><w:r><w:t>above</w:t></w:r></w:p>{middle}<w:p><w:r><w:t>below</w:t></w:r></w:p>");
+        let page = &pages(&Source { body: &body, styles, ..Source::default() }, &fonts, Model::Word)[0];
+        page.lines.last().unwrap().baseline - page.lines[0].baseline
+    };
+    let (empty, chinese) = (step("<w:p/>"), step("<w:p><w:r><w:t>中</w:t></w:r></w:p>"));
+    let hinted = step(r#"<w:p><w:pPr><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr></w:pPr></w:p>"#);
+    assert!(close(empty, 2.0 * 13.8, 0.03), "{empty}");
+    assert!(chinese > empty + 2.0, "{chinese} {empty}");
+    assert!(close(hinted, chinese, 0.01), "{hinted} {chinese}");
+}
+
+const A4_WITH_STORIES: &str = r#"<w:pgSz w:w="11906" w:h="16838"/>
+    <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708"/>"#;
+
+#[test]
+fn headers_and_footers_stand_at_their_distances_and_push_the_body() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `page-header-footer` and
+    // `page-tall-header`): a header begins 35.4 pt, its distance, from the
+    // top of the page, and a footer ends as far from the bottom. The body
+    // begins at the margin, 72 pt, unless the header reaches lower.
+    let line = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let references = r#"<w:headerReference w:type="default" r:id="h"/><w:footerReference w:type="default" r:id="f"/>"#;
+    let section = format!("{references}{A4_WITH_STORIES}");
+    let lay = |header: &str| {
+        let stories = [("h", "header", header), ("f", "footer", "<w:p><w:r><w:t>foot</w:t></w:r></w:p>")];
+        let body = line("body");
+        let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+        pages(&source, &fonts, Model::Word).remove(0)
+    };
+    // 12 pt Liberation Serif: a line of 13.8 pt, its baseline 11.2 pt down.
+    let short = lay(&line("head"));
+    let at = |page: &Page, text: &str| page.lines.iter().find(|l| l.text == text).map(|l| l.baseline).unwrap();
+    assert!(close(at(&short, "head"), 35.4 + 11.2, 0.03), "{}", at(&short, "head"));
+    assert!(close(at(&short, "body"), 72.0 + 11.2, 0.03), "{}", at(&short, "body"));
+    // The footer is of the document's default 10 pt: a line of 11.5 pt
+    // whose baseline is 9.35 pt down, ending 35.4 pt above the page's foot.
+    assert!(close(at(&short, "foot"), 841.9 - 35.4 - 11.5 + 9.35, 0.05), "{}", at(&short, "foot"));
+    assert!(close(short.body.0, 72.0, 0.01) && close(short.body.1, 841.9 - 72.0, 0.01), "{:?}", short.body);
+
+    // Five lines of header reach 35.4 + 69 = 104.4 pt down: the body waits.
+    let tall = lay(&line("head").repeat(5));
+    assert!(close(at(&tall, "body"), 104.4 + 11.2, 0.03), "{}", at(&tall, "body"));
+    assert!(close(tall.body.0, 104.4, 0.01), "{:?}", tall.body);
+
+    // A top margin written as a negative number holds, and the two overlap.
+    let fixed = section.replace(r#"w:top="1440""#, r#"w:top="-1440""#);
+    let header = line("head").repeat(5);
+    let stories = [("h", "header", header.as_str())];
+    let body = line("body");
+    let page =
+        pages(&Source { body: &body, section: &fixed, stories: &stories, ..Source::default() }, &fonts, Model::Word)
+            .remove(0);
+    assert!(close(at(&page, "body"), 72.0 + 11.2, 0.03), "{}", at(&page, "body"));
+}
+
+#[test]
+fn each_page_gets_the_header_meant_for_it_with_its_number() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let text = |text: &str| format!("<w:p><w:r><w:t>{text}</w:t></w:r></w:p>");
+    let numbered = r#"<w:p><w:r><w:t xml:space="preserve">page </w:t></w:r>
+        <w:fldSimple w:instr=" PAGE "><w:r><w:t>9</w:t></w:r></w:fldSimple><w:r><w:t xml:space="preserve"> of </w:t></w:r>
+        <w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> NUMPAGES </w:instrText></w:r>
+        <w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>9</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#;
+    let (first, even, odd) = (text("first"), text("even"), text("odd"));
+    let stories = [
+        ("a", "header", first.as_str()),
+        ("b", "header", even.as_str()),
+        ("c", "header", odd.as_str()),
+        ("n", "footer", numbered),
+    ];
+    let section = format!(
+        r#"<w:headerReference w:type="first" r:id="a"/><w:headerReference w:type="even" r:id="b"/>
+           <w:headerReference w:type="default" r:id="c"/><w:footerReference w:type="default" r:id="n"/>
+           {A4_WITH_STORIES}<w:titlePg/>"#
+    );
+    // Four pages: a paragraph on each, every one after the first asking for a new page.
+    let body = paragraph("", "", "one") + &paragraph("", "<w:pageBreakBefore/>", "x").repeat(3);
+    let lay = |settings: &str| {
+        let source = Source { body: &body, section: &section, settings, stories: &stories, ..Source::default() };
+        let pages = pages(&source, &fonts, Model::Word);
+        pages
+            .iter()
+            .map(|page| (page.lines[0].text.clone(), page.lines.last().unwrap().text.clone()))
+            .collect::<Vec<_>>()
+    };
+    let shown = |pairs: &[(&str, &str)]| pairs.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
+    // The first page has the title page's header and, having no footer of
+    // its own kind, none; the numbers are the pages', not the ones stored.
+    assert_eq!(
+        lay("<w:evenAndOddHeaders/>"),
+        shown(&[("first", "one"), ("even", "x"), ("odd", "page 3 of 4"), ("even", "x")])
+    );
+    // Unless the document tells odd and even pages apart, every other page
+    // has the default header and footer.
+    assert_eq!(
+        lay(""),
+        shown(&[("first", "one"), ("odd", "page 2 of 4"), ("odd", "page 3 of 4"), ("odd", "page 4 of 4")])
+    );
+}
+
+#[test]
+fn a_section_without_a_header_of_its_own_has_the_one_before_and_may_renumber() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let number = r#"<w:p><w:fldSimple w:instr="PAGE"><w:r><w:t>0</w:t></w:r></w:fldSimple></w:p>"#;
+    let stories = [("h", "header", "<w:p><w:r><w:t>head</w:t></w:r></w:p>"), ("n", "footer", number)];
+    // The first section names the header and footer; the second names
+    // neither, starts on a new page, and numbers from iv in roman: its
+    // first page is iv, and the pages after it count on from there.
+    let body = format!(
+        r#"<w:p><w:pPr><w:sectPr><w:headerReference r:id="h"/><w:footerReference r:id="n"/>{A4_WITH_STORIES}</w:sectPr></w:pPr>
+           <w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p>
+           <w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>three</w:t></w:r></w:p>"#
+    );
+    let section = format!(r#"{A4_WITH_STORIES}<w:pgNumType w:start="4" w:fmt="lowerRoman"/>"#);
+    let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+    let pages = pages(&source, &fonts, Model::Word);
+    let texts: Vec<Vec<&str>> = pages.iter().map(|page| page.lines.iter().map(|l| l.text.as_str()).collect()).collect();
+    assert_eq!(texts, [["head", "one", "1"], ["head", "two", "iv"], ["head", "three", "v"]]);
+}
+
+#[test]
+fn only_a_footer_that_is_there_takes_room_from_the_body() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // The footer's distance, 100 pt, is more than the bottom margin, 72 pt.
+    // With a footer of one 11.5 pt line the body ends above it; on a page
+    // without one the distance means nothing and the body ends at the
+    // margin (Word, docx4j's probe `firstheadernofooter`).
+    let far = A4_WITH_STORIES.replace(r#"w:footer="708""#, r#"w:footer="2000""#);
+    let stories = [("f", "footer", "<w:p><w:r><w:t>foot</w:t></w:r></w:p>")];
+    let body = paragraph("", "", "body");
+    let foot_of_body = |section: &str| {
+        let source = Source { body: &body, section, stories: &stories, ..Source::default() };
+        pages(&source, &fonts, Model::Word)[0].body.1
+    };
+    let with = foot_of_body(&format!(r#"<w:footerReference w:type="default" r:id="f"/>{far}"#));
+    assert!(close(with, 841.9 - 100.0 - 11.5, 0.03), "{with}");
+    let without = foot_of_body(&far);
+    assert!(close(without, 841.9 - 72.0, 0.03), "{without}");
+    // A bottom margin written as a negative number holds against the footer.
+    let fixed = far.replace(r#"w:bottom="1440""#, r#"w:bottom="-1440""#);
+    let held = foot_of_body(&format!(r#"<w:footerReference w:type="default" r:id="f"/>{fixed}"#));
+    assert!(close(held, 841.9 - 72.0, 0.03), "{held}");
+}
+
+#[test]
+fn a_floating_table_in_a_header_takes_no_room() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Word, as recorded in LibreOffice's test document
+    // `floating-table-header.docx`, which Word has on one page: a table that
+    // floats is not part of the header's height, so the body does not wait
+    // for it. Here the paragraph after such a table begins where it began.
+    let line = |text: &str| paragraph(&font("Liberation Serif", 24), "", text);
+    let cell = [line("a1"), line("a2"), line("a3"), line("a4"), line("a5")].concat();
+    let floating = table(&[2000], "", &[&[&cell]]).replace("<w:tblPr>", r#"<w:tblPr><w:tblpPr w:tblpY="1"/>"#);
+    let lay = |table: &str| {
+        let header = [line("head"), table.to_owned(), line("under")].concat();
+        let stories = [("h", "header", header.as_str())];
+        let section = format!(r#"<w:headerReference w:type="default" r:id="h"/>{A4_WITH_STORIES}"#);
+        let body = line("body");
+        let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+        pages(&source, &fonts, Model::Word).remove(0)
+    };
+    let at = |page: &Page, text: &str| page.lines.iter().find(|l| l.text == text).map(|l| l.baseline).unwrap();
+    // In the flow, the table's five lines carry the header past the margin.
+    let inline = lay(&floating.replace(r#"<w:tblpPr w:tblpY="1"/>"#, ""));
+    assert!(inline.body.0 > 72.0 + 30.0, "{:?}", inline.body);
+    assert!(at(&inline, "under") - at(&inline, "head") > 5.0 * 13.8);
+    // Floating, it leaves the two paragraphs one under the other, and the
+    // body at its margin.
+    let page = lay(&floating);
+    assert!(close(page.body.0, 72.0, 0.01), "{:?}", page.body);
+    assert!(close(at(&page, "under") - at(&page, "head"), 13.8, 0.03), "{}", at(&page, "under"));
+    assert!(close(at(&page, "body"), 72.0 + 11.2, 0.03), "{}", at(&page, "body"));
+    assert!(page.lines.iter().any(|l| l.text.ends_with("a5")), "the table is still drawn");
 }

@@ -455,19 +455,26 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
     let mark_choice = {
-        // The mark takes the East Asian font where the paragraph has one.
-        // When that names a Western font, as it does in documents whose
-        // default fonts are all the same, the line is that font's: asking
-        // it for a Chinese character would bring in a taller fallback font
-        // (measured in Word: an empty paragraph at 11 pt in such a document
-        // is 13.4 pt tall, one line of Calibri).
-        let wanted = family(&paragraph.mark.fonts.east_asia).or(family(&paragraph.mark.fonts.ascii));
-        let western = wanted
+        // The paragraph mark is a Western character unless it is marked as
+        // East Asian text, so an empty paragraph is a line of the Western
+        // font. (Measured in Word: with Calibri and an East Asian default
+        // font at 11 pt it is 13.4 pt tall, Calibri's line; and the page
+        // breaks Word records in documents full of empty paragraphs bear
+        // it out.) Where it is East Asian, a font in that slot that is in
+        // fact Western still gives its own line: asking it for a Chinese
+        // character would bring in a taller fallback font.
+        let mark = &paragraph.mark.fonts;
+        let western_mark = context.model == Model::Word && mark.hint.as_deref() != Some("eastAsia");
+        let named = match family(&mark.ascii).filter(|_| western_mark) {
+            Some(ascii) => Some(ascii),
+            None => family(&mark.east_asia).or(family(&mark.ascii)),
+        };
+        let western = named
             .and_then(|name| fonts.choose(Some(name), false, false, 'x', context.model))
             .filter(|choice| choice.known_family && !fonts.get(choice.font).east_asian);
         western.or_else(|| {
-            let sample = if wanted.is_some() { '中' } else { 'x' };
-            fonts.choose(wanted.or(Some("宋体")), false, false, sample, context.model)
+            let sample = if named.is_some() { '中' } else { 'x' };
+            fonts.choose(named.or(Some("宋体")), false, false, sample, context.model)
         })
     };
     let mark_box = mark_choice

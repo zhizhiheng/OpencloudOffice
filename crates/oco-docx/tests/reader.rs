@@ -336,6 +336,7 @@ fn reads_what_decides_where_a_tables_text_goes() {
             <w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="70" w:type="dxa"/></w:tblCellMar>
             <w:tblBorders><w:top w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="12"/><w:left w:val="nil" w:sz="96"/></w:tblBorders>
             <w:tblLook w:val="04A0"/><w:tblOverlap w:val="never"/>
+            <w:tblpPr w:vertAnchor="page" w:horzAnchor="page" w:tblpX="1362" w:tblpY="1135"/>
           </w:tblPr>
           <w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid>
           <w:tr>
@@ -357,6 +358,7 @@ fn reads_what_decides_where_a_tables_text_goes() {
     assert_eq!((props.cell_margins.left, props.cell_margins.right, props.cell_margins.top), (Some(60), Some(70), None));
     // The widest border that is drawn, in eighths of a point.
     assert_eq!(props.borders, Some(12));
+    assert!(props.floating);
 
     let (first, second) = (&table.rows[0], &table.rows[1]);
     assert_eq!((first.props.height, first.props.exact_height), (Some(400), true));
@@ -368,8 +370,11 @@ fn reads_what_decides_where_a_tables_text_goes() {
     // A width that is a percentage is not a length; a bare vMerge continues.
     assert_eq!((second.cells[0].props.width, second.cells[0].props.merge), (None, Some(VerticalMerge::Continue)));
     assert_eq!((second.cells[1].props.grid_span, second.cells[1].props.merge), (1, None));
-    // What is not read is said.
-    assert_eq!(docx.coverage.ranked().into_iter().collect::<Vec<_>>(), [("w:tblPr/w:tblOverlap", 1)]);
+    // What is not read is said; so is where the table floats, which is not.
+    assert_eq!(
+        docx.coverage.ranked().into_iter().collect::<Vec<_>>(),
+        [("w:tblPr/w:tblOverlap", 1), ("w:tblPr/w:tblpPr", 1)]
+    );
 }
 
 #[test]
@@ -493,6 +498,7 @@ fn reads_headers_and_footers_and_which_pages_they_are_for() {
     let r = r#"xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
     let body = r#"<w:p><w:pPr><w:sectPr>
              <w:headerReference w:type="default" r:id="rId1"/><w:footerReference w:type="even" r:id="rId3"/>
+             <w:pgMar w:top="-1440" w:bottom="1134" w:left="1440" w:right="1440" w:header="567" w:footer="850"/>
            </w:sectPr></w:pPr></w:p>
            <w:sectPr>
              <w:headerReference w:type="first" r:id="rId2"/><w:footerReference r:id="rId3"/>
@@ -545,9 +551,14 @@ fn reads_headers_and_footers_and_which_pages_they_are_for() {
     assert_eq!((first.headers.default.as_deref(), first.headers.first.as_deref()), (Some("rId1"), None));
     assert_eq!((first.footers.even.as_deref(), first.footers.default.as_deref()), (Some("rId3"), None));
     assert!(!first.title_page);
+    // A margin written as a negative number is that far all the same, and
+    // is not to give way to a header that reaches further.
+    assert_eq!((first.margin_top, first.margin_top_fixed), (1440, true));
+    assert_eq!((first.margin_bottom, first.margin_bottom_fixed), (1134, false));
     let last = &docx.document.section;
     assert_eq!((last.headers.first.as_deref(), last.footers.default.as_deref()), (Some("rId2"), Some("rId3")));
     assert_eq!((last.header, last.footer, last.title_page), (567, 850, true));
+    assert_eq!((last.margin_top, last.margin_top_fixed), (1440, false));
     assert_eq!((last.page_number_start, last.page_number_format.as_deref()), (Some(5), Some("lowerRoman")));
     assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
 }

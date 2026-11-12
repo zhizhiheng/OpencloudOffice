@@ -15,6 +15,11 @@ pub struct Section {
     pub margin_right: i32,
     pub margin_bottom: i32,
     pub margin_left: i32,
+    /// The top (bottom) margin was given as a negative number, which means
+    /// that the body begins (ends) exactly there even when the header
+    /// (footer) reaches further; they then overlap.
+    pub margin_top_fixed: bool,
+    pub margin_bottom_fixed: bool,
     pub header: i32,
     pub footer: i32,
     pub gutter: i32,
@@ -56,6 +61,8 @@ impl Default for Section {
             margin_right: 1440,
             margin_bottom: 1440,
             margin_left: 1440,
+            margin_top_fixed: false,
+            margin_bottom_fixed: false,
             header: 720,
             footer: 720,
             gutter: 0,
@@ -116,7 +123,9 @@ impl Section {
                 }
                 Some("pgMar") => {
                     // A negative top or bottom margin means "exactly this,
-                    // even if the header is taller"; the size is what matters here.
+                    // even if the header is taller".
+                    section.margin_top_fixed = length("top").is_some_and(|top| top < 0);
+                    section.margin_bottom_fixed = length("bottom").is_some_and(|bottom| bottom < 0);
                     section.margin_top = length("top").map_or(section.margin_top, i32::abs);
                     section.margin_bottom = length("bottom").map_or(section.margin_bottom, i32::abs);
                     section.margin_left = length("left").unwrap_or(section.margin_left);

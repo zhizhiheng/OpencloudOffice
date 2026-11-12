@@ -3,8 +3,8 @@
 //! Only what decides where the text of a table goes is read: the widths of
 //! the columns, the margins inside cells, the heights of rows and whether
 //! they may split across pages, and how cells span and merge. Whether
-//! borders are drawn is read, but not their styles; shading, conditional
-//! formatting and floating are not.
+//! borders are drawn is read, but not their styles, and that a table floats,
+//! but not where; shading and conditional formatting are not.
 
 use roxmltree::Node;
 use serde::Serialize;
@@ -63,6 +63,9 @@ pub struct TableProps {
     /// The width of the table's borders in eighths of a point: that of the
     /// widest edge of `w:tblBorders` that is drawn, and 0 when none is.
     pub borders: Option<i32>,
+    /// `w:tblpPr`: the table floats, out of the flow of the text. Where it
+    /// floats is not read.
+    pub floating: bool,
 }
 
 /// The width of the widest line a set of borders (`w:tblBorders`) draws,
@@ -91,6 +94,11 @@ impl TableProps {
                 Some("tblLayout") => props.fixed_layout = Some(w_attr(child, "type") == Some("fixed")),
                 Some("tblCellMar") => props.cell_margins = CellMargins::parse(child),
                 Some("tblBorders") => props.borders = Some(widest_border(child)),
+                Some("tblpPr") => {
+                    props.floating = true;
+                    // Its position is not modelled.
+                    coverage.miss(Some("w:tblPr"), child);
+                }
                 // Which conditional formats of the style apply; none are read.
                 Some("tblLook" | "tblStyleRowBandSize" | "tblStyleColBandSize") => {}
                 // Accessibility text.
@@ -110,6 +118,7 @@ impl TableProps {
         self.fixed_layout = over.fixed_layout.or(self.fixed_layout);
         self.cell_margins.apply(&over.cell_margins);
         self.borders = over.borders.or(self.borders);
+        self.floating |= over.floating;
     }
 }
 

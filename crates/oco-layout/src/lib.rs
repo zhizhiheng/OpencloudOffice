@@ -17,8 +17,11 @@ mod paragraph;
 pub mod svg;
 pub mod text;
 
+use std::collections::HashMap;
+
 use oco_docx::{
-    Block, BreakKind, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section, SectionStart,
+    format_number, Block, BreakKind, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section,
+    SectionStart, StoryRefs,
 };
 use serde::Serialize;
 
@@ -219,6 +222,9 @@ struct Unit {
     paragraph: Option<usize>,
     /// The unit is a table row; `lines` is then empty.
     row: Option<Row>,
+    /// The row is of a floating table. In a header or footer such a table
+    /// takes no room; in the body it is laid out in line all the same.
+    floating: bool,
 }
 
 /// A table row ready to be placed. Its cells are columns of lines side by
@@ -435,6 +441,7 @@ impl Builder<'_> {
             ends_section: source.section_break.clone(),
             paragraph: Some(index),
             row: None,
+            floating: false,
         }
     }
 
@@ -539,9 +546,73 @@ impl Builder<'_> {
                     border,
                     last: number + 1 == table.rows.len(),
                 }),
+                floating: props.floating,
             });
         }
         self.table_styles = outer;
+    }
+
+    /// Lays out the content of a header or footer, with the page number and
+    /// count written in when they are known. The body's own numbering of
+    /// paragraphs and of list items is left as it was.
+    fn story(&mut self, blocks: &[Block], section: &Section, numbers: Option<&(String, String)>) -> Vec<Unit> {
+        let filled = numbers.map(|numbers| with_numbers(blocks, numbers));
+        let (paragraphs, counters) = (self.paragraphs, std::mem::take(&mut self.counters));
+        let mut units = Vec::new();
+        self.blocks(filled.as_deref().unwrap_or(blocks), section, section.text_width() as f32 * TWIP, &mut units);
+        (self.paragraphs, self.counters) = (paragraphs, counters);
+        units
+    }
+
+    /// The frame of a page of `section` (the section with index `index`):
+    /// which header and footer it has, and where they leave the body.
+    ///
+    /// Measured in Word: a header begins its distance from the top of the
+    /// page and a footer ends its distance from the bottom; the body begins
+    /// at the top margin, or under the header where that reaches lower, and
+    /// likewise at the bottom. A page without a header has only its margin,
+    /// and a margin given as a negative number holds whatever the header.
+    fn frame(
+        &mut self,
+        section: &Section,
+        index: usize,
+        stories: &(StoryRefs, StoryRefs),
+        number: i32,
+        first: bool,
+        heights: &mut HashMap<(String, usize), f32>,
+    ) -> Frame {
+        let pick = |refs: &StoryRefs| {
+            if first && section.title_page {
+                refs.first.clone()
+            } else if self.docx.settings.even_and_odd_headers && number % 2 == 0 {
+                refs.even.clone()
+            } else {
+                refs.default.clone()
+            }
+        };
+        let (header, footer) = (pick(&stories.0), pick(&stories.1));
+        // How far a header or footer reaches in from its edge of the page;
+        // nothing at all where the page has none.
+        let mut reach = |id: &Option<String>, distance: i32| -> f32 {
+            let Some((id, blocks)) = id.as_ref().and_then(|id| Some((id, self.docx.stories.get(id)?))) else {
+                return 0.0;
+            };
+            let height = match heights.get(&(id.clone(), index)) {
+                Some(known) => *known,
+                None => {
+                    let measured = stack(self.story(blocks, section, None)).1;
+                    heights.insert((id.clone(), index), measured);
+                    measured
+                }
+            };
+            distance as f32 * TWIP + height
+        };
+        let (header_reach, footer_reach) = (reach(&header, section.header), reach(&footer, section.footer));
+        let points = |twips: i32| twips as f32 * TWIP;
+        let top = if section.margin_top_fixed { 0.0 } else { header_reach }.max(points(section.margin_top));
+        let bottom = points(section.page_height)
+            - if section.margin_bottom_fixed { 0.0 } else { footer_reach }.max(points(section.margin_bottom));
+        Frame { top, bottom, header, footer, number, section: index }
     }
 
     fn blocks(&mut self, blocks: &[Block], section: &Section, width: f32, units: &mut Vec<Unit>) {
@@ -581,14 +652,47 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
 
     let mut pages: Vec<Page> = Vec::new();
     let mut section_index = 0;
-    let new_page = |section: &Section| Page {
-        width: section.page_width as f32 * TWIP,
-        height: section.page_height as f32 * TWIP,
-        body: (section.margin_top as f32 * TWIP, (section.page_height - section.margin_bottom) as f32 * TWIP),
-        ..Page::default()
-    };
-    pages.push(new_page(setups[0]));
-    let mut y = setups[0].margin_top as f32 * TWIP;
+    // A header or footer that a section does not name is the one of the
+    // section before.
+    let mut stories: Vec<(StoryRefs, StoryRefs)> = Vec::with_capacity(setups.len());
+    for section in &setups {
+        let inherit = |own: &StoryRefs, before: Option<&StoryRefs>| StoryRefs {
+            default: own.default.clone().or_else(|| before.and_then(|b| b.default.clone())),
+            first: own.first.clone().or_else(|| before.and_then(|b| b.first.clone())),
+            even: own.even.clone().or_else(|| before.and_then(|b| b.even.clone())),
+        };
+        let before = stories.last();
+        stories.push((
+            inherit(&section.headers, before.map(|(headers, _)| headers)),
+            inherit(&section.footers, before.map(|(_, footers)| footers)),
+        ));
+    }
+    // What each page has around its body: one frame for each page.
+    let mut frames: Vec<Frame> = Vec::new();
+    let mut heights: HashMap<(String, usize), f32> = HashMap::new();
+    // The number of the page being filled, as its header would show it.
+    let mut number = 0;
+    let (mut y, mut top, mut bottom): (f32, f32, f32);
+    // Opens a page of the section with the given index; `$first` says that
+    // the section begins on it.
+    macro_rules! turn_page {
+        ($section:expr, $first:expr) => {{
+            let index = ($section).min(setups.len() - 1);
+            let section = setups[index];
+            number = section.page_number_start.filter(|_| $first).unwrap_or(number + 1);
+            let frame = builder.frame(section, index, &stories[index], number, $first, &mut heights);
+            (top, bottom) = (frame.top, frame.bottom);
+            pages.push(Page {
+                width: section.page_width as f32 * TWIP,
+                height: section.page_height as f32 * TWIP,
+                body: (top, bottom),
+                ..Page::default()
+            });
+            frames.push(frame);
+            y = top;
+        }};
+    }
+    turn_page!(0, true);
     let mut page_is_empty = true;
     // How many of the pages have had their first line placed.
     let mut started = 0;
@@ -622,14 +726,11 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
 
     for index in 0..units.len() {
         let section = setups[section_index.min(setups.len() - 1)];
-        let top = section.margin_top as f32 * TWIP;
-        let bottom = (section.page_height - section.margin_bottom) as f32 * TWIP;
         let left = (section.margin_left + section.gutter) as f32 * TWIP;
         let unit = &units[index];
 
         if unit.page_break_before && !page_is_empty {
-            pages.push(new_page(section));
-            y = top;
+            turn_page!(section_index, false);
             page_is_empty = true;
             after_break = true;
         }
@@ -669,8 +770,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         }
         let page_height = bottom - top;
         if !page_is_empty && y + gap(false, false) + chain > bottom + 0.01 && chain <= page_height {
-            pages.push(new_page(section));
-            y = top;
+            turn_page!(section_index, false);
             page_is_empty = true;
             after_break = true;
         }
@@ -713,8 +813,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                         .zip(&takes)
                         .all(|((cell, cursor), take)| *cursor >= cell.lines.len() || *take > 0);
                 if !fits && !splits && !page_is_empty {
-                    pages.push(new_page(section));
-                    y = top;
+                    turn_page!(section_index, false);
                     page_is_empty = true;
                     after_break = true;
                     continue;
@@ -760,8 +859,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                     y = part_bottom;
                     break;
                 }
-                pages.push(new_page(section));
-                y = top;
+                turn_page!(section_index, false);
                 page_is_empty = true;
                 after_break = true;
             }
@@ -780,8 +878,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 && fits(y, line)
                 && !fits(y + line.height, &unit.lines[number + 1]);
             if (!fits(y, line) || strands_last) && !page_is_empty {
-                pages.push(new_page(section));
-                y = top;
+                turn_page!(section_index, false);
                 after_break = true;
             }
             let number_of_pages = pages.len();
@@ -807,8 +904,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             y += line.height;
             page_is_empty = false;
             if line.page_break_after {
-                pages.push(new_page(section));
-                y = top;
+                turn_page!(section_index, false);
                 page_is_empty = true;
                 after_break = true;
             }
@@ -833,8 +929,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             section_index += 1;
             let next = setups[section_index.min(setups.len() - 1)];
             if next.start != SectionStart::Continuous {
-                pages.push(new_page(next));
-                y = next.margin_top as f32 * TWIP;
+                turn_page!(section_index, true);
                 page_is_empty = true;
                 // The first paragraph of a section keeps its space before.
                 after_break = false;
@@ -842,5 +937,116 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             }
         }
     }
+    // Headers and footers go on last, when the number of pages is known.
+    let count = pages.len();
+    for (page, frame) in pages.iter_mut().zip(&frames) {
+        let section = setups[frame.section];
+        let left = (section.margin_left + section.gutter) as f32 * TWIP;
+        let shown = |n: i32| format_number(section.page_number_format.as_deref().unwrap_or("decimal"), n);
+        let numbers = (shown(frame.number), shown(count as i32));
+        let mut lines = Vec::new();
+        for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
+            let Some(blocks) = story.as_deref().and_then(|id| docx.stories.get(id)) else { continue };
+            let (placed, height) = stack(builder.story(blocks, section, Some(&numbers)));
+            let origin =
+                if footer { page.height - section.footer as f32 * TWIP - height } else { section.header as f32 * TWIP };
+            for (offset, line) in placed {
+                for mut item in line.items {
+                    item.translate(left, origin + offset);
+                    page.items.push(item);
+                }
+                if !line.text.trim().is_empty() {
+                    lines.push(PlacedLine {
+                        baseline: origin + offset + line.baseline,
+                        x0: left + line.x0,
+                        x1: left + line.x1,
+                        text: line.text,
+                    });
+                }
+            }
+        }
+        page.lines.append(&mut lines);
+        page.lines.sort_by(|a, b| a.baseline.total_cmp(&b.baseline));
+    }
     Layout { pages, missing_fonts: builder.missing_fonts }
+}
+
+/// What a page has around its body.
+struct Frame {
+    /// Where the body begins and ends: at the margins, or beyond a header
+    /// or footer that reaches further.
+    top: f32,
+    bottom: f32,
+    /// The header and footer of the page, by relationship id.
+    header: Option<String>,
+    footer: Option<String>,
+    /// The page's number, as a `PAGE` field shows it.
+    number: i32,
+    /// Index of the page's section.
+    section: usize,
+}
+
+/// Lines stacked from the top down with the spacing of their paragraphs:
+/// each with its distance from the top, and the height of the whole.
+///
+/// A floating table takes no room: what follows it begins where it began.
+/// (In Word it stands where its properties say, which are not read; here it
+/// stays where the flow had come to.)
+fn stack(units: Vec<Unit>) -> (Vec<(f32, paragraph::Line)>, f32) {
+    let mut placed = Vec::new();
+    let (mut y, mut previous_after, mut first) = (0.0f32, 0.0f32, true);
+    // Where the flow goes on once the floating table being placed is over.
+    let mut flow = None;
+    for unit in units {
+        if unit.floating && flow.is_none() {
+            flow = Some((y, previous_after, first));
+        }
+        y += if first { unit.before } else { unit.before.max(previous_after) };
+        first = false;
+        previous_after = unit.after;
+        let ends_table = unit.row.as_ref().is_some_and(|row| row.last);
+        let lines = match unit.row {
+            Some(row) => vec![row.into_line()],
+            None => unit.lines,
+        };
+        for line in lines {
+            let height = line.height;
+            placed.push((y, line));
+            y += height;
+        }
+        if ends_table {
+            if let Some(resume) = flow.take() {
+                (y, previous_after, first) = resume;
+            }
+        }
+    }
+    (placed, y + previous_after)
+}
+
+/// A copy of `blocks` with the page number and page count written out
+/// where the fields for them are.
+fn with_numbers(blocks: &[Block], numbers: &(String, String)) -> Vec<Block> {
+    let mut blocks = blocks.to_vec();
+    fn fill(blocks: &mut [Block], numbers: &(String, String)) {
+        for block in blocks {
+            match block {
+                Block::Paragraph(paragraph) => {
+                    for piece in paragraph.runs.iter_mut().flat_map(|run| &mut run.content) {
+                        match piece {
+                            RunContent::PageNumber(_) => *piece = RunContent::Text(numbers.0.clone()),
+                            RunContent::PageCount(_) => *piece = RunContent::Text(numbers.1.clone()),
+                            _ => {}
+                        }
+                    }
+                }
+                Block::Table(table) => {
+                    for cell in table.rows.iter_mut().flat_map(|row| &mut row.cells) {
+                        fill(&mut cell.blocks, numbers);
+                    }
+                }
+            }
+        }
+    }
+    fill(&mut blocks, numbers);
+    blocks
 }

@@ -67,7 +67,9 @@ impl Arguments {
 pub fn beyond_body_text(docx: &Docx) -> bool {
     let unsupported =
         |needles: &[&str]| docx.coverage.unsupported.keys().any(|key| needles.iter().any(|n| key.contains(n)));
-    docx.document.body.iter().any(|block| matches!(block, Block::Table(_)))
+    let table = |block: &Block| matches!(block, Block::Table(_));
+    docx.document.body.iter().any(table)
+        || docx.stories.values().flatten().any(table)
         || unsupported(&[
             "w:drawing",
             "w:pict",
