@@ -301,7 +301,7 @@ LibreOffice 的做法不同：这类字符跟随前面文字的类别，不看�
 4. 字符单位缩进所依据的字符宽度。
 5. 下划线、删除线、着重号的位置和粗细。
 
-验证的办法：在装有 Word 的机器上把 `testdata/zh` 里的文档另存为 PDF，就可以像本文处理 docx4j 的 PDF 那样量出来。docx4j 的 128 份 PDF 对应的源文档要运行它的生成程序才能得到，这一步属于运行外部代码，本次没有做。
+验证的办法：在装有 Word 的 Windows 机器上运行 `tools\word\export.ps1`，把 `testdata/zh` 里的文档导出为 PDF，就可以像本文处理 docx4j 的 PDF 那样量出来，并由 `tools/word/compare.py` 逐行对照（见 [还原度](fidelity.md) 第五节）。docx4j 的 128 份 PDF 对应的源文档要运行它的生成程序才能得到，这一步属于运行外部代码，本次没有做。
 
 尚未实现：
 

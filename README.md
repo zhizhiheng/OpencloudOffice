@@ -6,10 +6,13 @@
 
 **当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文排成页面并输出 SVG，行高与 Word 实测一致）。表格、页眉页脚、图片尚未排版，也还不能编辑。
 
+还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。见 [docs/fidelity.md](docs/fidelity.md)。
+
 | 文档 | 内容 |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | 目标、技术决定、原型计划和进度 |
 | [docs/strategy.md](docs/strategy.md) | 如何做得比现有方案更好 |
+| [docs/fidelity.md](docs/fidelity.md) | 还原度怎么量：标准答案的来源、当前记分表、只升不降的基线、接入 Word 输出 |
 | [docs/layout.md](docs/layout.md) | 排版规则：行高、字号、缩进、编号、字体效果、标点，以及各自的依据 |
 | [docs/corpus-report.md](docs/corpus-report.md) | 语料测试的方法、数据和发现的问题 |
 | [docs/word-behaviour.md](docs/word-behaviour.md) | Word 的实际行为与规范不同的地方 |
@@ -51,10 +54,12 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 |---|---|
 | `crates/oco-docx` | docx 读取：容器、样式、主题字体、编号、页面设置、格式继承计算 |
 | `crates/oco-layout` | 排版：字体度量与替换、断行、行高、编号、分页，输出 SVG |
-| `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试 |
+| `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试，`score` 对照 Word 的分页记录打分 |
 | `testdata/zh` | 10 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
 | `tools/zh` | 生成中文测试文档，与 LibreOffice 的排版结果对比 |
 | `tools/corpus` | 公开语料测试：拉取、与 LibreOffice 对比、与 Word 另存结果对照 |
+| `tools/fidelity` | 还原度记分表和基线 |
+| `tools/word` | 用 Word 批量导出 PDF（Windows），并与我们的排版逐行对照 |
 | `tools/fonts` | 下载开源字体；参照渲染用的字体映射 |
 | `docs` | 见上表 |
 
@@ -64,6 +69,7 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 cargo test                                               # 全部测试
 cargo clippy --all-targets                               # 静态检查
 cargo build -p oco-layout --target wasm32-unknown-unknown  # 确认内核可编译成 WASM
+tools/fidelity/score.py                                  # 还原度记分表，与基线比较（需先拉取测试集和字体）
 ```
 
 排版测试需要字体：系统里的 Liberation、Carlito、DejaVu，以及 `tools/fonts/fetch.sh` 下载的中文字体。缺少字体时相关测试会打印提示并跳过。
