@@ -454,7 +454,12 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         } else {
             1
         };
-        unit.lines.iter().take(count).map(|l| l.height).sum()
+        // The last of them only has to fit as far as its text reaches: extra
+        // leading below it may run past the bottom margin, as it may for
+        // any line that ends a page.
+        let lines = &unit.lines[..count.min(unit.lines.len())];
+        let last = lines.last().map_or(0.0, |line| line.needed);
+        lines.iter().rev().skip(1).map(|line| line.height).sum::<f32>() + last
     };
 
     for index in 0..units.len() {

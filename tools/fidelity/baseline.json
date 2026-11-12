@@ -938,7 +938,7 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/footer-body-distance.docx": {
@@ -2138,7 +2138,7 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/paragraph/sectionBreak.docx": {
@@ -2910,11 +2910,11 @@
    "forced_page_starts": 410,
    "forced_page_starts_equal": 386,
    "multipage": 655,
-   "multipage_pages_equal": 407,
-   "multipage_pages_within_one": 554,
+   "multipage_pages_equal": 406,
+   "multipage_pages_within_one": 553,
    "page_starts": 2041,
-   "page_starts_equal": 246,
-   "page_starts_same_paragraph": 411
+   "page_starts_equal": 245,
+   "page_starts_same_paragraph": 409
   },
   "covered": {
    "documents": 601,
@@ -2924,8 +2924,8 @@
    "multipage_pages_equal": 60,
    "multipage_pages_within_one": 66,
    "page_starts": 54,
-   "page_starts_equal": 26,
-   "page_starts_same_paragraph": 39
+   "page_starts_equal": 28,
+   "page_starts_same_paragraph": 40
   },
   "fresh": {
    "documents": 1943,
@@ -2935,8 +2935,8 @@
    "multipage_pages_equal": 161,
    "multipage_pages_within_one": 213,
    "page_starts": 467,
-   "page_starts_equal": 85,
-   "page_starts_same_paragraph": 143
+   "page_starts_equal": 87,
+   "page_starts_same_paragraph": 145
   },
   "plain": {
    "documents": 950,
@@ -2946,8 +2946,8 @@
    "multipage_pages_equal": 78,
    "multipage_pages_within_one": 85,
    "page_starts": 83,
-   "page_starts_equal": 36,
-   "page_starts_same_paragraph": 50
+   "page_starts_equal": 38,
+   "page_starts_same_paragraph": 51
   }
  },
  "lines": {

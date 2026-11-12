@@ -455,3 +455,18 @@ fn a_face_name_is_read_as_a_family_and_a_style() {
     let choice = fonts.choose(Some("Arial Bold Italic"), false, false, 'a', Model::Word).unwrap();
     assert!(fonts.get(choice.font).bold && fonts.get(choice.font).italic);
 }
+
+#[test]
+fn the_last_line_of_a_page_need_only_fit_as_far_as_its_text() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Triple spacing at 12 pt: 41.4 pt from line to line, of which the text
+    // takes 13.8 pt and the rest is leading below it. The page is 697.9 pt
+    // tall: sixteen whole lines, and the text of a seventeenth. Word puts
+    // seventeen on the page (its record of where page 2 begins in
+    // `paragraph-line space.docx` of the Open XML SDK's test files and in
+    // LibreOffice's `firstheadernofooter.docx`).
+    let one = paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:line="720" w:lineRule="auto"/>"#, "One line.");
+    let pages = pages(&Source { body: &one.repeat(20), ..Source::default() }, &fonts, Model::Word);
+    assert_eq!(pages.iter().map(|page| page.lines.len()).collect::<Vec<_>>(), [17, 3]);
+    assert!(close(pitches(&pages[0])[0], 41.4, 0.01));
+}
