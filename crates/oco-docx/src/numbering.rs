@@ -156,11 +156,16 @@ impl Numbering {
         num.level_overrides.get(&ilvl).or_else(|| self.abstract_of(num_id)?.1.levels.get(&ilvl))
     }
 
-    /// The depth of the level in list `num_id` that belongs to paragraph
-    /// style `style_id`, which is how a numbered heading finds its level.
-    pub fn level_for_style(&self, num_id: i32, style_id: &str) -> Option<usize> {
-        let (_, definition) = self.abstract_of(num_id)?;
-        definition.levels.iter().find(|(_, level)| level.style.as_deref() == Some(style_id)).map(|(ilvl, _)| *ilvl)
+    /// The paragraph style that level `ilvl` of list `num_id` names with
+    /// `w:pStyle`. This is read from the list's definition: an instance's
+    /// override of the level does not change whose level it is.
+    pub fn level_style(&self, num_id: i32, ilvl: usize) -> Option<&str> {
+        self.abstract_of(num_id)?.1.levels.get(&ilvl)?.style.as_deref()
+    }
+
+    /// Whether two list instances are instances of the same definition.
+    pub fn same_definition(&self, a: i32, b: i32) -> bool {
+        matches!((self.abstract_of(a), self.abstract_of(b)), (Some((x, _)), Some((y, _))) if x == y)
     }
 
     pub fn is_empty(&self) -> bool {

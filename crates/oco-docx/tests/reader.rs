@@ -822,12 +822,12 @@ fn a_numbered_heading_takes_its_level_and_indent_from_the_list() {
         r#"<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="H1"/><w:lvlText w:val="%1"/><w:pPr><w:ind w:left="432" w:hanging="432"/></w:pPr></w:lvl>"#,
         r#"<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:pStyle w:val="H2"/><w:lvlText w:val="%1.%2"/><w:pPr><w:ind w:left="576" w:hanging="576"/></w:pPr></w:lvl>"#,
     );
-    // Both styles name the list; neither says which level. The level is the
-    // one that names the style.
+    // Both styles name the list, as Word writes numbered headings: the
+    // first level goes unsaid, any other is stated.
     let styles = r#"
         <w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>
         <w:style w:type="paragraph" w:styleId="H1"><w:pPr><w:numPr><w:numId w:val="5"/></w:numPr><w:ind w:left="100"/></w:pPr></w:style>
-        <w:style w:type="paragraph" w:styleId="H2"><w:pPr><w:numPr><w:numId w:val="5"/></w:numPr></w:pPr></w:style>"#;
+        <w:style w:type="paragraph" w:styleId="H2"><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="5"/></w:numPr></w:pPr></w:style>"#;
     let heading = |style: &str, extra: &str| format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/>{extra}</w:pPr></w:p>"#);
     let body = [
         heading("H1", ""),
@@ -853,6 +853,79 @@ fn a_numbered_heading_takes_its_level_and_indent_from_the_list() {
     assert_eq!(indent(1), (Some(576), Some(576)));
     assert_eq!(indent(2), (Some(720), Some(576)));
     assert_eq!(indent(4), (None, None));
+}
+
+#[test]
+fn a_list_level_numbers_the_paragraphs_of_one_style_only() {
+    // As measured in Word (docx4j's probes `numbering-linked-level-other-style`,
+    // `numbering-unlinked-level-claim` and `numbering-shared-abstract-styles`).
+    let numbering = format!(
+        r#"<w:abstractNum w:abstractNumId="0">{}{}{}</w:abstractNum>
+           <w:num w:numId="100"><w:abstractNumId w:val="0"/></w:num>
+           <w:num w:numId="101"><w:abstractNumId w:val="0"/></w:num>"#,
+        level(0, "decimal", "A%1", r#"<w:pStyle w:val="Owner"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>"#),
+        level(1, "decimal", "B%2", ""),
+        level(2, "decimal", "C%3", r#"<w:pStyle w:val="NamedByTwo"/>"#),
+    );
+    let style = |id: &str, based_on: &str, num: &str| {
+        format!(
+            r#"<w:style w:type="paragraph" w:styleId="{id}"><w:basedOn w:val="{based_on}"/><w:pPr>{num}</w:pPr></w:style>"#
+        )
+    };
+    let list = |num_id: u8| format!(r#"<w:numPr><w:numId w:val="{num_id}"/></w:numPr>"#);
+    let at_one = r#"<w:numPr><w:ilvl w:val="1"/><w:numId w:val="100"/></w:numPr>"#;
+    let styles = [
+        r#"<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>"#.to_owned(),
+        style("Owner", "Normal", &list(100)),
+        style("Other", "Normal", &list(100)),
+        style("Derived", "Owner", ""),
+        style("OtherInstance", "Normal", &list(101)),
+        // Level 2 names this style, but its own numPr reads the first level.
+        style("NamedByTwo", "Normal", &list(100)),
+        // No style is named by level 1: the first to claim it in this part owns it.
+        style("FirstAtOne", "Normal", at_one),
+        style("SecondAtOne", "Normal", at_one),
+    ]
+    .concat();
+    let of = |style: &str, extra: &str| format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/>{extra}</w:pPr></w:p>"#);
+    let direct = r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="100"/></w:numPr>"#;
+    let cases = [
+        (of("Other", ""), "-"),
+        (of("Owner", ""), "A1"),
+        (of("Derived", ""), "A2"),
+        (of("OtherInstance", ""), "-"),
+        (of("NamedByTwo", ""), "-"),
+        (of("SecondAtOne", ""), "-"),
+        (of("FirstAtOne", ""), "B1"),
+        // Numbering on the paragraph itself always numbers it.
+        (of("Other", direct), "A3"),
+        (of("Owner", ""), "A4"),
+    ];
+    let body: String = cases.iter().map(|(paragraph, _)| paragraph.as_str()).collect();
+    let docx = numbered(&body, &styles, &numbering);
+    assert_eq!(labels(&docx), cases.map(|(_, label)| label));
+
+    // A paragraph the level does not number still takes the level's indents.
+    let other = docx.resolver().paragraph(&docx.document.paragraphs()[0].props);
+    assert_eq!((other.numbering, other.indent.left, other.indent.hanging), (None, Some(720), Some(360)));
+}
+
+#[test]
+fn theme_fonts_fall_back_to_the_office_theme_when_there_is_no_theme_part() {
+    // As measured in Word (docx4j's probe `theme-fonts-no-theme-part`).
+    let run = |fonts: &str| format!("<w:r><w:rPr><w:rFonts {fonts}/></w:rPr><w:t>x</w:t></w:r>");
+    let body = format!(
+        "<w:p>{}{}{}</w:p>",
+        run(r#"w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi""#),
+        run(r#"w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorAscii""#),
+        run(r#"w:eastAsiaTheme="minorEastAsia" w:ascii="Arial""#),
+    );
+    let runs = resolved_runs(&docx(&body, ""));
+    assert_eq!((runs[0].fonts.ascii.clone(), runs[0].fonts.h_ansi.clone()), (name("Calibri"), name("Calibri")));
+    assert_eq!((runs[1].fonts.ascii.clone(), runs[1].fonts.h_ansi.clone()), (name("Cambria"), name("Cambria")));
+    // Only the Latin slots: the East Asian one depends on the language.
+    assert_eq!(runs[2].fonts.east_asia, Some(FontRef::Theme("minorEastAsia".into())));
+    assert_eq!(runs[2].fonts.ascii, name("Arial"));
 }
 
 #[test]

@@ -35,6 +35,9 @@ pub struct StyleSheet {
     pub default_para: ParaProps,
     pub default_run: RunProps,
     styles: HashMap<String, Style>,
+    /// Style ids in the order the part defines them, which Word consults
+    /// when two styles lay claim to one list level.
+    order: Vec<String>,
     default_paragraph_style: Option<String>,
     default_character_style: Option<String>,
 }
@@ -101,7 +104,15 @@ impl StyleSheet {
                 _ => {}
             }
         }
+        if !self.styles.contains_key(&style.id) {
+            self.order.push(style.id.clone());
+        }
         self.styles.insert(style.id.clone(), style);
+    }
+
+    /// Every style, in the order the styles part defines them.
+    pub fn in_order(&self) -> impl Iterator<Item = &Style> {
+        self.order.iter().filter_map(|id| self.styles.get(id))
     }
 
     pub fn get(&self, id: &str) -> Option<&Style> {

@@ -42,20 +42,21 @@ impl<'a> Resolver<'a> {
         let direct_list = direct.numbering.as_ref().and_then(|n| n.num_id);
         match list {
             Some((num_id, stated_level)) => {
-                // A list named by a style uses the level that belongs to that
-                // style; this is how numbered headings find their depth.
-                let from_style = if direct_list.is_none() {
-                    chain.iter().rev().find_map(|style| self.numbering.level_for_style(num_id, &style.id))
-                } else {
-                    None
-                };
-                let ilvl = from_style.or(stated_level.and_then(|l| usize::try_from(l).ok())).unwrap_or(0).min(8);
+                // The level is the one stated, by the paragraph or by its
+                // style, and the first when neither states one. That a level
+                // names the style with `w:pStyle` does not put the style's
+                // paragraphs at that level (measured in Word, against
+                // ECMA-376 17.9.24).
+                let ilvl = stated_level.and_then(|l| usize::try_from(l).ok()).unwrap_or(0).min(8);
+                let numbered = direct_list.is_some() || self.owns_level(&chain, num_id, ilvl);
+                out.numbering = None;
                 if let Some(level) = self.numbering.level(num_id, ilvl) {
                     // The level's indents beat the style's; direct formatting beats both.
+                    // They apply even to a paragraph the level does not number.
                     out.apply(&level.para);
                     out.apply(direct);
                     out.style_id = chain.last().map(|s| s.id.clone());
-                    out.numbering = Some(NumRef { num_id: Some(num_id), level: Some(ilvl as i32) });
+                    out.numbering = numbered.then_some(NumRef { num_id: Some(num_id), level: Some(ilvl as i32) });
                 }
             }
             // `numId` 0 takes a paragraph out of the list its style puts it
@@ -68,6 +69,31 @@ impl<'a> Resolver<'a> {
             None => out.numbering = None,
         }
         out
+    }
+
+    /// Whether level `ilvl` of list `num_id` numbers a paragraph that got the
+    /// list from its style, where `chain` is the paragraph's style chain.
+    ///
+    /// Measured in Word (docx4j's probes `numbering-linked-level-other-style`,
+    /// `numbering-unlinked-level-claim` and `numbering-shared-abstract-styles`):
+    /// a level belongs to one paragraph style. That is the style the level
+    /// names with `w:pStyle`, or else the first style in the styles part
+    /// whose own `w:numPr` names the level, through any instance of the
+    /// list's definition. Paragraphs of that style, or of a style based on
+    /// it, are numbered. Paragraphs of any other style that carries the list
+    /// get the level's indents but no label, and are not counted.
+    fn owns_level(&self, chain: &[&Style], num_id: i32, ilvl: usize) -> bool {
+        let owner = self.numbering.level_style(num_id, ilvl).or_else(|| {
+            let claims = |style: &&Style| {
+                style.kind == StyleKind::Paragraph
+                    && style.para.numbering.as_ref().is_some_and(|own| {
+                        own.num_id.is_some_and(|id| self.numbering.same_definition(id, num_id))
+                            && own.level.map_or(0, |level| level.max(0) as usize) == ilvl
+                    })
+            };
+            self.styles.in_order().find(claims).map(|style| style.id.as_str())
+        });
+        owner.is_none_or(|owner| chain.iter().any(|style| style.id == owner))
     }
 
     /// The list level a resolved paragraph belongs to, if it is a list item.
@@ -127,7 +153,17 @@ impl<'a> Resolver<'a> {
         let Some(FontRef::Theme(name)) = slot else {
             return;
         };
-        if let Some(typeface) = self.theme.and_then(|t| t.resolve(name, self.theme_lang)) {
+        let typeface = match self.theme {
+            Some(theme) => theme.resolve(name, self.theme_lang),
+            // A document with no theme part gets the fonts of the Office
+            // theme for its Latin theme references (measured in Word:
+            // docx4j's probe `theme-fonts-no-theme-part`).
+            None if name.ends_with("Ascii") || name.ends_with("HAnsi") => {
+                Some(if name.starts_with("major") { "Cambria" } else { "Calibri" })
+            }
+            None => None,
+        };
+        if let Some(typeface) = typeface {
             *slot = Some(FontRef::Name(typeface.to_owned()));
         }
     }
