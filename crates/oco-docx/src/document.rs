@@ -6,7 +6,8 @@
 
 use std::collections::HashSet;
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
@@ -19,7 +20,8 @@ use crate::xml::{elements, mc_branch, preserves_space, text_of, w_attr, w_name};
 /// a hostile file. Word itself stops far earlier.
 const MAX_NESTING: usize = 64;
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Document {
     pub body: Vec<Block>,
     /// Page setup of the last section, or of the whole document when it has
@@ -30,14 +32,16 @@ pub struct Document {
 // Paragraphs are by far the common case, so boxing them to shrink the rarer
 // `Table` variant would cost an allocation per paragraph for nothing.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Block {
     Paragraph(Paragraph),
     Table(Table),
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Paragraph {
     pub props: ParaProps,
     /// Formatting of the paragraph mark. It sets the height of an empty paragraph.
@@ -48,7 +52,8 @@ pub struct Paragraph {
     pub section_break: Option<Section>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Run {
     pub props: RunProps,
     pub content: Vec<RunContent>,
@@ -56,7 +61,7 @@ pub struct Run {
     pub revision: Option<Revision>,
     /// Where the parts of complex fields fall in `content`, while the
     /// paragraph is being read; empty afterwards.
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub(crate) field_marks: Vec<(usize, FieldMark)>,
 }
 
@@ -69,8 +74,9 @@ pub(crate) enum FieldMark {
     End,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum RunContent {
     Text(String),
     Tab,
@@ -93,8 +99,9 @@ pub enum RunContent {
     PageCount(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum BreakKind {
     Line,
     Page,
@@ -102,7 +109,8 @@ pub enum BreakKind {
 }
 
 /// A tracked change (`w:ins`, `w:del`, `w:moveFrom`, `w:moveTo`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Revision {
     pub kind: RevisionKind,
     pub author: Option<String>,
@@ -111,8 +119,9 @@ pub struct Revision {
     pub id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum RevisionKind {
     Inserted,
     Deleted,
@@ -127,7 +136,8 @@ impl RevisionKind {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Table {
     pub props: TableProps,
     /// `w:tblGrid`: the width of each column, in twips.
@@ -135,13 +145,15 @@ pub struct Table {
     pub rows: Vec<TableRow>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct TableRow {
     pub props: RowProps,
     pub cells: Vec<TableCell>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct TableCell {
     pub props: CellProps,
     pub blocks: Vec<Block>,
@@ -181,15 +193,15 @@ impl Paragraph {
 
 impl Document {
     /// The content of a header or footer part (`w:hdr`, `w:ftr`).
-    pub(crate) fn parse_story(xml: &str, coverage: &mut Coverage) -> Result<Vec<Block>, roxmltree::Error> {
-        let tree = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse_story(xml: &str, coverage: &mut Coverage) -> Result<Vec<Block>, crate::xmltree::Error> {
+        let tree = crate::xmltree::Document::parse(xml)?;
         let mut blocks = Vec::new();
         parse_blocks(tree.root_element(), 0, &mut blocks, coverage);
         Ok(blocks)
     }
 
-    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut document = Document::default();
         read_root(doc.root_element(), &mut document, coverage);
         Ok(document)

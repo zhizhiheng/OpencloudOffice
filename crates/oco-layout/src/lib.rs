@@ -23,6 +23,7 @@ use oco_docx::{
     format_number, Block, BreakKind, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section,
     SectionStart, StoryRefs, VerticalMerge,
 };
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 pub use fonts::{FontDb, FontId, Model};
@@ -105,7 +106,8 @@ impl Item {
 }
 
 /// Where a line of text ended up, for comparing against a reference.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PlacedLine {
     pub baseline: f32,
     pub x0: f32,
@@ -116,7 +118,8 @@ pub struct PlacedLine {
 /// A place in the document's content: a paragraph, by its index in
 /// [`oco_docx::Document::paragraphs`], and how many pieces of its
 /// [`content`] come before.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Position {
     pub paragraph: usize,
     pub offset: usize,

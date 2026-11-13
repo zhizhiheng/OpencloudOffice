@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
@@ -9,8 +10,9 @@ use crate::props::{ParaProps, RunProps};
 use crate::table::TableProps;
 use crate::xml::{elements, val, w_attr, w_child, w_name};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum StyleKind {
     Paragraph,
     Character,
@@ -18,7 +20,8 @@ pub enum StyleKind {
     Numbering,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Style {
     pub id: String,
     /// Display name, e.g. `heading 1`. Ids are locale-dependent; names are not.
@@ -32,7 +35,8 @@ pub struct Style {
     pub table: TableProps,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct StyleSheet {
     /// `w:docDefaults`: the base of every paragraph's and run's formatting.
     pub default_para: ParaProps,
@@ -47,8 +51,8 @@ pub struct StyleSheet {
 }
 
 impl StyleSheet {
-    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut sheet = StyleSheet::default();
         for node in elements(doc.root_element()) {
             match w_name(node) {
@@ -70,7 +74,7 @@ impl StyleSheet {
         Ok(sheet)
     }
 
-    fn add(&mut self, node: roxmltree::Node, coverage: &mut Coverage) {
+    fn add(&mut self, node: crate::xmltree::Node, coverage: &mut Coverage) {
         let Some(id) = w_attr(node, "styleId") else {
             return;
         };

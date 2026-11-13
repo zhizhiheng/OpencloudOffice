@@ -1,5 +1,6 @@
 //! Document statistics from the extended properties part (`docProps/app.xml`).
 
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 /// What the application that last saved the document recorded about it.
@@ -9,7 +10,8 @@ use serde::Serialize;
 /// needs no copy of Word to obtain. They describe the document as it was
 /// when the statistics were last updated, so check `characters` against the
 /// text actually present before trusting the rest.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Statistics {
     pub application: Option<String>,
     pub pages: Option<u32>,
@@ -22,8 +24,8 @@ pub struct Statistics {
 }
 
 impl Statistics {
-    pub(crate) fn parse(xml: &str) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut statistics = Statistics::default();
         for node in doc.root_element().children().filter(|n| n.is_element()) {
             let text = node.text().unwrap_or_default().trim();

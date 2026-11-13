@@ -12,7 +12,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
@@ -20,8 +21,9 @@ use crate::props::{ParaProps, RunProps};
 use crate::xml::{elements, int, val, w_attr, w_child, w_name};
 
 /// What follows the label before the paragraph text begins.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Suffix {
     /// A tab, running to the hanging indent or the next tab stop.
     #[default]
@@ -30,8 +32,9 @@ pub enum Suffix {
     Nothing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum LabelAlign {
     #[default]
     Left,
@@ -40,7 +43,8 @@ pub enum LabelAlign {
 }
 
 /// One level of a list definition (`w:lvl`).
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Level {
     pub start: i32,
     /// `ST_NumberFormat` value: `decimal`, `chineseCounting`, `bullet`, ...
@@ -62,7 +66,8 @@ pub struct Level {
     pub run: RunProps,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 struct AbstractNum {
     levels: HashMap<usize, Level>,
     /// Name of a numbering style this definition delegates to.
@@ -71,22 +76,24 @@ struct AbstractNum {
     style_link: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 struct Num {
     abstract_id: i32,
     start_overrides: HashMap<usize, i32>,
     level_overrides: HashMap<usize, Level>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Numbering {
     abstracts: HashMap<i32, AbstractNum>,
     nums: HashMap<i32, Num>,
 }
 
 impl Numbering {
-    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut numbering = Numbering::default();
         for node in elements(doc.root_element()) {
             match w_name(node) {
@@ -212,7 +219,8 @@ fn parse_level(node: Node, coverage: &mut Coverage) -> Level {
 }
 
 /// The label of one paragraph.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Label {
     pub text: String,
     pub num_id: i32,

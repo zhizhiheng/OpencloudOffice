@@ -4,16 +4,16 @@
 use std::collections::HashMap;
 use std::io::{Read, Seek};
 
-use zip::ZipArchive;
-
 use crate::error::{Error, Result};
+use crate::xmltree;
+use crate::zip::{self, Archive};
 
 /// Upper bound on the uncompressed size of a single part. Guards against
 /// decompression bombs; real document parts are orders of magnitude smaller.
 pub const MAX_PART_SIZE: u64 = 256 * 1024 * 1024;
 
 pub struct Package<R> {
-    archive: ZipArchive<R>,
+    archive: Archive<R>,
     /// Normalised part name -> zip entry index.
     index: HashMap<String, usize>,
 }
@@ -29,12 +29,10 @@ pub struct Relationship {
 
 impl<R: Read + Seek> Package<R> {
     pub fn new(reader: R) -> Result<Self> {
-        let archive = ZipArchive::new(reader)?;
+        let archive = Archive::new(reader)?;
         let mut index = HashMap::new();
-        for i in 0..archive.len() {
-            if let Some(Ok(name)) = archive.name_for_index(i) {
-                index.entry(normalize(&name)).or_insert(i);
-            }
+        for (i, entry) in archive.entries().iter().enumerate() {
+            index.entry(normalize(&entry.name)).or_insert(i);
         }
         Ok(Self { archive, index })
     }
@@ -48,18 +46,12 @@ impl<R: Read + Seek> Package<R> {
         let Some(&i) = self.index.get(&normalize(name)) else {
             return Ok(None);
         };
-        let too_large = || Error::PartTooLarge { part: name.to_owned(), limit: MAX_PART_SIZE };
-        let mut file = self.archive.by_index(i)?;
-        if file.size() > MAX_PART_SIZE {
-            return Err(too_large());
+        // The size an entry declares is not to be trusted; the archive caps the actual read too.
+        match self.archive.read(i, MAX_PART_SIZE) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(zip::Error::TooLarge) => Err(Error::PartTooLarge { part: name.to_owned(), limit: MAX_PART_SIZE }),
+            Err(error) => Err(error.into()),
         }
-        // The declared size is attacker-controlled, so cap the actual read too.
-        let mut bytes = Vec::new();
-        (&mut file).take(MAX_PART_SIZE + 1).read_to_end(&mut bytes)?;
-        if bytes.len() as u64 > MAX_PART_SIZE {
-            return Err(too_large());
-        }
-        Ok(Some(bytes))
     }
 
     /// Reads an XML part as text. Parts are UTF-8 or UTF-16 (Part 2 §8.1.4).
@@ -83,7 +75,7 @@ impl<R: Read + Seek> Package<R> {
         let Some(xml) = self.read_xml(&rels_part)? else {
             return Ok(Vec::new());
         };
-        let doc = roxmltree::Document::parse(&xml).map_err(|source| Error::Xml { part: rels_part.clone(), source })?;
+        let doc = xmltree::Document::parse(&xml).map_err(|source| Error::Xml { part: rels_part.clone(), source })?;
         let base_dir = source.map(|s| split_dir(s).0).unwrap_or("");
         let relationships = doc
             .root_element()

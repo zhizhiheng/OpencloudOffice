@@ -1,9 +1,9 @@
-//! Small helpers over `roxmltree` for namespace-aware access to WordprocessingML.
+//! Small helpers for namespace-aware access to WordprocessingML.
 //!
 //! Documents exist in two flavours with different namespace URIs: Transitional
 //! (what Word writes by default) and ISO Strict. Everything here accepts both.
 
-use roxmltree::Node;
+use crate::xmltree::Node;
 
 pub(crate) const W_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 pub(crate) const W_NS_STRICT: &str = "http://purl.oclc.org/ooxml/wordprocessingml/main";

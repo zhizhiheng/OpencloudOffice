@@ -4811,9 +4811,9 @@
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/case-variant-exact-first.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/case-variant-exact-last.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/control-one-main.docx": "agrees",
-   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-central-reversed.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-central-reversed.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-content-types.docx": "agrees",
-   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-document.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-document.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-part-rels.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/dup-entry-same-bytes.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/one-main-rel-document-override-last.docx": "agrees",
@@ -4833,8 +4833,8 @@
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-other-first.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-types-other-first.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-main-rels-zip-other-first.docx": "agrees",
-   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-document-first.docx": "text differs",
-   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-other-first.docx": "text differs",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-document-first.docx": "agrees",
+   "docx4j/docx4j-core-tests/src/test/resources/package-wiring/two-rels-entries-other-first.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-30-sdtcontent-run.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-31-sdtcontent-row.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/repeated/c79-32-sdtcontent-cell.docx": "agrees",
@@ -5236,7 +5236,7 @@
   }
  },
  "reading": {
-  "agree": 307,
+  "agree": 311,
   "pairs": 370
  }
 }

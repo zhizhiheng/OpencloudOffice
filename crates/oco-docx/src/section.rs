@@ -1,13 +1,15 @@
 //! Section properties (`w:sectPr`): page size, margins and the document grid.
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
 use crate::xml::{elements, int, twips, val, w_attr, w_name};
 
 /// The page setup of one section. All lengths are in twips (1/20 pt).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Section {
     pub page_width: i32,
     pub page_height: i32,
@@ -40,7 +42,8 @@ pub struct Section {
 }
 
 /// The header or footer for each kind of page, by relationship id.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct StoryRefs {
     /// For every page that has none of its own.
     pub default: Option<String>,
@@ -80,7 +83,8 @@ impl Default for Section {
 
 /// The document grid (`w:docGrid`), which East Asian documents use to fix
 /// the number of lines per page, and sometimes characters per line.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct DocGrid {
     pub kind: GridKind,
     /// Distance between grid lines in twips.
@@ -89,8 +93,9 @@ pub struct DocGrid {
     pub char_space: i32,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum GridKind {
     #[default]
     None,
@@ -101,8 +106,9 @@ pub enum GridKind {
     SnapToChars,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum SectionStart {
     NextPage,
     Continuous,

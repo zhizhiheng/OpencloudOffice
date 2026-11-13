@@ -6,13 +6,10 @@
 //! system, and for Chinese text the fonts fetched by tools/fonts/fetch.sh.
 //! A test whose fonts are missing prints a notice and passes vacuously.
 
-use std::io::{Cursor, Write};
 use std::path::Path;
 
 use oco_docx::Docx;
 use oco_layout::{content, layout, Content, FontDb, Model, Options, Page, Position};
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, ZipWriter};
 
 const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
 const RELS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -92,13 +89,11 @@ fn docx(source: &Source) -> Docx {
         let root = if *kind == "header" { "hdr" } else { "ftr" };
         parts.push((format!("word/{id}.xml"), format!("<w:{root} {W}>{content}</w:{root}>")));
     }
-    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let mut writer = oco_docx::zip::Writer::new();
     for (name, content) in parts {
-        writer.start_file(name, options).unwrap();
-        writer.write_all(content.as_bytes()).unwrap();
+        writer.add(&name, content.as_bytes());
     }
-    Docx::from_bytes(&writer.finish().unwrap().into_inner()).unwrap()
+    Docx::from_bytes(&writer.finish()).unwrap()
 }
 
 /// Loads the fonts, or `None` (with a notice) when one of `needed` is absent.

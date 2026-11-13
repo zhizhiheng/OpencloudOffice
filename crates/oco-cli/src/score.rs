@@ -447,7 +447,6 @@ fn summary(report: &Report) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Write as _};
 
     use super::*;
 
@@ -457,12 +456,11 @@ mod tests {
             ("word/document.xml", format!("<w:document {word}><w:body>{body}</w:body></w:document>")),
             ("docProps/app.xml", format!("<Properties>{app}</Properties>")),
         ];
-        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let mut writer = oco_docx::zip::Writer::new();
         for (name, content) in parts {
-            writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
-            writer.write_all(content.as_bytes()).unwrap();
+            writer.add(name, content.as_bytes());
         }
-        Docx::from_bytes(&writer.finish().unwrap().into_inner()).unwrap()
+        Docx::from_bytes(&writer.finish()).unwrap()
     }
 
     fn hints(body: &str) -> Vec<(usize, usize, bool)> {

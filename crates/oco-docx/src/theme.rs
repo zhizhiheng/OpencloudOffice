@@ -8,11 +8,13 @@
 
 use std::collections::HashMap;
 
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::xml::{elements, w_attr, w_name};
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 struct FontSet {
     latin: Option<String>,
     east_asia: Option<String>,
@@ -21,7 +23,8 @@ struct FontSet {
     by_script: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ThemeFonts {
     /// Heading fonts.
     major: FontSet,
@@ -30,7 +33,8 @@ pub struct ThemeFonts {
 }
 
 /// `w:themeFontLang` from the settings part.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ThemeFontLang {
     pub latin: Option<String>,
     pub east_asia: Option<String>,
@@ -38,8 +42,8 @@ pub struct ThemeFontLang {
 }
 
 impl ThemeFonts {
-    pub(crate) fn parse(xml: &str) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut theme = ThemeFonts::default();
         // DrawingML also has Transitional and Strict namespaces; inside a theme
         // part the local names are unambiguous, so match on those.
@@ -88,14 +92,15 @@ impl ThemeFonts {
 }
 
 impl ThemeFontLang {
-    fn parse(node: roxmltree::Node) -> Self {
+    fn parse(node: crate::xmltree::Node) -> Self {
         let get = |name| w_attr(node, name).map(str::to_owned);
         ThemeFontLang { latin: get("val"), east_asia: get("eastAsia"), bidi: get("bidi") }
     }
 }
 
 /// Document-wide settings (`word/settings.xml`) that affect how text is laid out.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Settings {
     pub theme_lang: ThemeFontLang,
     /// Spacing of the default tab stops, in twips.
@@ -130,8 +135,8 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub(crate) fn parse(xml: &str) -> Result<Self, roxmltree::Error> {
-        let doc = roxmltree::Document::parse(xml)?;
+    pub(crate) fn parse(xml: &str) -> Result<Self, crate::xmltree::Error> {
+        let doc = crate::xmltree::Document::parse(xml)?;
         let mut settings = Settings::default();
         for node in elements(doc.root_element()) {
             match w_name(node) {

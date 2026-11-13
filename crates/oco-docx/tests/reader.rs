@@ -1,27 +1,21 @@
 //! End-to-end tests of the reader: packages are built in memory so each test
 //! states exactly the markup it depends on, plus two real-world fixtures.
 
-use std::io::{Cursor, Write};
-
 use oco_docx::{
     Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, ParaProps, RevisionKind, RunContent,
     RunProps, Statistics, Underline, VertAlign, VerticalMerge,
 };
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, ZipWriter};
 
 const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
 const PKG_RELS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 const DOC_RELS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 fn zip(parts: &[(&str, String)]) -> Vec<u8> {
-    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let mut writer = oco_docx::zip::Writer::new();
     for (name, content) in parts {
-        writer.start_file(*name, options).unwrap();
-        writer.write_all(content.as_bytes()).unwrap();
+        writer.add(name, content.as_bytes());
     }
-    writer.finish().unwrap().into_inner()
+    writer.finish()
 }
 
 /// A package holding a document with the given body and style definitions.
@@ -659,6 +653,23 @@ fn rejects_files_that_are_not_documents() {
     assert!(matches!(Docx::from_bytes(&no_document), Err(Error::NoMainDocument)));
     let broken = zip(&[("word/document.xml", "<w:document".to_owned())]);
     assert!(matches!(Docx::from_bytes(&broken), Err(Error::Xml { part, .. }) if part == "word/document.xml"));
+}
+
+#[test]
+fn of_two_entries_with_one_name_the_first_in_the_directory_is_read() {
+    let part =
+        |text: &str| format!("<w:document {W}><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>");
+    let package = zip(&[("word/document.xml", part("first")), ("word/document.xml", part("second"))]);
+    let docx = Docx::from_bytes(&package).unwrap();
+    let Block::Paragraph(paragraph) = &docx.document.body[0] else { panic!("a paragraph") };
+    assert!(matches!(&paragraph.runs[0].content[..], [RunContent::Text(text)] if text == "first"));
+}
+
+#[test]
+fn a_package_with_bytes_in_front_of_it_still_opens() {
+    let mut package = b"something a mail gateway put here".to_vec();
+    package.extend(zip(&[("word/document.xml", format!("<w:document {W}><w:body/></w:document>"))]));
+    assert!(Docx::from_bytes(&package).is_ok());
 }
 
 // ------------------------------------------------------ how Word reads things

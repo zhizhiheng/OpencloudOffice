@@ -3,7 +3,8 @@
 //! Every field is optional: `None` means "not specified at this level", which
 //! is what lets one level of the style hierarchy be layered over another.
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
@@ -18,8 +19,9 @@ macro_rules! overlay {
 }
 
 /// A font named directly, or by reference to a slot of the document theme.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum FontRef {
     Name(String),
     /// A theme slot such as `minorEastAsia`; see [`crate::theme::ThemeFonts::resolve`].
@@ -27,7 +29,8 @@ pub enum FontRef {
 }
 
 /// `w:rFonts`: one font per script category. Word picks the slot per character.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Fonts {
     /// Basic Latin (U+0000..U+007F).
     pub ascii: Option<FontRef>,
@@ -63,7 +66,8 @@ impl Fonts {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct RunProps {
     /// Character style (`w:rStyle`).
     pub style_id: Option<String>,
@@ -113,7 +117,8 @@ pub struct RunProps {
 }
 
 /// One edge of a border, or the box around a run (`w:bdr`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Border {
     /// Line style: `single`, `double`, `dashed`, ... or `nil`/`none` for no line.
     pub style: String,
@@ -219,7 +224,8 @@ impl RunProps {
 /// `w:ind`. Lengths are in twips (1/20 pt); the `*_chars` variants are in
 /// hundredths of a character width and take precedence when present. They are
 /// how Chinese documents express "indent the first line by two characters".
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Indent {
     pub left: Option<i32>,
     pub right: Option<i32>,
@@ -265,7 +271,8 @@ impl Indent {
 
 /// `w:spacing` on a paragraph. `before`/`after` are in twips; `line` is in
 /// twips or in 240ths of a line, depending on `line_rule`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Spacing {
     pub before: Option<i32>,
     pub after: Option<i32>,
@@ -312,14 +319,16 @@ impl Spacing {
 }
 
 /// `w:numPr`: membership of a numbered or bulleted list.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct NumRef {
     pub num_id: Option<i32>,
     pub level: Option<i32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum TabKind {
     Left,
     Center,
@@ -331,7 +340,8 @@ pub enum TabKind {
 }
 
 /// A custom tab stop (`w:tab` inside `w:tabs`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct TabStop {
     pub kind: TabKind,
     /// Distance from the left margin in twips.
@@ -360,7 +370,8 @@ impl TabStop {
 }
 
 /// Borders around a paragraph (`w:pBdr`).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ParaBorders {
     pub top: Option<Border>,
     pub left: Option<Border>,
@@ -376,7 +387,8 @@ impl ParaBorders {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ParaProps {
     /// Paragraph style (`w:pStyle`).
     pub style_id: Option<String>,

@@ -1,36 +1,66 @@
-use thiserror::Error;
+use std::fmt;
+
+use crate::{xmltree, zip};
 
 /// Errors raised while opening or parsing a `.docx` package.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("i/o error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("not a valid zip package: {0}")]
-    Zip(#[from] zip::result::ZipError),
-
-    #[error("malformed XML in part `{part}`: {source}")]
+    Io(std::io::Error),
+    Zip(zip::Error),
     Xml {
         part: String,
-        #[source]
-        source: roxmltree::Error,
+        source: xmltree::Error,
     },
-
-    #[error("part `{0}` is neither UTF-8 nor UTF-16")]
     Encoding(String),
-
-    #[error("part `{part}` is larger than the {limit}-byte limit")]
-    PartTooLarge { part: String, limit: u64 },
-
-    #[error("the package has no main document part")]
+    PartTooLarge {
+        part: String,
+        limit: u64,
+    },
     NoMainDocument,
-
     /// The file is a recognisable format, just not a `.docx` package.
-    #[error("not a .docx package: {0}")]
     OtherFormat(OtherFormat),
-
-    #[error("part `{0}` is referenced but missing from the package")]
     MissingPart(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Io(error) => write!(f, "i/o error: {error}"),
+            Error::Zip(error) => write!(f, "not a valid zip package: {error}"),
+            Error::Xml { part, source } => write!(f, "malformed XML in part `{part}`: {source}"),
+            Error::Encoding(part) => write!(f, "part `{part}` is neither UTF-8 nor UTF-16"),
+            Error::PartTooLarge { part, limit } => write!(f, "part `{part}` is larger than the {limit}-byte limit"),
+            Error::NoMainDocument => f.write_str("the package has no main document part"),
+            Error::OtherFormat(format) => write!(f, "not a .docx package: {format}"),
+            Error::MissingPart(part) => write!(f, "part `{part}` is referenced but missing from the package"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Io(error) => Some(error),
+            Error::Zip(error) => Some(error),
+            Error::Xml { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Error::Io(error)
+    }
+}
+
+impl From<zip::Error> for Error {
+    fn from(error: zip::Error) -> Self {
+        match error {
+            zip::Error::Io(error) => Error::Io(error),
+            other => Error::Zip(other),
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -45,8 +75,8 @@ pub enum OtherFormat {
     OpenDocument,
 }
 
-impl std::fmt::Display for OtherFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for OtherFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             OtherFormat::OleCompoundFile => "OLE compound file (a password-protected document or a legacy .doc)",
             OtherFormat::OpenDocument => "OpenDocument file",

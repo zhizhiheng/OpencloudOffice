@@ -9,6 +9,7 @@
 //! The rules encoded here were measured against Word 365 and are listed with
 //! their sources in `docs/word-behaviour.md`.
 
+#[cfg(feature = "serde")]
 use serde::{Serialize, Serializer};
 
 /// Defines an enumeration whose variants map to exact attribute values.
@@ -34,6 +35,8 @@ macro_rules! exact_values {
                 }
             }
         }
+
+        #[cfg(feature = "serde")]
 
         impl Serialize for $name {
             fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -126,6 +129,7 @@ impl std::fmt::Display for Color {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for Color {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(self)

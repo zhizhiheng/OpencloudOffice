@@ -12,6 +12,7 @@
 mod coverage;
 mod document;
 mod error;
+mod inflate;
 mod numbering;
 pub mod opc;
 mod props;
@@ -23,6 +24,8 @@ mod table;
 mod theme;
 mod values;
 mod xml;
+pub mod xmltree;
+pub mod zip;
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -129,7 +132,7 @@ impl Docx {
         let settings_xml = read_related("/settings");
         let numbering_xml = read_related("/numbering");
 
-        let mut parsed = |kind: &str, error: roxmltree::Error| {
+        let mut parsed = |kind: &str, error: crate::xmltree::Error| {
             warnings.push(format!("the {kind} part is malformed and was ignored: {error}"));
         };
         let styles = styles_xml

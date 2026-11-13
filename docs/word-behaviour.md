@@ -48,6 +48,7 @@
 
 | 规则 | 验证 | 测试 |
 |---|---|---|
+| zip 包内有重名条目时，取目录（文件末尾的中央目录）里排在前面的那个，不看它们在文件里的先后 | 配对（`dup-entry-document`、`dup-central-reversed` 等 4 份） | `of_two_entries_with_one_name_the_first_in_the_directory_is_read` |
 | 兼容性标记（`mc:AlternateContent`）取第一个所需命名空间全部认识的分支；都不认识时取后备分支；没有后备分支则什么都不读 | 配对 | `takes_the_first_compatibility_choice_word_understands` |
 | 未知的 `w:` 命名空间元素不会被跳过，其子元素被当作直接出现在该位置，可以嵌套。其他命名空间的未知元素连同内容一起忽略 | 配对 | `reads_through_unknown_elements_of_the_main_namespace` |
 | 内容控件和自定义 XML 元素可以包裹整行或整个单元格 | 配对；语料中有真实文档 | `content_controls_can_wrap_rows_and_cells` |
@@ -72,7 +73,6 @@
 | 每个字符用哪个字体槽位：ASCII 用西文字体（包括汉字之间的空格和数字），汉字用东亚字体，开启复杂文字标记时整段用复杂文字字体 | 排版阶段需要 |
 | 表格样式的条件格式（首行、首列、镶边等）和它们与段落样式的优先关系（`overrideTableStyleFontSizeAndJustification`） | 表格样式的基本叠加顺序和内置的 Normal Table 已实现，见结构一节 |
 | 整数超出范围时不报错而是按 16 位回绕 | 仅影响异常文件 |
-| zip 包内有重名条目时取目录中的第一个 | 通用 zip 库取最后一个，需要自有的读取层 |
 | 未知元素的细节：未知元素里的段落并入外层段落，段落属性里的文字块提到段首等 | 仅见于探测文档 |
 
 ## LibreOffice 与 Word 不同的地方

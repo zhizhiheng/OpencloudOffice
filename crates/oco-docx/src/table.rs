@@ -6,7 +6,8 @@
 //! borders are drawn is read, but not their styles, and that a table floats,
 //! but not where; shading and conditional formatting are not.
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::coverage::Coverage;
@@ -14,7 +15,8 @@ use crate::props::Border;
 use crate::xml::{elements, int, on_off, twips, val, w_attr, w_name};
 
 /// The blank between a cell's edges and its content, in twips.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct CellMargins {
     pub top: Option<i32>,
     pub left: Option<i32>,
@@ -48,7 +50,8 @@ impl CellMargins {
 }
 
 /// `w:tblPr`, of a table or of a table style.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct TableProps {
     pub style_id: Option<String>,
     /// `w:tblW` when it is a length, in twips.
@@ -150,7 +153,8 @@ impl TableProps {
 }
 
 /// `w:trPr`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct RowProps {
     /// `w:trHeight` in twips: the least the row is tall, or exactly how tall.
     pub height: Option<i32>,
@@ -195,8 +199,9 @@ impl RowProps {
 }
 
 /// How a cell takes part in a vertical merge (`w:vMerge`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum VerticalMerge {
     /// The first cell of the merged group, which holds its content.
     Restart,
@@ -205,7 +210,8 @@ pub enum VerticalMerge {
 }
 
 /// `w:tcPr`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct CellProps {
     /// `w:tcW` when it is a length, in twips.
     pub width: Option<i32>,

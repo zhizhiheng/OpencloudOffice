@@ -11,10 +11,7 @@ name = "oco"
 path = "src/main.rs"
 
 [dependencies]
-oco-docx.workspace = true
-oco-layout.workspace = true
+oco-docx = { workspace = true, features = ["serde"] }
+oco-layout = { workspace = true, features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies]
-zip.workspace = true

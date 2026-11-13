@@ -7,7 +7,9 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-roxmltree.workspace = true
-serde.workspace = true
-thiserror.workspace = true
-zip.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+# Lets the model be written out as JSON. The command-line tool turns it on for its reports;
+# the core itself needs no third-party code.
+serde = ["dep:serde"]

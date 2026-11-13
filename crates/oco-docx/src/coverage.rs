@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use roxmltree::Node;
+use crate::xmltree::Node;
+#[cfg(feature = "serde")]
 use serde::Serialize;
 
 use crate::xml::qualified_name;
@@ -9,7 +10,8 @@ use crate::xml::qualified_name;
 ///
 /// Running this over a corpus of real documents shows which features matter
 /// most, so it doubles as the to-do list for the document model.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Coverage {
     /// Element name (or `parent/child` for properties) -> number of occurrences.
     pub unsupported: BTreeMap<String, usize>,
