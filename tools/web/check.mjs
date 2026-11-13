@@ -29,33 +29,40 @@ if (files.length === 0) {
 
 let pages = 0;
 let different = 0;
+let checked = 0;
+let failed = 0;
 let wasmTime = 0;
 for (const file of files) {
   const out = mkdtempSync(join(tmpdir(), "oco-check-"));
   try {
     execFileSync(join(root, "target/release/oco"), ["render", file, "--out", out], { cwd: root, stdio: "ignore" });
-  } catch {
-    rmSync(out, { recursive: true });
-    continue;
-  }
-  const began = performance.now();
-  const doc = oco.open(readFileSync(file));
-  const count = doc.pageCount;
-  const drawn = Array.from({ length: count }, (_, page) => doc.pageSvg(page));
-  wasmTime += performance.now() - began;
-  doc.close();
+    const began = performance.now();
+    const doc = oco.open(readFileSync(file), file);
+    let drawn;
+    let count;
+    try {
+      count = doc.pageCount;
+      drawn = Array.from({ length: count }, (_, page) => doc.pageSvg(page));
+    } finally { doc.close(); }
+    wasmTime += performance.now() - began;
 
-  const native = readdirSync(out).filter((name) => name.endsWith(".svg")).length;
-  let same = native === count;
-  for (let page = 0; same && page < count; page++) {
-    same = readFileSync(join(out, `page-${page + 1}.svg`), "utf8") === drawn[page];
-  }
-  rmSync(out, { recursive: true });
-  pages += count;
-  if (!same) {
-    different++;
-    console.log(`DIFFERENT ${file} (native ${native} pages, wasm ${count})`);
+    const native = readdirSync(out).filter((name) => name.endsWith(".svg")).length;
+    let same = native === count;
+    for (let page = 0; same && page < count; page++) {
+      same = readFileSync(join(out, `page-${page + 1}.svg`), "utf8") === drawn[page];
+    }
+    checked++;
+    pages += count;
+    if (!same) {
+      different++;
+      console.log(`DIFFERENT ${file} (native ${native} pages, wasm ${count})`);
+    }
+  } catch (error) {
+    failed++;
+    console.error(`FAILED ${file}: ${error.message}`);
+  } finally {
+    rmSync(out, { recursive: true });
   }
 }
-console.log(`${faces} font faces; ${files.length} documents, ${pages} pages; ${different} differ; wasm ${Math.round(wasmTime)} ms`);
-process.exit(different ? 1 : 0);
+console.log(`${faces} font faces; ${checked}/${files.length} documents checked, ${pages} pages; ${different} differ, ${failed} failed; wasm ${Math.round(wasmTime)} ms`);
+process.exit(different || failed || !checked ? 1 : 0);

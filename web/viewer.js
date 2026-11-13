@@ -1,38 +1,39 @@
-// The viewer: opens a .docx from a file, a drop or a URL, and shows its
-// pages as the core lays them out. Everything happens in this page; the
-// document goes nowhere.
-
-import { Oco } from "./oco.js";
+// The UI owns page placeholders and navigation; the worker owns the core.
+import { ViewerClient } from "./viewer-client.js";
 
 const $ = (id) => document.getElementById(id);
 const desk = $("desk");
 const pages = $("pages");
 const status = $("status");
-const bar = $("progress").firstElementChild;
-
-/** CSS pixels per point at 100%. */
+const progressBar = $("progress");
 const PX_PER_PT = 96 / 72;
-/** How many pages keep their drawing while out of sight. */
 const KEEP_DRAWN = 12;
-
+const SEARCH_LIMIT = 1000;
 const NOT_SHOWN = {
-  pictures: "图片",
-  text_boxes: "文本框和形状",
-  embedded_objects: "嵌入对象",
-  notes: "脚注和尾注",
-  equations: "公式",
-  columns: "分栏",
-  frames: "图文框",
-  floating_tables: "浮动表格",
-  comments: "批注",
+  pictures: "图片", text_boxes: "文本框和形状", embedded_objects: "嵌入对象",
+  notes: "脚注和尾注", equations: "公式", columns: "分栏", frames: "图文框",
+  floating_tables: "浮动表格", comments: "批注",
 };
 
-let oco = null;
-/** The open document: its core object, name, page sizes and timings. */
 let current = null;
 let zoom = 1;
 let fitWidth = true;
-let fontCount = 0;
+let ready = false;
+let broken = false;
+let busy = false;
+let updatingFonts = false;
+let openSequence = 0;
+let downloadController = null;
+let viewSequence = 0;
+const visible = new Set();
+const drawn = new Set();
+let rendering = false;
+let searchSequence = 0;
+let searchTimer;
+let matches = [];
+let matchIndex = -1;
+let searchLimited = false;
+let searchPending = false;
 
 function say(message, isError = false) {
   status.textContent = message;
@@ -40,182 +41,271 @@ function say(message, isError = false) {
 }
 
 function progress(fraction) {
-  bar.style.width = fraction === null ? "0" : `${Math.round(fraction * 100)}%`;
+  progressBar.classList.toggle("busy", fraction === undefined);
+  progressBar.firstElementChild.style.width = fraction === undefined ? "" : fraction === null ? "0" : `${Math.round(fraction * 100)}%`;
 }
 
-async function download(url, onProgress) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url}：HTTP ${response.status}`);
-  const total = Number(response.headers.get("content-length")) || 0;
-  if (!response.body || !onProgress) return new Uint8Array(await response.arrayBuffer());
-  const chunks = [];
-  let received = 0;
-  for (const reader = response.body.getReader(); ; ) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    onProgress(received, total);
+function controls() {
+  $("open").disabled = $("open-url").disabled = $("samples").disabled = !ready || broken || updatingFonts;
+  $("add-font").disabled = !ready || busy || broken;
+  const empty = !current?.sizes.length;
+  for (const id of ["zoom-in", "zoom-out", "zoom-fit", "info-toggle", "page-number", "search-toggle"]) {
+    $(id).disabled = empty || broken;
   }
-  const bytes = new Uint8Array(received);
-  let at = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, at);
-    at += chunk.length;
-  }
-  return bytes;
+  indicate();
 }
 
-/** Loads the core and the fonts listed in fonts/index.json, in the order listed. */
+function setBusy(value) {
+  busy = value;
+  desk.setAttribute("aria-busy", String(value));
+  progress(value ? undefined : null);
+  controls();
+}
+
+const client = new ViewerClient({
+  onProgress({ done, total, bytes }) {
+    say(`正在加载字体 ${done}/${total}（${(bytes / 1048576).toFixed(0)} MB）…`);
+    progress(total ? done / total : null);
+  },
+  onFailure(error) {
+    broken = true;
+    setBusy(false);
+    say(error.message, true);
+  },
+});
+
 async function start() {
   say("正在加载排版内核…");
-  oco = await Oco.load(new URL("oco.wasm", import.meta.url));
-
-  let list = [];
-  try {
-    list = await (await fetch("fonts/index.json")).json();
-  } catch {
-    // No font list: the page still works once fonts are added by hand.
-  }
-  const sizes = new Array(list.length).fill(0);
-  const fetched = new Array(list.length);
-  let next = 0;
-  let done = 0;
-  const report = () => {
-    const megabytes = (sizes.reduce((a, b) => a + b, 0) / 1048576).toFixed(0);
-    say(`正在加载字体 ${done}/${list.length}（已下载 ${megabytes} MB，首次较慢，之后由浏览器缓存）`);
-    progress(list.length ? done / list.length : null);
-  };
-  const worker = async () => {
-    while (next < list.length) {
-      const index = next++;
-      try {
-        fetched[index] = await download(`fonts/${list[index]}`, (received) => {
-          sizes[index] = received;
-          report();
-        });
-      } catch (error) {
-        console.warn(error);
-      }
-      done++;
-      report();
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
-  // Fonts are handed over in the listed order: which font stands in for a
-  // missing one depends on it, and the result must not depend on the network.
-  for (const bytes of fetched) {
-    if (bytes) fontCount += oco.addFont(bytes);
-  }
+  const { fonts, failed } = await client.request("init");
+  ready = true;
   progress(null);
-  say(fontCount ? "" : "没有可用的字体。请点击“添加字体”选择字体文件，否则无法排版。", !fontCount);
-
+  controls();
+  say(!fonts ? "没有可用的字体，请点击“添加字体”。" : failed.length ? `${failed.length} 个字体资源未加载，可在文档信息中查看缺失字体。` : "", !fonts);
   try {
-    const samples = await (await fetch("samples/index.json")).json();
-    for (const file of samples) $("samples").append(new Option(file.replace(/\.docx$/, ""), `samples/${file}`));
-    $("samples").hidden = samples.length === 0;
-  } catch {}
-
+    const response = await fetch("samples/index.json");
+    if (response.ok) {
+      const samples = await response.json();
+      for (const file of samples) $("samples").append(new Option(file.replace(/\.docx$/, ""), `samples/${file}`));
+      $("samples").hidden = samples.length === 0;
+    }
+  } catch { /* Samples are optional. */ }
   const wanted = new URLSearchParams(location.search).get("file");
   if (wanted) await openUrl(wanted);
 }
 
-async function openUrl(url) {
-  try {
-    say(`正在下载 ${url} …`);
-    const bytes = await download(url, (received, total) => progress(total ? received / total : null));
-    progress(null);
-    show(bytes, decodeURIComponent(new URL(url, location.href).pathname.split("/").pop() || url));
-  } catch (error) {
-    progress(null);
-    say(`无法下载这个文档：${error.message}`, true);
-  }
+function beginOpen() {
+  downloadController?.abort();
+  downloadController = null;
+  const sequence = ++openSequence;
+  setBusy(true);
+  return sequence;
 }
 
-/** After fonts were handed to the core: shows the open document as it is now laid out, and says what happened. */
-function fontsAdded(added) {
-  fontCount += added;
-  // The core lays open documents out afresh; the sheets have to follow.
-  // This clears the status line, so the news goes there afterwards.
-  if (added && current) arrange();
-  say(added ? `已添加 ${added} 个字体${current ? "，文档已按新的字体重新排版" : ""}。` : "选中的文件不是可用的字体。", !added);
-}
-
-/** Opens the bytes of a document and puts its pages on the desk. */
-function show(bytes, name) {
-  if (!oco) return;
-  let opened;
-  const began = performance.now();
-  try {
-    opened = oco.open(bytes, name);
-  } catch (error) {
-    say(`无法打开“${name}”：${error.message}`, true);
+async function openBytes(bytes, name, sequence) {
+  if (sequence !== openSequence) return;
+  const size = bytes.byteLength;
+  say(`正在排版“${name}”…`);
+  const document = await client.open(bytes, name);
+  if (sequence !== openSequence) {
+    void client.request("release", { revision: document.revision }).catch(() => {});
     return;
   }
-  current?.doc.close();
-  current = { doc: opened, name, bytes: bytes.length, sizes: [], elapsed: 0 };
-  arrange(began);
+  if (current) void client.request("release", { revision: current.revision }).catch(() => {});
+  current = { ...document, name, bytes: size };
+  arrange();
+  say(current.sizes.length ? "" : "文档中没有可显示的页面。");
 }
 
-/** Lays the open document out and builds an empty sheet per page; pages are drawn as they come into view. */
-function arrange(began = performance.now()) {
-  const { doc } = current;
-  const count = doc.pageCount;
-  current.sizes = Array.from({ length: count }, (_, page) => doc.pageSize(page));
-  current.elapsed = performance.now() - began;
-  $("welcome").hidden = true;
-  say("");
-
-  watcher.disconnect();
-  drawn.clear();
-  pages.replaceChildren(
-    ...current.sizes.map((_, page) => {
-      const sheet = document.createElement("div");
-      sheet.className = "page";
-      sheet.dataset.page = page;
-      sheet.setAttribute("aria-label", `第 ${page + 1} 页`);
-      return sheet;
-    }),
-  );
-  resize();
-  for (const sheet of pages.children) watcher.observe(sheet);
-  desk.scrollTop = 0;
-  indicate();
-  describe();
+async function openFile(file) {
+  if (!ready || broken || updatingFonts) return;
+  const sequence = beginOpen();
+  $("samples").value = "";
+  try {
+    say(`正在读取“${file.name}”…`);
+    await openBytes(await file.arrayBuffer(), file.name, sequence);
+  } catch (error) {
+    if (sequence === openSequence) say(`无法打开“${file.name}”：${error.message}`, true);
+  } finally {
+    if (sequence === openSequence) setBusy(false);
+  }
 }
 
-/** Sheets that hold a drawing, oldest first. */
-const drawn = new Set();
-
-const watcher = new IntersectionObserver(
-  (entries) => {
-    for (const entry of entries) {
-      const sheet = entry.target;
-      if (!entry.isIntersecting || !current) continue;
-      if (!sheet.firstChild) sheet.innerHTML = current.doc.pageSvg(Number(sheet.dataset.page));
-      // Most recently seen last.
-      drawn.delete(sheet);
-      drawn.add(sheet);
+async function openUrl(address) {
+  if (!ready || broken || updatingFonts) return;
+  const sequence = beginOpen();
+  const controller = downloadController = new AbortController();
+  try {
+    const url = new URL(address, location.href);
+    if (!["http:", "https:"].includes(url.protocol)) throw new Error("请使用 HTTP 或 HTTPS 文档网址。");
+    say("正在下载文档…");
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    let name = url.pathname.split("/").pop() || "文档";
+    try { name = decodeURIComponent(name); } catch { /* A malformed URL escape is still a usable file name. */ }
+    await openBytes(await response.arrayBuffer(), name, sequence);
+  } catch (error) {
+    if (sequence === openSequence && error.name !== "AbortError") say(`无法打开文档：${error.message}`, true);
+  } finally {
+    if (sequence === openSequence) {
+      downloadController = null;
+      setBusy(false);
     }
-    for (const sheet of drawn) {
-      if (drawn.size <= KEEP_DRAWN) break;
-      const box = sheet.getBoundingClientRect();
-      const view = desk.getBoundingClientRect();
-      if (box.bottom < view.top - view.height || box.top > view.bottom + view.height) {
-        sheet.replaceChildren();
+  }
+}
+
+async function addFonts(files) {
+  if (!ready || busy || broken || !files.length) return;
+  updatingFonts = true;
+  const sequence = beginOpen();
+  const position = readingPosition();
+  try {
+    say("正在添加字体并重新排版…");
+    const buffers = await Promise.all(files.map((file) => file.arrayBuffer()));
+    if (sequence !== openSequence) return;
+    const result = await client.addFonts(buffers, current?.revision);
+    if (sequence !== openSequence) return;
+    if (result.document && current) {
+      current = { ...current, ...result.document };
+      arrange(position);
+    }
+    say(result.added ? `已添加 ${result.added} 个字体${current ? "，文档已重新排版" : ""}。` : "选中的文件不是可用的字体。", !result.added);
+  } catch (error) {
+    if (sequence === openSequence) say(`无法添加字体：${error.message}`, true);
+  } finally {
+    updatingFonts = false;
+    if (sequence === openSequence) setBusy(false);
+  }
+}
+
+function arrange(position = null) {
+  viewSequence++;
+  watcher.disconnect();
+  visible.clear();
+  drawn.clear();
+  resetSearch();
+  $("welcome").hidden = true;
+  const fragment = document.createDocumentFragment();
+  for (let page = 0; page < current.sizes.length; page++) {
+    const sheet = document.createElement("div");
+    sheet.className = "page";
+    sheet.dataset.page = page;
+    sheet.setAttribute("aria-label", `第 ${page + 1} 页`);
+    const art = document.createElement("div");
+    art.className = "page-art";
+    sheet.append(art);
+    fragment.append(sheet);
+  }
+  pages.replaceChildren(fragment);
+  resize(position);
+  if (!position) desk.scrollTop = 0;
+  for (const sheet of pages.children) watcher.observe(sheet);
+  controls();
+  describe();
+  if (!$("search-bar").hidden && $("search-query").value.trim()) scheduleSearch();
+}
+
+const watcher = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.target.isConnected) continue;
+    if (entry.isIntersecting) visible.add(entry.target);
+    else visible.delete(entry.target);
+  }
+  evict();
+  void drawVisible();
+}, { root: desk, rootMargin: "100% 0px" });
+
+// Only one SVG request is in flight. Fast scrolling does not queue every
+// page passed along the way in front of the page the reader actually wants.
+async function drawVisible() {
+  if (rendering || broken) return;
+  rendering = true;
+  try {
+    while (current && !broken) {
+      const middle = desk.getBoundingClientRect().top + desk.clientHeight / 2;
+      const sheet = [...visible].filter((s) => s.isConnected && !s.hasAttribute("data-rendered") && !s.hasAttribute("data-failed"))
+        .sort((a, b) => Math.abs(a.getBoundingClientRect().top - middle) - Math.abs(b.getBoundingClientRect().top - middle))[0];
+      if (!sheet) break;
+      const sequence = viewSequence;
+      const revision = current.revision;
+      try {
+        const svg = await client.request("render", { revision, page: Number(sheet.dataset.page) });
+        if (sequence !== viewSequence || !sheet.isConnected) continue;
+        if (svg === null) break; // A newer document is being opened in the worker.
+        if (!visible.has(sheet)) continue;
+        sheet.querySelector(".page-art").innerHTML = svg;
+        sheet.dataset.rendered = "";
         drawn.delete(sheet);
+        drawn.add(sheet);
+        evict();
+      } catch (error) {
+        if (sequence !== viewSequence || !sheet.isConnected) continue;
+        sheet.dataset.failed = "";
+        const notice = element("div", `此页显示失败：${error.message} `, "page-error");
+        const retry = element("button", "重试");
+        retry.addEventListener("click", () => {
+          notice.remove();
+          delete sheet.dataset.failed;
+          void drawVisible();
+        });
+        notice.append(retry);
+        sheet.append(notice);
       }
     }
-  },
-  { root: desk, rootMargin: "100% 0px" },
-);
+  } finally { rendering = false; }
+}
 
-/** Sizes the sheets for the zoom in force. */
-function resize() {
+function selected(sheet) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return false;
+  for (let i = 0; i < selection.rangeCount; i++) {
+    if (selection.getRangeAt(i).intersectsNode(sheet)) return true;
+  }
+  return false;
+}
+
+function evict() {
+  for (const sheet of drawn) {
+    if (drawn.size <= KEEP_DRAWN) break;
+    if (visible.has(sheet) || selected(sheet)) continue;
+    sheet.querySelector(".page-art").replaceChildren();
+    delete sheet.dataset.rendered;
+    drawn.delete(sheet);
+  }
+}
+
+function pageAtMiddle() {
+  const sheets = pages.children;
+  if (!sheets.length) return 0;
+  const middle = desk.getBoundingClientRect().top + desk.clientHeight / 2;
+  let low = 0, high = sheets.length - 1;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (sheets[mid].getBoundingClientRect().bottom < middle) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+function readingPosition() {
+  if (!current?.sizes.length) return null;
+  const page = pageAtMiddle();
+  const box = pages.children[page].getBoundingClientRect();
+  return { page, fraction: Math.max(0, Math.min(1, (desk.getBoundingClientRect().top + desk.clientHeight / 2 - box.top) / box.height)) };
+}
+
+function restorePosition(position) {
+  const sheet = pages.children[Math.min(position.page, pages.children.length - 1)];
+  if (!sheet) return;
+  const box = sheet.getBoundingClientRect();
+  desk.scrollTop += box.top - desk.getBoundingClientRect().top + position.fraction * box.height - desk.clientHeight / 2;
+}
+
+function resize(position = readingPosition()) {
   if (!current) return;
   if (fitWidth) {
-    const widest = Math.max(...current.sizes.map((size) => size.width), 1);
-    const room = desk.clientWidth - 2 * parseFloat(getComputedStyle(desk).paddingLeft);
+    const widest = current.sizes.reduce((width, size) => Math.max(width, size.width), 1);
+    const style = getComputedStyle(desk);
+    const room = desk.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     zoom = Math.max(0.1, Math.min(room / (widest * PX_PER_PT), 2));
   }
   [...pages.children].forEach((sheet, page) => {
@@ -224,34 +314,140 @@ function resize() {
   });
   $("zoom-value").textContent = `${Math.round(zoom * 100)}%`;
   $("zoom-fit").setAttribute("aria-pressed", String(fitWidth));
-}
-
-function setZoom(value) {
-  // Keep the same place in the document under the middle of the window.
-  const before = (desk.scrollTop + desk.clientHeight / 2) / Math.max(desk.scrollHeight, 1);
-  fitWidth = false;
-  zoom = Math.max(0.1, Math.min(value, 5));
-  resize();
-  desk.scrollTop = before * desk.scrollHeight - desk.clientHeight / 2;
+  if (position) restorePosition(position);
   indicate();
 }
 
-/** Shows which page is in the middle of the window. */
+function setZoom(value) {
+  if (!current) return;
+  const position = readingPosition();
+  fitWidth = false;
+  zoom = Math.max(0.1, Math.min(value, 5));
+  resize(position);
+}
+
+function goToPage(page, y = 0) {
+  const sheet = pages.children[page];
+  if (!sheet) return;
+  desk.scrollTop += sheet.getBoundingClientRect().top - desk.getBoundingClientRect().top + y * PX_PER_PT * zoom - 20;
+  indicate();
+}
+
 function indicate() {
-  const sheets = pages.children;
-  if (!current || sheets.length === 0) {
-    $("page-indicator").textContent = "";
-    return;
+  const count = current?.sizes.length ?? 0;
+  const page = count ? pageAtMiddle() + 1 : 1;
+  if (document.activeElement !== $("page-number")) $("page-number").value = page;
+  $("page-number").max = Math.max(1, count);
+  $("page-total").textContent = `/ ${count} 页`;
+  $("page-indicator").textContent = count ? `第 ${page} / ${count} 页` : "";
+  $("page-prev").disabled = broken || page <= 1;
+  $("page-next").disabled = broken || page >= count;
+}
+
+function resetSearch() {
+  clearTimeout(searchTimer);
+  searchSequence++;
+  searchPending = false;
+  matches = [];
+  matchIndex = -1;
+  searchLimited = false;
+  for (const layer of pages.querySelectorAll(".search-highlights")) layer.remove();
+  updateSearchCount();
+}
+
+function updateSearchCount(message = "") {
+  $("search-count").textContent = message || (matches.length ? `${matchIndex + 1} / ${matches.length}${searchLimited ? "+" : ""}` : "");
+  $("search-count").title = searchLimited ? `显示前 ${SEARCH_LIMIT} 个匹配` : "";
+  $("search-prev").disabled = $("search-next").disabled = !matches.length || searchPending;
+}
+
+function toggleSearch(open) {
+  const position = readingPosition();
+  $("search-bar").hidden = !open;
+  $("search-toggle").setAttribute("aria-expanded", String(open));
+  if (position) restorePosition(position);
+  if (open) {
+    $("search-query").focus();
+    $("search-query").select();
+    scheduleSearch();
+  } else {
+    resetSearch();
+    $("search-toggle").focus();
   }
-  const middle = desk.getBoundingClientRect().top + desk.clientHeight / 2;
-  let low = 0;
-  let high = sheets.length - 1;
-  while (low < high) {
-    const mid = (low + high) >> 1;
-    if (sheets[mid].getBoundingClientRect().bottom < middle) low = mid + 1;
-    else high = mid;
+}
+
+function scheduleSearch() {
+  resetSearch();
+  if (!current || $("search-bar").hidden || !$("search-query").value.trim()) return;
+  searchPending = true;
+  updateSearchCount("正在查找…");
+  searchTimer = setTimeout(() => void runSearch(), 150);
+}
+
+async function runSearch() {
+  clearTimeout(searchTimer);
+  if (!current || $("search-bar").hidden) return;
+  const query = $("search-query").value.trim();
+  if (!query) return resetSearch();
+  const sequence = ++searchSequence;
+  const revision = current.revision;
+  searchPending = true;
+  updateSearchCount("正在查找…");
+  try {
+    const result = await client.request("find", { revision, query, limit: SEARCH_LIMIT + 1 });
+    if (sequence !== searchSequence || current?.revision !== revision) return;
+    searchPending = false;
+    if (result === null) return updateSearchCount();
+    matches = result.slice(0, SEARCH_LIMIT);
+    searchLimited = result.length > SEARCH_LIMIT;
+    if (!matches.length) return updateSearchCount("未找到匹配");
+    const near = matches.findIndex((match) => match.page >= pageAtMiddle());
+    matchIndex = near < 0 ? 0 : near;
+    paintMatches();
+    revealMatch();
+  } catch (error) {
+    if (sequence !== searchSequence) return;
+    searchPending = false;
+    updateSearchCount("查找失败");
+    say(error.message, true);
   }
-  $("page-indicator").textContent = `第 ${low + 1} / ${sheets.length} 页`;
+}
+
+function paintMatches() {
+  for (const layer of pages.querySelectorAll(".search-highlights")) layer.remove();
+  const layers = new Map();
+  matches.forEach((match, index) => {
+    const sheet = pages.children[match.page];
+    if (!sheet) return;
+    let layer = layers.get(match.page);
+    if (!layer) {
+      layer = element("div", undefined, "search-highlights");
+      layer.setAttribute("aria-hidden", "true");
+      sheet.append(layer);
+      layers.set(match.page, layer);
+    }
+    const size = current.sizes[match.page];
+    for (const [x, y, width, height] of match.boxes) {
+      const hit = element("span", undefined, "search-hit");
+      hit.dataset.match = index;
+      Object.assign(hit.style, { left: `${100 * x / size.width}%`, top: `${100 * y / size.height}%`, width: `${100 * width / size.width}%`, height: `${100 * height / size.height}%` });
+      layer.append(hit);
+    }
+  });
+}
+
+function revealMatch() {
+  for (const hit of pages.querySelectorAll(".search-hit")) hit.classList.toggle("active", Number(hit.dataset.match) === matchIndex);
+  const match = matches[matchIndex];
+  if (match) goToPage(match.page, match.boxes[0]?.[1] ?? 0);
+  updateSearchCount();
+}
+
+function moveMatch(step) {
+  if (searchPending) return void runSearch();
+  if (!matches.length) return;
+  matchIndex = (matchIndex + step + matches.length) % matches.length;
+  revealMatch();
 }
 
 function element(tag, text, className) {
@@ -265,7 +461,7 @@ function element(tag, text, className) {
 function describe() {
   const panel = $("info");
   if (!current) return panel.replaceChildren();
-  const info = current.doc.info();
+  const info = current.info;
   const facts = element("dl");
   const fact = (name, value) => facts.append(element("dt", name), element("dd", value));
   fact("文件", current.name);
@@ -299,84 +495,86 @@ function describe() {
   panel.replaceChildren(...nodes);
 }
 
-// ---------------------------------------------------------------- controls
-
 $("open").addEventListener("click", () => $("file").click());
-$("file").addEventListener("change", async (event) => {
+$("file").addEventListener("change", (event) => {
   const file = event.target.files[0];
-  if (file) show(new Uint8Array(await file.arrayBuffer()), file.name);
   event.target.value = "";
+  if (file) void openFile(file);
 });
-$("samples").addEventListener("change", (event) => {
-  if (event.target.value) openUrl(event.target.value);
-});
+$("samples").addEventListener("change", (event) => { if (event.target.value) void openUrl(event.target.value); });
 $("url-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  if ($("url").value) openUrl($("url").value);
+  if ($("url").value) { $("samples").value = ""; void openUrl($("url").value); }
 });
 $("add-font").addEventListener("click", () => $("font-file").click());
-$("font-file").addEventListener("change", async (event) => {
-  let added = 0;
-  for (const file of event.target.files) added += oco.addFont(new Uint8Array(await file.arrayBuffer()));
+$("font-file").addEventListener("change", (event) => {
+  const files = [...event.target.files];
   event.target.value = "";
-  fontsAdded(added);
+  void addFonts(files);
 });
 $("zoom-in").addEventListener("click", () => setZoom(zoom * 1.2));
 $("zoom-out").addEventListener("click", () => setZoom(zoom / 1.2));
-$("zoom-fit").addEventListener("click", () => {
-  fitWidth = true;
-  resize();
-  indicate();
-});
+$("zoom-fit").addEventListener("click", () => { fitWidth = true; resize(); });
 $("info-toggle").addEventListener("click", (event) => {
-  const panel = $("info");
-  panel.hidden = !panel.hidden;
-  event.currentTarget.setAttribute("aria-pressed", String(!panel.hidden));
-  resize();
+  const position = readingPosition();
+  $("info").hidden = !$("info").hidden;
+  event.currentTarget.setAttribute("aria-pressed", String(!$("info").hidden));
+  resize(position);
 });
+$("page-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!current?.sizes.length) return;
+  const page = Math.max(1, Math.min(current.sizes.length, Math.floor(Number($("page-number").value) || 1)));
+  $("page-number").value = page;
+  $("page-number").blur();
+  goToPage(page - 1);
+});
+$("page-prev").addEventListener("click", () => goToPage(pageAtMiddle() - 1));
+$("page-next").addEventListener("click", () => goToPage(pageAtMiddle() + 1));
+$("search-toggle").addEventListener("click", () => toggleSearch($("search-bar").hidden));
+$("search-close").addEventListener("click", () => toggleSearch(false));
+$("search-query").addEventListener("input", scheduleSearch);
+$("search-bar").addEventListener("submit", (event) => { event.preventDefault(); moveMatch(1); });
+$("search-query").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && event.shiftKey) { event.preventDefault(); moveMatch(-1); }
+});
+$("search-prev").addEventListener("click", () => moveMatch(-1));
+$("search-next").addEventListener("click", () => moveMatch(1));
 
 let scheduled = false;
 desk.addEventListener("scroll", () => {
   if (scheduled) return;
   scheduled = true;
-  requestAnimationFrame(() => {
-    scheduled = false;
-    indicate();
-  });
+  requestAnimationFrame(() => { scheduled = false; indicate(); evict(); });
 });
-new ResizeObserver(() => {
-  if (fitWidth) resize();
-  indicate();
-}).observe(desk);
+new ResizeObserver(() => { if (fitWidth) resize(); else indicate(); }).observe(desk);
+document.addEventListener("selectionchange", evict);
 
 window.addEventListener("keydown", (event) => {
-  if (!(event.ctrlKey || event.metaKey)) return;
-  if (event.key === "=" || event.key === "+") setZoom(zoom * 1.2);
-  else if (event.key === "-") setZoom(zoom / 1.2);
-  else if (event.key === "o") $("file").click();
+  if (event.key === "Escape" && !$("search-bar").hidden) { event.preventDefault(); toggleSearch(false); return; }
+  if (!(event.ctrlKey || event.metaKey) || event.isComposing) return;
+  const key = event.key.toLowerCase();
+  if (key === "o" && ready && !broken && !updatingFonts) $("file").click();
+  else if (key === "f" && current && !broken) toggleSearch(true);
+  else if (event.target.closest("input, textarea, [contenteditable]")) return;
+  else if (current && (key === "=" || key === "+")) setZoom(zoom * 1.2);
+  else if (current && key === "-") setZoom(zoom / 1.2);
   else return;
   event.preventDefault();
 });
 
-// Dropping a file anywhere opens it; a font file is added to the fonts.
-window.addEventListener("dragover", (event) => {
-  event.preventDefault();
-  document.body.classList.add("dragging");
-});
-window.addEventListener("dragleave", (event) => {
-  if (!event.relatedTarget) document.body.classList.remove("dragging");
-});
+window.addEventListener("dragover", (event) => { event.preventDefault(); document.body.classList.add("dragging"); });
+window.addEventListener("dragleave", (event) => { if (!event.relatedTarget) document.body.classList.remove("dragging"); });
 window.addEventListener("drop", async (event) => {
   event.preventDefault();
   document.body.classList.remove("dragging");
-  for (const file of event.dataTransfer.files) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (/\.(ttf|otf|ttc)$/i.test(file.name)) fontsAdded(oco.addFont(bytes));
-    else show(bytes, file.name);
-  }
+  if (!ready || broken) { say("排版内核正在加载，请稍后打开文件。"); return; }
+  const files = [...event.dataTransfer.files];
+  const fonts = files.filter((file) => /\.(ttf|otf|ttc)$/i.test(file.name));
+  if (fonts.length) await addFonts(fonts);
+  const document = files.find((file) => !/\.(ttf|otf|ttc)$/i.test(file.name));
+  if (document) await openFile(document);
 });
 
-start().catch((error) => {
-  progress(null);
-  say(`启动失败：${error.message}`, true);
-});
+controls();
+start().catch((error) => { progress(null); say(`启动失败：${error.message}`, true); });

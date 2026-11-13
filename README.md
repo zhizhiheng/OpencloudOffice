@@ -57,9 +57,15 @@ tools/web/build.sh                     # 编译 web/oco.wasm，并把字体和�
 python3 -m http.server -d web 8000     # 然后打开 http://localhost:8000
 ```
 
-查看器可以打开本地文件（也可以拖进来）、网址上的文件（`?file=<网址>`），可以添加本机的字体文件；侧栏列出这份文档里还不能按 Word 的样子显示的内容。文件只在浏览器里读取和排版，不上传。`web/oco.js` 是给 JavaScript 用的接口，约 150 行，用法见文件开头。
+查看器可以打开本地文件（也可以拖进来）、网址上的文件（`?file=<网址>`），可以添加本机的字体文件；侧栏列出这份文档里还不能按 Word 的样子显示的内容。文件只在浏览器里读取和排版，不上传。
 
-浏览器里排出的页面与命令行逐字节相同：`node tools/web/check.mjs` 对 259 份文档、658 页做过比较，没有一处不同。完整内核的 WASM 是 483 KB，gzip 后 212 KB。
+在页码框输入数字后按回车可以跳页。点击“查找”或按 Ctrl/Cmd+F 可搜索整份文档，包括尚未滚动到的页面；匹配处会高亮，回车跳到下一个，Shift+回车跳到上一个，Esc 关闭查找。结果超过 1000 处时显示前 1000 处，并标记“1000+”。文字仍可选中、复制。缩放和切换侧栏会尽量保持当前阅读位置。
+
+字体解析、文档排版、查找和 SVG 生成在 Web Worker 中执行，页面按可见范围逐页绘制。字体按原有顺序分批下载并解析；当前仍加载完整字体集，按文档按需下载尚未实现。快速切换文件时以最后选择的文件为准，打开失败会保留原文档。
+
+`web/oco.js` 是同步 JavaScript SDK；`web/viewer-client.js` 和 `web/viewer-worker.js` 为查看器提供异步接口。
+
+浏览器里排出的页面与命令行逐字节相同：`node tools/web/check.mjs` 对 259 份文档、658 页做过比较，没有一处不同；该脚本会对打开失败的文件报错。构建脚本会显示当前 WASM 的大小及 gzip 后大小，字体文件另计。
 
 ## 目录
 
@@ -92,6 +98,8 @@ cargo clippy --all-targets                               # 静态检查
 cargo build -p oco-layout --target wasm32-unknown-unknown  # 确认内核可编译成 WASM
 tools/fidelity/score.py                                  # 还原度记分表，与基线比较（需先拉取测试集和字体）
 ```
+
+查看器的浏览器集成检查：先运行 `tools/web/build.sh`，在开发环境安装 Playwright 及其 Chromium，再运行 `node tools/web/test-viewer.mjs`。也可用 `PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 指向现有安装。检查包括全文搜索、跳页、缩放位置、后台处理时的界面响应、快速切换文件、下载失败和复制；截图写入 `out/viewer-tests/`。
 
 排版测试需要字体：系统里的 Liberation、Carlito、DejaVu，以及 `tools/fonts/fetch.sh` 下载的中文字体。缺少字体时相关测试会打印提示并跳过。
 

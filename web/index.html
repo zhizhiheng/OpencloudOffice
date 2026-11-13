@@ -20,6 +20,8 @@
     color: var(--ink);
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   html, body { height: 100%; margin: 0; }
   body { display: flex; flex-direction: column; background: var(--desk); }
 
@@ -28,9 +30,9 @@
     padding: 8px 14px; background: var(--bar); border-bottom: 1px solid var(--line);
   }
   header h1 { font-size: 15px; font-weight: 600; margin: 0 8px 0 0; white-space: nowrap; }
-  header .group { display: flex; align-items: center; gap: 6px; }
+  header .group { display: flex; flex: none; align-items: center; gap: 6px; }
   header .spring { flex: 1; }
-  button, select, input[type="url"] {
+  button, select, input[type="url"], input[type="search"], input[type="number"] {
     font: inherit; color: inherit; height: 30px; padding: 0 10px;
     border: 1px solid var(--line); border-radius: 6px; background: #fff;
   }
@@ -45,15 +47,29 @@
   select { max-width: 150px; }
   #zoom-value { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
   #page-indicator { color: var(--soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #page-number { width: 64px; padding: 0 5px; text-align: center; }
+  #page-total { white-space: nowrap; color: var(--soft); }
+  #search-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 14px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  #search-query { width: min(280px, 55vw); }
+  #search-count { min-width: 90px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
   #progress { height: 3px; background: transparent; }
   #progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  #progress.busy > div { width: 30%; animation: loading 1.2s ease-in-out infinite alternate; }
+  @keyframes loading { to { transform: translateX(230%); } }
+  @media (prefers-reduced-motion: reduce) { #progress.busy > div { animation: none; width: 100%; opacity: .5; } }
 
   main { flex: 1; display: flex; min-height: 0; }
   #desk { flex: 1; overflow: auto; padding: 20px; position: relative; }
   #pages { display: flex; flex-direction: column; align-items: center; gap: 16px; min-width: min-content; }
-  .page { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .04); flex: none; }
-  .page svg { display: block; width: 100%; height: 100%; }
+  .page { position: relative; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .04); flex: none; }
+  .page-art, .page-art > svg { display: block; width: 100%; height: 100%; }
+  .page:not([data-rendered])::before { content: attr(aria-label); position: absolute; top: 24px; left: 24px; color: #85909c; pointer-events: none; }
+  .page-error { position: absolute; top: 50%; left: 10%; right: 10%; text-align: center; color: var(--error); }
+  .search-highlights { position: absolute; inset: 0; pointer-events: none; }
+  .search-hit { position: absolute; background: rgba(255, 212, 59, .35); border-radius: 2px; }
+  .search-hit.active { background: rgba(255, 143, 0, .4); outline: 2px solid #c66b00; }
 
   #welcome {
     max-width: 520px; margin: 12vh auto 0; padding: 32px; text-align: center; color: var(--soft);
@@ -93,15 +109,22 @@
 <header>
   <h1>OpencloudOffice 查看器</h1>
   <div class="group">
-    <button class="primary" id="open">打开文件</button>
+    <button class="primary" id="open" disabled>打开文件</button>
     <select id="samples" hidden aria-label="示例文档"><option value="">示例文档…</option></select>
   </div>
   <form class="group" id="url-form">
     <input type="url" id="url" placeholder="文档网址（如对象存储的链接）" aria-label="文档网址">
-    <button>打开网址</button>
+    <button id="open-url" disabled>打开网址</button>
   </form>
   <div class="spring"></div>
-  <span id="page-indicator"></span>
+  <form class="group" id="page-form" aria-label="页面导航">
+    <button class="square" id="page-prev" type="button" title="上一页" aria-label="上一页" disabled>‹</button>
+    <label class="sr-only" for="page-number">跳转到页码</label>
+    <input id="page-number" type="number" min="1" value="1" step="1" disabled>
+    <span id="page-total">/ 0 页</span>
+    <button class="square" id="page-next" type="button" title="下一页" aria-label="下一页" disabled>›</button>
+  </form>
+  <span id="page-indicator" class="sr-only"></span>
   <div class="group">
     <button class="square" id="zoom-out" title="缩小" aria-label="缩小">−</button>
     <span id="zoom-value">100%</span>
@@ -109,10 +132,19 @@
     <button id="zoom-fit" title="让页面宽度占满窗口">适合宽度</button>
   </div>
   <div class="group">
-    <button id="add-font" title="添加本机的字体文件，文档里用到它的地方会按它重新排版">添加字体</button>
+    <button id="search-toggle" aria-expanded="false" aria-controls="search-bar" disabled>查找</button>
+    <button id="add-font" title="添加本机的字体文件，文档里用到它的地方会按它重新排版" disabled>添加字体</button>
     <button id="info-toggle" aria-pressed="false">文档信息</button>
   </div>
 </header>
+<form id="search-bar" role="search" hidden>
+  <label class="sr-only" for="search-query">查找整份文档</label>
+  <input id="search-query" type="search" placeholder="查找整份文档" autocomplete="off">
+  <span id="search-count" role="status" aria-live="polite"></span>
+  <button id="search-prev" type="button" aria-label="上一个匹配" disabled>上一个</button>
+  <button id="search-next" type="button" aria-label="下一个匹配" disabled>下一个</button>
+  <button id="search-close" type="button" aria-label="关闭查找">关闭</button>
+</form>
 <div id="progress"><div></div></div>
 <div id="status" role="status"></div>
 <main>
