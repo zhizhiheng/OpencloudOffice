@@ -1764,11 +1764,18 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         story_counters: Counters::default(),
     };
     let mut units = Vec::new();
-    // Line breaks depend on the text width, which this prototype takes from
-    // the first section throughout.
-    let first = setups[0];
-    let width = first.text_width() as f32 * TWIP;
-    builder.blocks(&docx.document.body, first, width, &mut units);
+    // Each section is laid out at its own text width. A section ends with
+    // the paragraph that carries its page setup.
+    let body = &docx.document.body;
+    let (mut from, mut number) = (0, 0);
+    for (index, block) in body.iter().enumerate() {
+        let ends = matches!(block, Block::Paragraph(paragraph) if paragraph.section_break.is_some());
+        if ends || index + 1 == body.len() {
+            let section = setups[number.min(setups.len() - 1)];
+            builder.blocks(&body[from..=index], section, section.text_width() as f32 * TWIP, &mut units);
+            (from, number) = (index + 1, number + 1);
+        }
+    }
 
     let mut pages: Vec<Page> = Vec::new();
     let mut section_index = 0;
@@ -2029,6 +2036,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             floats.clear();
             floats_page = pages.len();
         }
+        let width = section.text_width() as f32 * TWIP;
         let column = (left + unit.left, left + unit.left + width);
         // Objects anchored in the paragraph go on the page its first line
         // goes on, and that line may have to begin below them: if it then
@@ -2104,7 +2112,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                     break;
                 }
                 shape = next;
-                lines = std::borrow::Cow::Owned(builder.again(source, unit, first, width, &shape));
+                lines = std::borrow::Cow::Owned(builder.again(source, unit, section, width, &shape));
             }
         }
 
@@ -2155,7 +2163,12 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         if unit.ends_section.is_some() {
             section_index += 1;
             let next = setups[section_index.min(setups.len() - 1)];
-            if next.start != SectionStart::Continuous {
+            // A section that goes on in the same page cannot do so on paper
+            // of another size or turned the other way: it begins a new
+            // page then. (Measured in Word, docx4j's probe
+            // `page-blank-landscape`.)
+            let same_paper = (next.page_width, next.page_height) == (section.page_width, section.page_height);
+            if next.start != SectionStart::Continuous || !same_paper {
                 turn_page!(section_index, true);
                 page_is_empty = true;
                 // The first paragraph of a section keeps its space before.

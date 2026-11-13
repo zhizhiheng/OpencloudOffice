@@ -314,7 +314,7 @@
    "libreoffice/chart2/qa/extras/data/docx/testchartoleobjectembeddings.docx": {
     "pages": [
      81,
-     92
+     91
     ],
     "starts": [
      1,
@@ -394,7 +394,7 @@
    "libreoffice/sw/qa/core/doc/data/header-footer-delete.docx": {
     "pages": [
      3,
-     2
+     3
     ],
     "starts": [
      1,
@@ -694,7 +694,7 @@
    "libreoffice/sw/qa/extras/layout/data/shape-anchored-in-follow.docx": {
     "pages": [
      3,
-     2
+     3
     ],
     "starts": [
      3,
@@ -2108,13 +2108,13 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/text direction/textdirection-1.docx": {
     "pages": [
      3,
-     1
+     3
     ],
     "starts": [
      0,
@@ -3337,19 +3337,19 @@
      "same": 29
     },
     "corpus-word/docx4j/page-blank-landscape.docx": {
-     "dx": 0.12,
-     "dy": 0.06,
+     "dx": 0.02,
+     "dy": 0.1,
      "lines": 54,
      "missing_fonts": [],
      "page_starts": 2,
-     "page_starts_equal": 0,
+     "page_starts_equal": 2,
      "pages": [
       3,
       3
      ],
-     "placed": 14,
+     "placed": 54,
      "plain": false,
-     "same": 14
+     "same": 54
     },
     "corpus-word/docx4j/page-break-line.docx": {
      "dx": 0.02,
@@ -3436,14 +3436,14 @@
      "lines": 80,
      "missing_fonts": [],
      "page_starts": 2,
-     "page_starts_equal": 0,
+     "page_starts_equal": 2,
      "pages": [
       3,
-      4
+      3
      ],
-     "placed": 24,
+     "placed": 80,
      "plain": false,
-     "same": 24
+     "same": 80
     },
     "corpus-word/docx4j/page-tall-header-image.docx": {
      "dx": 0.02,
@@ -3562,18 +3562,18 @@
     },
     "corpus-word/docx4j/section-continuous-geometry.docx": {
      "dx": 0.02,
-     "dy": 330.24,
+     "dy": 0.2,
      "lines": 302,
      "missing_fonts": [],
      "page_starts": 8,
-     "page_starts_equal": 1,
+     "page_starts_equal": 7,
      "pages": [
       9,
       9
      ],
-     "placed": 60,
+     "placed": 222,
      "plain": false,
-     "same": 240
+     "same": 302
     },
     "corpus-word/docx4j/spacing-adjacent.docx": {
      "dx": 0.02,
@@ -5141,11 +5141,11 @@
    "forced_page_starts": 407,
    "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 498,
-   "multipage_pages_within_one": 594,
+   "multipage_pages_equal": 501,
+   "multipage_pages_within_one": 595,
    "page_starts": 2044,
-   "page_starts_equal": 490,
-   "page_starts_same_paragraph": 640
+   "page_starts_equal": 499,
+   "page_starts_same_paragraph": 636
   },
   "covered": {
    "documents": 537,
@@ -5163,11 +5163,11 @@
    "forced_page_starts": 113,
    "forced_page_starts_equal": 103,
    "multipage": 229,
-   "multipage_pages_equal": 184,
-   "multipage_pages_within_one": 222,
+   "multipage_pages_equal": 187,
+   "multipage_pages_within_one": 223,
    "page_starts": 467,
-   "page_starts_equal": 151,
-   "page_starts_same_paragraph": 200
+   "page_starts_equal": 152,
+   "page_starts_same_paragraph": 202
   },
   "plain": {
    "documents": 881,
@@ -5187,10 +5187,10 @@
     "documents": 128,
     "lines": 7059,
     "page_starts": 193,
-    "page_starts_equal": 168,
-    "pages_equal": 120,
-    "placed": 5263,
-    "same": 6399
+    "page_starts_equal": 178,
+    "pages_equal": 121,
+    "placed": 5521,
+    "same": 6557
    },
    "covered": {
     "documents": 28,

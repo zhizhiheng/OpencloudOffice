@@ -1836,3 +1836,33 @@ fn the_header_and_the_footer_of_a_page_are_numbered_as_one() {
         assert_eq!(texts, ["1.\thead a", "2.\thead b", body, "3.\tfoot"]);
     }
 }
+
+#[test]
+fn each_section_is_set_at_its_own_width_and_new_paper_begins_a_new_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `page-landscape-margins` and
+    // `page-blank-landscape`): the text of a section on landscape paper
+    // runs the width of that paper, and a section marked to go on in the
+    // same page begins a new one all the same when its paper is another.
+    let margins =
+        r#"<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708"/>"#;
+    let portrait = format!(r#"<w:pgSz w:w="11906" w:h="16838"/>{margins}"#);
+    let landscape = format!(r#"<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>{margins}"#);
+    let text = paragraph(&font("Liberation Serif", 24), "", LONG);
+    let body = format!("{text}<w:p><w:pPr><w:sectPr>{portrait}</w:sectPr></w:pPr></w:p>{text}");
+    let lay = |last: &str| {
+        let section = format!(r#"<w:type w:val="continuous"/>{last}"#);
+        pages(&Source { body: &body, section: &section, ..Source::default() }, &fonts, Model::Word)
+    };
+
+    let turned = lay(&landscape);
+    assert_eq!(turned.len(), 2, "other paper, another page");
+    assert!(close(turned[0].width, 595.3, 0.1) && close(turned[1].width, 841.9, 0.1));
+    let reach = |page: &Page| page.lines.iter().map(|line| line.x1).fold(0.0f32, f32::max);
+    assert!(reach(&turned[0]) <= 595.3 - 72.0 + 0.5, "{}", reach(&turned[0]));
+    assert!(reach(&turned[1]) > 700.0, "the second section's lines run the width of its paper: {}", reach(&turned[1]));
+    assert!(turned[1].lines.len() < turned[0].lines.len(), "and so are fewer");
+
+    let same = lay(&portrait);
+    assert_eq!(same.len(), 1, "the same paper: the section goes on in the page");
+}
