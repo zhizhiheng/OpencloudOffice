@@ -132,6 +132,15 @@ async function openUrl(url) {
   }
 }
 
+/** After fonts were handed to the core: shows the open document as it is now laid out, and says what happened. */
+function fontsAdded(added) {
+  fontCount += added;
+  // The core lays open documents out afresh; the sheets have to follow.
+  // This clears the status line, so the news goes there afterwards.
+  if (added && current) arrange();
+  say(added ? `已添加 ${added} 个字体${current ? "，文档已按新的字体重新排版" : ""}。` : "选中的文件不是可用的字体。", !added);
+}
+
 /** Opens the bytes of a document and puts its pages on the desk. */
 function show(bytes, name) {
   if (!oco) return;
@@ -310,10 +319,7 @@ $("font-file").addEventListener("change", async (event) => {
   let added = 0;
   for (const file of event.target.files) added += oco.addFont(new Uint8Array(await file.arrayBuffer()));
   event.target.value = "";
-  fontCount += added;
-  say(added ? `已添加 ${added} 个字体。` : "选中的文件不是可用的字体。", !added);
-  // The core lays open documents out afresh; the sheets have to follow.
-  if (added && current) arrange();
+  fontsAdded(added);
 });
 $("zoom-in").addEventListener("click", () => setZoom(zoom * 1.2));
 $("zoom-out").addEventListener("click", () => setZoom(zoom / 1.2));
@@ -365,12 +371,8 @@ window.addEventListener("drop", async (event) => {
   document.body.classList.remove("dragging");
   for (const file of event.dataTransfer.files) {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (/\.(ttf|otf|ttc)$/i.test(file.name)) {
-      fontCount += oco.addFont(bytes);
-      if (current) arrange();
-    } else {
-      show(bytes, file.name);
-    }
+    if (/\.(ttf|otf|ttc)$/i.test(file.name)) fontsAdded(oco.addFont(bytes));
+    else show(bytes, file.name);
   }
 });
 
