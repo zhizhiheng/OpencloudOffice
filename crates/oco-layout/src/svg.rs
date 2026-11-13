@@ -7,11 +7,10 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use owned_ttf_parser::OutlineBuilder;
-
 use oco_docx::Media;
 
 use crate::fonts::FontDb;
+use crate::sfnt::OutlineBuilder;
 use crate::{Item, Page, Rgb};
 
 /// Collects a glyph outline as SVG path data, in font units with y up.

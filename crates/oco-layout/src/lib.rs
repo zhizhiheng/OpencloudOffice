@@ -14,6 +14,7 @@
 
 pub mod fonts;
 mod paragraph;
+pub mod sfnt;
 pub mod svg;
 pub mod text;
 

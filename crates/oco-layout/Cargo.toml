@@ -8,7 +8,6 @@ publish.workspace = true
 
 [dependencies]
 oco-docx.workspace = true
-owned_ttf_parser.workspace = true
 serde = { workspace = true, optional = true }
 
 [features]

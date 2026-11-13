@@ -12,8 +12,9 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
-use owned_ttf_parser::{name_id, AsFaceRef, Face, GlyphId, OutlineBuilder, OwnedFace};
+use crate::sfnt::{self, Face, OutlineBuilder};
 
 /// Whose layout rules to follow where they differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub enum Model {
 pub struct FontId(pub usize);
 
 pub struct Font {
-    face: OwnedFace,
+    face: Face,
     families: Vec<String>,
     pub bold: bool,
     pub italic: bool,
@@ -63,66 +64,61 @@ impl LineBox {
 }
 
 impl Font {
-    fn new(face: OwnedFace) -> Self {
-        let f: &Face = face.as_face_ref();
-        let upm = f32::from(f.units_per_em());
+    fn new(face: Face) -> Self {
+        let upm = f32::from(face.units_per_em());
         let em = |units: i16| f32::from(units) / upm;
-        let hhea = f.tables().hhea;
+        let hhea = face.hhea();
         let hhea_box = LineBox { ascent: em(hhea.ascender) + em(hhea.line_gap).max(0.0), descent: -em(hhea.descender) };
         // Word's rule: the Windows ascent and descent, plus whatever the
         // `hhea` table asks for beyond them as external leading above the
         // line; or the typographic metrics when the font says to use those.
-        let box_word = match f.tables().os2 {
-            Some(os2) if os2.use_typographic_metrics() => LineBox {
-                ascent: em(os2.typographic_ascender()) + em(os2.typographic_line_gap()).max(0.0),
-                descent: -em(os2.typographic_descender()),
+        let box_word = match face.os2() {
+            Some(os2) if os2.use_typographic_metrics => LineBox {
+                ascent: em(os2.typographic_ascender) + em(os2.typographic_line_gap).max(0.0),
+                descent: -em(os2.typographic_descender),
             },
             Some(os2) => {
-                let (ascent, descent) = (em(os2.windows_ascender()), em(os2.windows_descender()).abs());
+                let (ascent, descent) = (em(os2.windows_ascender), em(os2.windows_descender).abs());
                 let leading = (hhea_box.ascent + hhea_box.descent - ascent - descent).max(0.0);
                 LineBox { ascent: ascent + leading, descent }
             }
             None => hhea_box,
         };
         let mut families = Vec::new();
-        for name in f.names() {
-            if matches!(name.name_id, name_id::FAMILY | name_id::TYPOGRAPHIC_FAMILY) {
-                if let Some(text) = name.to_string() {
-                    let text = text.to_lowercase();
-                    if !families.contains(&text) {
-                        families.push(text);
-                    }
-                }
+        for name in face.family_names() {
+            let name = name.to_lowercase();
+            if !families.contains(&name) {
+                families.push(name);
             }
         }
-        let line = |metrics: Option<owned_ttf_parser::LineMetrics>, fallback: (f32, f32)| {
-            metrics.map_or(fallback, |m| (em(m.position), em(m.thickness).max(0.02)))
+        let line = |metrics: Option<(i16, i16)>, fallback: (f32, f32)| {
+            metrics.map_or(fallback, |(position, thickness)| (em(position), em(thickness).max(0.02)))
         };
         Font {
-            bold: f.is_bold(),
-            italic: f.is_italic(),
+            bold: face.is_bold(),
+            italic: face.is_italic(),
             units_per_em: upm,
-            east_asian: ['中', 'あ', '한'].iter().any(|ch| f.glyph_index(*ch).is_some()),
+            east_asian: ['中', 'あ', '한'].iter().any(|ch| face.glyph_index(*ch).is_some()),
             box_word,
             box_plain: hhea_box,
-            underline: line(f.underline_metrics(), (-0.1, 0.05)),
-            strikeout: line(f.strikeout_metrics(), (0.3, 0.05)),
+            underline: line(face.post().map(|post| (post.underline_position, post.underline_thickness)), (-0.1, 0.05)),
+            strikeout: line(face.os2().map(|os2| (os2.strikeout_position, os2.strikeout_thickness)), (0.3, 0.05)),
             families,
             face,
         }
     }
 
     pub fn glyph(&self, ch: char) -> Option<u16> {
-        self.face.as_face_ref().glyph_index(ch).map(|g| g.0)
+        self.face.glyph_index(ch)
     }
 
     /// Advance width of a glyph in em.
     pub fn advance(&self, glyph: u16) -> f32 {
-        self.face.as_face_ref().glyph_hor_advance(GlyphId(glyph)).map_or(0.0, |a| f32::from(a) / self.units_per_em)
+        self.face.advance(glyph).map_or(0.0, |advance| f32::from(advance) / self.units_per_em)
     }
 
     pub fn outline(&self, glyph: u16, builder: &mut dyn OutlineBuilder) {
-        self.face.as_face_ref().outline_glyph(GlyphId(glyph), builder);
+        self.face.outline(glyph, builder);
     }
 
     pub fn family(&self) -> &str {
@@ -270,15 +266,14 @@ impl FontDb {
     /// Adds the faces of a font file held in memory (a collection has
     /// several) and returns how many there were: none if it is not a font.
     pub fn add(&mut self, data: Vec<u8>) -> usize {
-        let count = owned_ttf_parser::fonts_in_collection(&data).unwrap_or(1);
-        let mut added = 0;
-        for index in 0..count {
-            if let Ok(face) = OwnedFace::from_vec(data.clone(), index) {
+        let data: Arc<[u8]> = data.into();
+        let before = self.fonts.len();
+        for index in 0..sfnt::faces_in(&data) {
+            if let Some(face) = Face::parse(Arc::clone(&data), index) {
                 self.register(Font::new(face));
-                added += 1;
             }
         }
-        added
+        self.fonts.len() - before
     }
 
     fn register(&mut self, font: Font) {
