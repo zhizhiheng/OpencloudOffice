@@ -1627,3 +1627,128 @@ fn a_multiple_of_single_spacing_multiplies_the_text_and_not_the_picture() {
     let after = page.lines.iter().find(|line| line.text == "after").unwrap().baseline;
     assert!(close(after, page.body.0 + 100.0 + 13.8 + 11.2, 0.05), "{after} below a top of {}", page.body.0);
 }
+
+/// A `w:drawing` anchored in its paragraph: a box in points, placed and wrapped as the pieces say.
+fn anchored_picture(size: (u32, u32), horizontal: &str, vertical: &str, wrap: &str, attributes: &str) -> String {
+    format!(
+        r#"<w:drawing><wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+           distT="0" distB="0" distL="114300" distR="114300" {attributes}>
+           <wp:positionH {horizontal}</wp:positionH><wp:positionV {vertical}</wp:positionV>
+           <wp:extent cx="{}" cy="{}"/>{wrap}</wp:anchor></w:drawing>"#,
+        size.0 * 12700,
+        size.1 * 12700
+    )
+}
+
+#[test]
+fn text_begins_below_a_picture_it_may_not_pass_and_both_move_on_when_they_do_not_fit() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `image-anchored` and
+    // `anchor-side-by-side`): a picture with text above and below only,
+    // placed at the top of its paragraph and centred between the margins,
+    // has the paragraph's first line begin right at its bottom. Near the
+    // foot of a page, where picture and first line no longer fit, the
+    // paragraph goes to the next page and the picture with it.
+    let serif = font("Liberation Serif", 24);
+    let picture = anchored_picture(
+        (170, 60),
+        r#"relativeFrom="margin"><wp:align>center</wp:align>"#,
+        r#"relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset>"#,
+        "<wp:wrapTopAndBottom/>",
+        "",
+    );
+    let anchored =
+        format!(r#"<w:p><w:r>{picture}</w:r><w:r><w:rPr>{serif}</w:rPr><w:t>beside the picture</w:t></w:r></w:p>"#);
+    let lay = |filler: usize| {
+        let body = paragraph(&serif, "", "one line").repeat(filler) + &anchored + &paragraph(&serif, "", "after");
+        pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word)
+    };
+
+    let pages_ = lay(1);
+    let page = &pages_[0];
+    let (x, y, width, height) = images(page)[0];
+    let above = page.lines[0].baseline;
+    assert!(close(y, above + 2.6, 0.05), "at the top of its paragraph: {y} under a line at {above}");
+    assert!(close(x + width / 2.0, page.width / 2.0, 0.01), "centred: {x}");
+    let text = page.lines.iter().find(|line| line.text.starts_with("beside")).unwrap();
+    assert!(
+        close(text.baseline, y + height + 11.2, 0.05),
+        "{} under a picture that ends at {}",
+        text.baseline,
+        y + height
+    );
+
+    // 49 lines of 13.8 pt leave 21.7 pt on a page of 697.9: room for a line, not for the picture and a line.
+    let pages_ = lay(49);
+    assert_eq!(pages_.len(), 2);
+    assert!(images(&pages_[0]).is_empty() && pages_[0].lines.len() == 49);
+    let (_, y, _, height) = images(&pages_[1])[0];
+    assert!(close(y, pages_[1].body.0, 0.01), "at the top of the next page: {y}");
+    assert!(close(pages_[1].lines[0].baseline, y + height + 11.2, 0.05));
+}
+
+#[test]
+fn lines_beside_a_picture_are_shorter_and_those_below_it_run_the_full_width() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (`image-anchored`): a picture of 113.4 by 85 pt at
+    // the right margin, with square wrapping and 9 pt kept clear at its
+    // sides. Every line any part of which is beside the picture ends 9 pt
+    // before it; the first line that begins below the picture is full again.
+    let serif = font("Liberation Serif", 24);
+    let picture = anchored_picture(
+        (113, 85),
+        r#"relativeFrom="margin"><wp:align>right</wp:align>"#,
+        r#"relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset>"#,
+        r#"<wp:wrapSquare wrapText="bothSides"/>"#,
+        "",
+    );
+    let text = LONG.repeat(4);
+    let body = format!(r#"<w:p><w:r>{picture}</w:r><w:r><w:rPr>{serif}</w:rPr><w:t>{text}</w:t></w:r></w:p>"#);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let (x, y, _, height) = images(&page)[0];
+    let right = page.width - 72.0;
+    assert!(close(x + 113.0, right, 0.01) && close(y, page.body.0, 0.01), "at the right margin, at the top: {x} {y}");
+
+    let (bottom, pitch) = (y + height, 13.8);
+    let beside = |line: &oco_layout::PlacedLine| line.baseline - 11.2 < bottom;
+    let count = page.lines.iter().filter(|line| beside(line)).count();
+    assert_eq!(count, (height / pitch).ceil() as usize, "the lines whose top is above the picture's bottom");
+    for (number, line) in page.lines.iter().enumerate().take(page.lines.len() - 1) {
+        if beside(line) {
+            assert!(line.x1 <= x - 9.0 + 0.01, "line {number} ends at {} beside a picture at {x}", line.x1);
+        } else {
+            assert!(line.x1 > x, "line {number} below the picture ends at {}", line.x1);
+        }
+    }
+    // The text is all there, broken differently: more lines than without the picture.
+    let plain = format!(r#"<w:p><w:r><w:rPr>{serif}</w:rPr><w:t>{text}</w:t></w:r></w:p>"#);
+    let without = pages(&Source { body: &plain, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert!(page.lines.len() > without.lines.len());
+    let words =
+        |page: &Page| page.lines.iter().flat_map(|l| l.text.split_whitespace().map(str::to_owned)).collect::<Vec<_>>();
+    assert_eq!(words(&page), words(&without));
+}
+
+#[test]
+fn a_picture_behind_the_text_moves_nothing_and_is_drawn_first() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let serif = font("Liberation Serif", 24);
+    let picture = anchored_picture(
+        (100, 50),
+        r#"relativeFrom="page"><wp:posOffset>1270000</wp:posOffset>"#,
+        r#"relativeFrom="page"><wp:posOffset>2540000</wp:posOffset>"#,
+        "<wp:wrapNone/>",
+        r#"behindDoc="1""#,
+    );
+    // A paragraph above, so that there is text on the page before the picture comes.
+    let lay = |picture: &str| {
+        let body = paragraph(&serif, "", "above")
+            + &format!(r#"<w:p><w:r>{picture}</w:r><w:r><w:rPr>{serif}</w:rPr><w:t>{LONG}</w:t></w:r></w:p>"#);
+        pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0)
+    };
+    let (with, without) = (lay(&picture), lay(""));
+    assert_eq!(images(&with), [(100.0, 200.0, 100.0, 50.0)], "from the corner of the page");
+    assert!(matches!(with.items[0], Item::Image { .. }), "under the text");
+    let lines = |page: &Page| page.lines.iter().map(|l| (l.baseline, l.x0, l.x1, l.text.clone())).collect::<Vec<_>>();
+    assert_eq!(lines(&with), lines(&without));
+}

@@ -328,7 +328,7 @@
     ],
     "starts": [
      6,
-     0
+     4
     ]
    },
    "libreoffice/sw/qa/core/data/ooxml/pass/fdo80514.docx": {
@@ -2486,16 +2486,16 @@
    "word": {
     "corpus-word/docx4j/anchor-side-by-side.docx": {
      "dx": 0.02,
-     "dy": 223.9,
+     "dy": 0.1,
      "lines": 23,
      "missing_fonts": [],
      "page_starts": 1,
-     "page_starts_equal": 0,
+     "page_starts_equal": 1,
      "pages": [
       2,
-      1
+      2
      ],
-     "placed": 4,
+     "placed": 23,
      "plain": false,
      "same": 23
     },
@@ -2872,18 +2872,18 @@
     },
     "corpus-word/docx4j/image-anchored.docx": {
      "dx": 0.02,
-     "dy": 70.4,
+     "dy": 0.0,
      "lines": 66,
      "missing_fonts": [],
      "page_starts": 1,
-     "page_starts_equal": 0,
+     "page_starts_equal": 1,
      "pages": [
       2,
       2
      ],
-     "placed": 0,
+     "placed": 50,
      "plain": false,
-     "same": 50
+     "same": 59
     },
     "corpus-word/docx4j/image-inline.docx": {
      "dx": 0.02,
@@ -5144,8 +5144,8 @@
    "multipage_pages_equal": 498,
    "multipage_pages_within_one": 594,
    "page_starts": 2044,
-   "page_starts_equal": 474,
-   "page_starts_same_paragraph": 623
+   "page_starts_equal": 490,
+   "page_starts_same_paragraph": 640
   },
   "covered": {
    "documents": 537,
@@ -5166,8 +5166,8 @@
    "multipage_pages_equal": 184,
    "multipage_pages_within_one": 222,
    "page_starts": 467,
-   "page_starts_equal": 147,
-   "page_starts_same_paragraph": 196
+   "page_starts_equal": 151,
+   "page_starts_same_paragraph": 200
   },
   "plain": {
    "documents": 881,
@@ -5187,10 +5187,10 @@
     "documents": 128,
     "lines": 7059,
     "page_starts": 193,
-    "page_starts_equal": 166,
-    "pages_equal": 119,
-    "placed": 5185,
-    "same": 6376
+    "page_starts_equal": 168,
+    "pages_equal": 120,
+    "placed": 5254,
+    "same": 6385
    },
    "covered": {
     "documents": 28,

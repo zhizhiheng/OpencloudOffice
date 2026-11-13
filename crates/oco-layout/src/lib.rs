@@ -21,8 +21,8 @@ pub mod text;
 use std::collections::HashMap;
 
 use oco_docx::{
-    format_number, Block, BreakKind, Counters, Docx, GridKind, ParaProps, Resolver, RunContent, RunProps, Section,
-    SectionStart, StoryRefs, VerticalMerge,
+    format_number, Alignment, Block, BreakKind, Counters, Docx, GridKind, Offset, ParaProps, RelativeTo, Resolver,
+    RunContent, RunProps, Section, SectionStart, StoryRefs, VerticalMerge, Wrap, WrapSide,
 };
 #[cfg(feature = "serde")]
 use serde::Serialize;
@@ -161,6 +161,9 @@ pub struct Layout {
     /// designated replacement. Text in them was set in a fallback font, so
     /// its line breaks are not to be trusted.
     pub missing_fonts: Vec<String>,
+    /// How many anchored objects were left out because the place they are
+    /// anchored in is not handled yet: a table cell.
+    pub unplaced: usize,
 }
 
 /// One piece of a paragraph's content, as [`content`] reports it.
@@ -255,6 +258,99 @@ struct Unit {
     /// The rows at the head of the unit's table that are repeated at the
     /// top of each page the table goes on to, if the unit is a later row.
     header: Option<std::rc::Rc<Vec<Row>>>,
+    /// The objects anchored in the paragraph.
+    anchored: Vec<paragraph::Anchored>,
+    /// The paragraph's list label and whether it shares its bottom border
+    /// with the paragraph below: what it takes to lay it out a second time,
+    /// around an object, without counting it again as a list item.
+    label: Option<paragraph::LabelSpec>,
+    joined: bool,
+}
+
+/// An object on a page that text keeps clear of.
+struct Float {
+    /// Its box, grown by the distance text keeps from it.
+    left: f32,
+    right: f32,
+    top: f32,
+    bottom: f32,
+    /// Text stops above the object and goes on below it, rather than passing beside it.
+    across: bool,
+    side: WrapSide,
+}
+
+/// A line beside an object needs at least this much room; with less it goes below.
+const LEAST_BESIDE: f32 = 12.0;
+
+/// Where a line of `height` whose top would be at `y` can stand among the
+/// objects on the page: its top, at `y` or lower, and the bounds it keeps
+/// between if an object is beside it. (Measured in Word, docx4j's probes
+/// `image-anchored` and `anchor-side-by-side`: a line is kept clear of an
+/// object when any part of its height meets the object's, from the object's
+/// top less its distance to its bottom plus its distance; under an object
+/// that text does not pass, the next line begins right at that bottom.)
+fn among(floats: &[Float], mut y: f32, height: f32, column: (f32, f32)) -> (f32, Option<(f32, f32)>) {
+    loop {
+        let meets = |float: &&Float| y < float.bottom - 0.01 && y + height > float.top + 0.01;
+        if let Some(float) = floats.iter().filter(meets).find(|float| float.across) {
+            y = float.bottom;
+            continue;
+        }
+        let mut bounds = column;
+        let mut beside: Option<f32> = None;
+        for float in floats.iter().filter(meets) {
+            if float.right <= bounds.0 || float.left >= bounds.1 {
+                continue;
+            }
+            let (before, after) = ((bounds.0, float.left.max(bounds.0)), (float.right.min(bounds.1), bounds.1));
+            bounds = match float.side {
+                WrapSide::Left => before,
+                WrapSide::Right => after,
+                // On both sides Word sets text on both; here it goes on the wider one.
+                _ if before.1 - before.0 >= after.1 - after.0 => before,
+                _ => after,
+            };
+            beside = Some(beside.map_or(float.bottom, |lowest: f32| lowest.min(float.bottom)));
+        }
+        match beside {
+            Some(lowest) if bounds.1 - bounds.0 < LEAST_BESIDE => y = lowest,
+            Some(_) => return (y, Some(bounds)),
+            None => return (y, None),
+        }
+    }
+}
+
+/// The left and top of an anchored object on its page. `column` and `body`
+/// are the left and right, and the top and bottom, of the text area;
+/// `paragraph` is the top of the paragraph the object is anchored in.
+fn anchored_at(
+    object: &paragraph::Anchored,
+    page: (f32, f32),
+    column: (f32, f32),
+    body: (f32, f32),
+    paragraph: f32,
+) -> (f32, f32) {
+    let place = |placement: oco_docx::Placement, area: (f32, f32), size: f32| match placement.offset {
+        Offset::By(distance) => area.0 + distance as f32 / oco_docx::EMU_PER_POINT as f32,
+        Offset::Align(Alignment::Start | Alignment::Inside) => area.0,
+        Offset::Align(Alignment::Center) => (area.0 + area.1 - size) / 2.0,
+        Offset::Align(Alignment::End | Alignment::Outside) => area.1 - size,
+    };
+    let anchor = &object.anchor;
+    let across = match anchor.horizontal.relative_to {
+        RelativeTo::Page => (0.0, page.0),
+        RelativeTo::LeftMargin | RelativeTo::InsideMargin => (0.0, column.0),
+        RelativeTo::RightMargin | RelativeTo::OutsideMargin => (column.1, page.0),
+        _ => column,
+    };
+    let down = match anchor.vertical.relative_to {
+        RelativeTo::Page => (0.0, page.1),
+        RelativeTo::Margin => body,
+        RelativeTo::TopMargin => (0.0, body.0),
+        RelativeTo::BottomMargin => (body.1, page.1),
+        _ => (paragraph, paragraph),
+    };
+    (place(anchor.horizontal, across, object.width), place(anchor.vertical, down, object.height))
 }
 
 /// A table row ready to be placed. Its cells are columns of lines side by
@@ -523,6 +619,8 @@ struct Builder<'a> {
     demands: HashMap<usize, Demands>,
     /// How many tables the content being laid out is inside.
     depth: usize,
+    /// Anchored objects met that were not placed: those in table cells.
+    unplaced: usize,
 }
 
 /// What the columns of an auto-fit table ask for, each across its whole
@@ -587,18 +685,54 @@ fn portable_bullet(text: &str, props: &mut RunProps) -> String {
         .collect()
 }
 
+/// Draws the border under a paragraph below its last line and gives the
+/// line the room the border takes.
+fn border_below(lines: &mut [paragraph::Line], props: &ParaProps, width: f32) {
+    let Some(border) = props.borders.bottom.as_ref().filter(|b| b.is_visible()) else { return };
+    let Some(line) = lines.last_mut() else { return };
+    let color = match border.color {
+        Some(oco_docx::Color::Rgb(r, g, b)) => [r, g, b],
+        _ => [0, 0, 0],
+    };
+    let (rule, space) = (border.size as f32 / 8.0, border.space as f32);
+    let at = line.height + space + rule / 2.0;
+    line.items.push(Item::Rule {
+        x1: props.indent.left.unwrap_or(0) as f32 * TWIP,
+        y1: at,
+        x2: width - props.indent.right.unwrap_or(0) as f32 * TWIP,
+        y2: at,
+        width: rule,
+        color,
+        dash: [0.0, 0.0],
+    });
+    line.height += space + rule;
+    line.needed += space + rule;
+}
+
 impl Builder<'_> {
     /// What a paragraph is laid out from: its properties, runs and label,
     /// all resolved. Counts the paragraph if it is a list item.
     fn resolved<'s>(&mut self, source: &'s oco_docx::Paragraph) -> (ParaProps, paragraph::Paragraph<'s>) {
+        self.resolve(source, None)
+    }
+
+    /// As [`Builder::resolved`]; with `known`, the label is the one given
+    /// and the paragraph is not counted.
+    fn resolve<'s>(
+        &mut self,
+        source: &'s oco_docx::Paragraph,
+        known: Option<Option<paragraph::LabelSpec>>,
+    ) -> (ParaProps, paragraph::Paragraph<'s>) {
         static NONE: std::sync::OnceLock<ParaProps> = std::sync::OnceLock::new();
         let props: ParaProps = self.resolver.paragraph_in(&source.props, &self.table_styles);
         let style = source.props.style_id.as_deref();
-        let label = self.resolver.list_level(&props).and_then(|(num_id, ilvl, level)| {
-            let label = self.counters.next(&self.docx.numbering, num_id, ilvl)?;
-            let mut label_props = self.resolver.label(style, &source.mark_props, level);
-            let text = portable_bullet(&label.text, &mut label_props);
-            Some(paragraph::LabelSpec { text, props: label_props, suffix: level.suffix, align: level.align })
+        let label = known.unwrap_or_else(|| {
+            self.resolver.list_level(&props).and_then(|(num_id, ilvl, level)| {
+                let label = self.counters.next(&self.docx.numbering, num_id, ilvl)?;
+                let mut label_props = self.resolver.label(style, &source.mark_props, level);
+                let text = portable_bullet(&label.text, &mut label_props);
+                Some(paragraph::LabelSpec { text, props: label_props, suffix: level.suffix, align: level.align })
+            })
         });
         let runs: Vec<(RunProps, &[RunContent])> = source
             .runs
@@ -650,6 +784,7 @@ impl Builder<'_> {
     ) -> Unit {
         let (props, input) = self.resolved(source);
         let input = paragraph::Paragraph { props: &props, ..input };
+        let label = input.label.clone();
         let ctx = context(self.docx, section, width, self.options.model);
         let mut laid = paragraph::layout(&input, self.fonts, &ctx);
         for name in std::mem::take(&mut laid.missing_fonts) {
@@ -668,31 +803,14 @@ impl Builder<'_> {
         //
         // Paragraphs one after the other with the same borders and indents
         // are bordered as one, so only the last of them has the border.
-        if let Some(border) = props.borders.bottom.as_ref().filter(|b| b.is_visible()) {
-            let joined = next.is_some_and(|next| {
+        let joined = props.borders.bottom.as_ref().is_some_and(|b| b.is_visible())
+            && next.is_some_and(|next| {
                 let below = self.resolver.paragraph_in(&next.props, &self.table_styles);
                 below.borders == props.borders
                     && (below.indent.left, below.indent.right) == (props.indent.left, props.indent.right)
             });
-            if let Some(line) = laid.lines.last_mut().filter(|_| !joined) {
-                let color = match border.color {
-                    Some(oco_docx::Color::Rgb(r, g, b)) => [r, g, b],
-                    _ => [0, 0, 0],
-                };
-                let (rule, space) = (border.size as f32 / 8.0, border.space as f32);
-                let at = line.height + space + rule / 2.0;
-                line.items.push(Item::Rule {
-                    x1: props.indent.left.unwrap_or(0) as f32 * TWIP,
-                    y1: at,
-                    x2: width - props.indent.right.unwrap_or(0) as f32 * TWIP,
-                    y2: at,
-                    width: rule,
-                    color,
-                    dash: [0.0, 0.0],
-                });
-                line.height += space + rule;
-                line.needed += space + rule;
-            }
+        if !joined {
+            border_below(&mut laid.lines, &props, width);
         }
         Unit {
             lines: laid.lines,
@@ -713,7 +831,30 @@ impl Builder<'_> {
             automatic: (props.spacing.before_auto == Some(true), props.spacing.after_auto == Some(true)),
             list: self.resolver.list_level(&props).map(|(list, _, _)| list),
             header: None,
+            anchored: laid.anchored,
+            label,
+            joined,
         }
+    }
+
+    /// Lays a paragraph out a second time, its lines kept within `shape`
+    /// (see [`paragraph::layout_within`]). Nothing is counted again.
+    fn again(
+        &mut self,
+        source: &oco_docx::Paragraph,
+        unit: &Unit,
+        section: &Section,
+        width: f32,
+        shape: &[(f32, f32)],
+    ) -> Vec<paragraph::Line> {
+        let (props, input) = self.resolve(source, Some(unit.label.clone()));
+        let input = paragraph::Paragraph { props: &props, ..input };
+        let ctx = context(self.docx, section, width, self.options.model);
+        let mut laid = paragraph::layout_within(&input, self.fonts, &ctx, shape);
+        if !unit.joined {
+            border_below(&mut laid.lines, &props, width);
+        }
+        laid.lines
     }
 
     /// What each column of `table` asks for, from its cells: see [`Demands`].
@@ -1107,6 +1248,7 @@ impl Builder<'_> {
                 let mut inner = Vec::new();
                 self.depth += 1;
                 self.blocks(blocks, section, (cell_width - left - right).max(1.0), &mut inner);
+                self.unplaced += inner.iter().map(|unit| unit.anchored.len()).sum::<usize>();
                 self.depth -= 1;
                 // Automatic spacing gives way to the edges of the cell:
                 // above the first paragraph always, below the last unless
@@ -1288,6 +1430,9 @@ impl Builder<'_> {
                 automatic: (false, false),
                 list: None,
                 header: repeated.clone().filter(|_| number >= heading),
+                anchored: Vec::new(),
+                label: None,
+                joined: false,
             });
         }
         self.table_styles = outer;
@@ -1457,6 +1602,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         table_styles: Vec::new(),
         demands: HashMap::new(),
         depth: 0,
+        unplaced: 0,
     };
     let mut units = Vec::new();
     // Line breaks depend on the text width, which this prototype takes from
@@ -1548,6 +1694,10 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         lines.iter().rev().skip(1).map(|line| line.height).sum::<f32>() + last
     };
 
+    let sources = docx.document.paragraphs();
+    // The objects on the page being filled that text keeps clear of.
+    let mut floats: Vec<Float> = Vec::new();
+    let mut floats_page = 0;
     for index in 0..units.len() {
         let section = setups[section_index.min(setups.len() - 1)];
         let left = (section.margin_left + section.gutter) as f32 * TWIP;
@@ -1716,15 +1866,117 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             continue;
         }
 
-        let count = unit.lines.len();
-        for (number, line) in unit.lines.iter().enumerate() {
+        if floats_page != pages.len() {
+            floats.clear();
+            floats_page = pages.len();
+        }
+        let column = (left + unit.left, left + unit.left + width);
+        // Objects anchored in the paragraph go on the page its first line
+        // goes on, and that line may have to begin below them: if it then
+        // does not fit, paragraph and objects go to the next page together.
+        if !unit.anchored.is_empty() {
+            let placed = |top_of_paragraph: f32, page: &Page, body: (f32, f32)| -> Vec<(f32, f32, Float)> {
+                let boxes = unit.anchored.iter().map(|object| {
+                    let (x, y) = anchored_at(object, (page.width, page.height), column, body, top_of_paragraph);
+                    let distance = object.anchor.distance.map(|emu| emu as f32 / oco_docx::EMU_PER_POINT as f32);
+                    let float = Float {
+                        left: x - distance[2],
+                        right: x + object.width + distance[3],
+                        top: y - distance[0],
+                        bottom: y + object.height + distance[1],
+                        across: object.anchor.wrap == Wrap::TopAndBottom,
+                        side: object.anchor.wrap_side,
+                    };
+                    (x, y, float)
+                });
+                boxes.collect()
+            };
+            let first = unit.lines.first().map_or(0.0, |line| line.needed);
+            let mut own = placed(y, pages.last().expect("a page is always open"), (top, bottom));
+            let wraps = |object: &paragraph::Anchored| object.anchor.wrap != Wrap::None;
+            let mut all: Vec<Float> = std::mem::take(&mut floats);
+            let before = all.len();
+            all.extend(
+                own.drain(..).zip(&unit.anchored).filter(|(_, object)| wraps(object)).map(|(placed, _)| placed.2),
+            );
+            let begins = among(&all, y, first, column).0;
+            all.truncate(before);
+            floats = all;
+            if begins + first > bottom + 0.01 && !page_is_empty {
+                turn_page!(section_index, false);
+                page_is_empty = true;
+                after_break = true;
+                floats.clear();
+                floats_page = pages.len();
+            }
+            let page = pages.last_mut().expect("a page is always open");
+            for ((x, y, float), object) in placed(y, page, (top, bottom)).into_iter().zip(&unit.anchored) {
+                let image = Item::Image {
+                    x,
+                    y,
+                    width: object.width,
+                    height: object.height,
+                    part: object.part.clone(),
+                    crop: object.crop,
+                };
+                // What lies behind the text is drawn before it.
+                match object.anchor.behind_text {
+                    true => page.items.insert(0, image),
+                    false => page.items.push(image),
+                }
+                if wraps(object) {
+                    floats.push(float);
+                }
+            }
+        }
+
+        // Where an object stands beside the paragraph, its lines are broken
+        // again to keep to one side of it. Which lines those are depends on
+        // how they break, so this is done until it settles.
+        let mut lines = std::borrow::Cow::Borrowed(&unit.lines[..]);
+        let beside = floats.iter().any(|float| !float.across);
+        if let Some(source) = unit.paragraph.and_then(|index| sources.get(index)).filter(|_| beside) {
+            const OPEN: (f32, f32) = (f32::MIN, f32::MAX);
+            let mut shape: Vec<(f32, f32)> = Vec::new();
+            for _ in 0..6 {
+                let mut next = Vec::new();
+                let mut at = y;
+                for line in lines.iter() {
+                    let (settled, bounds) = among(&floats, at, line.height, column);
+                    if settled + line.needed > bottom + 0.01 {
+                        // The rest goes to the next page, clear of these objects.
+                        break;
+                    }
+                    next.push(bounds.map_or(OPEN, |(from, to)| (from - column.0, to - column.0)));
+                    at = settled + line.height;
+                }
+                while next.last() == Some(&OPEN) {
+                    next.pop();
+                }
+                if next == shape {
+                    break;
+                }
+                shape = next;
+                lines = std::borrow::Cow::Owned(builder.again(source, unit, first, width, &shape));
+            }
+        }
+
+        let count = lines.len();
+        for (number, line) in lines.iter().enumerate() {
             let fits = |y: f32, line: &paragraph::Line| y + line.needed <= bottom + 0.01;
+            if floats_page != pages.len() {
+                floats.clear();
+                floats_page = pages.len();
+            }
+            if !floats.is_empty() {
+                y = among(&floats, y, line.height, column).0;
+            }
             // Widow control: the last line may not go to a new page alone.
             let strands_last = unit.widow_control
                 && count >= 4
                 && number + 2 == count
                 && fits(y, line)
-                && !fits(y + line.height, &unit.lines[number + 1]);
+                && !fits(y + line.height, &lines[number + 1]);
             if (!fits(y, line) || strands_last) && !page_is_empty {
                 turn_page!(section_index, false);
                 after_break = true;
@@ -1778,7 +2030,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         let mut lines = Vec::new();
         for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
             let Some(blocks) = story.as_deref().and_then(|id| docx.stories.get(id)) else { continue };
-            let (placed, height) = stack(builder.story(blocks, section, Some(&numbers)));
+            let (placed, height, anchored) = stack(builder.story(blocks, section, Some(&numbers)));
             let origin =
                 if footer { page.height - section.footer as f32 * TWIP - height } else { section.header as f32 * TWIP };
             for (offset, mut line) in placed {
@@ -1788,11 +2040,29 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 }
                 record(&line, left, origin + offset, &mut lines);
             }
+            // Objects anchored in a header or footer are placed as in the
+            // body; its text takes no notice of them.
+            let column = (left, left + section.text_width() as f32 * TWIP);
+            for (offset, object) in anchored {
+                let (x, y) = anchored_at(&object, (page.width, page.height), column, page.body, origin + offset);
+                let image = Item::Image {
+                    x,
+                    y,
+                    width: object.width,
+                    height: object.height,
+                    part: object.part,
+                    crop: object.crop,
+                };
+                match object.anchor.behind_text {
+                    true => page.items.insert(0, image),
+                    false => page.items.push(image),
+                }
+            }
         }
         page.lines.append(&mut lines);
         page.lines.sort_by(|a, b| a.baseline.total_cmp(&b.baseline));
     }
-    Layout { pages, missing_fonts: builder.missing_fonts }
+    Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced }
 }
 
 /// What a page has around its body.
@@ -1816,8 +2086,14 @@ struct Frame {
 /// A floating table takes no room: what follows it begins where it began.
 /// (In Word it stands where its properties say, which are not read; here it
 /// stays where the flow had come to.)
-fn stack(units: Vec<Unit>) -> (Vec<(f32, paragraph::Line)>, f32) {
+/// Stacks the units of a header or footer: its lines with how far down
+/// each begins, its height, and the objects anchored in it with the top of
+/// the paragraph each is anchored in.
+type Stacked = (Vec<(f32, paragraph::Line)>, f32, Vec<(f32, paragraph::Anchored)>);
+
+fn stack(units: Vec<Unit>) -> Stacked {
     let mut placed = Vec::new();
+    let mut anchored = Vec::new();
     let (mut y, mut previous_after, mut first) = (0.0f32, 0.0f32, true);
     // Where the flow goes on once the floating table being placed is over.
     let mut flow = None;
@@ -1828,6 +2104,7 @@ fn stack(units: Vec<Unit>) -> (Vec<(f32, paragraph::Line)>, f32) {
         y += if first { unit.before } else { unit.before.max(previous_after) };
         first = false;
         previous_after = unit.after;
+        anchored.extend(unit.anchored.into_iter().map(|object| (y, object)));
         let ends_table = unit.row.as_ref().is_some_and(|row| row.last);
         let lines = match unit.row {
             Some(row) => vec![row.into_line()],
@@ -1844,7 +2121,7 @@ fn stack(units: Vec<Unit>) -> (Vec<(f32, paragraph::Line)>, f32) {
             }
         }
     }
-    (placed, y + previous_after)
+    (placed, y + previous_after, anchored)
 }
 
 /// A copy of `blocks` with the page number and page count written out

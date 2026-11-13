@@ -199,7 +199,15 @@ pub extern "C" fn oco_info(handle: u32) -> u32 {
         let mut json = format!("{{\"pages\":{},\"missingFonts\":[", layout.pages.len());
         list(&mut json, layout.missing_fonts.iter(), |json, font| string(json, font));
         json.push_str("],\"notShown\":[");
-        list(&mut json, not_shown(docx).into_iter(), |json, (kind, count)| {
+        let mut kinds = not_shown(docx);
+        if layout.unplaced > 0 {
+            // Pictures anchored in table cells are read but not placed yet.
+            match kinds.iter_mut().find(|(kind, _)| *kind == "pictures") {
+                Some((_, count)) => *count += layout.unplaced,
+                None => kinds.insert(0, ("pictures", layout.unplaced)),
+            }
+        }
+        list(&mut json, kinds.into_iter(), |json, (kind, count)| {
             let _ = write!(json, "{{\"kind\":\"{kind}\",\"count\":{count}}}");
         });
         json.push_str("],\"warnings\":[");

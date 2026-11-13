@@ -35,6 +35,7 @@ pub struct Context {
 }
 
 /// A list label to set at the start of the paragraph.
+#[derive(Debug, Clone)]
 pub struct LabelSpec {
     pub text: String,
     pub props: RunProps,
@@ -84,6 +85,18 @@ pub struct Laid {
     /// Fonts the paragraph asks for that are neither installed nor have a
     /// designated replacement.
     pub missing_fonts: Vec<String>,
+    /// The objects anchored in the paragraph, which are placed apart from its lines.
+    pub anchored: Vec<Anchored>,
+}
+
+/// A picture or another object anchored in a paragraph.
+#[derive(Debug, Clone)]
+pub struct Anchored {
+    pub width: f32,
+    pub height: f32,
+    pub part: Option<String>,
+    pub crop: [f32; 4],
+    pub anchor: oco_docx::Anchor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +200,7 @@ struct Builder<'a> {
     after_cjk: bool,
     missing_fonts: Vec<String>,
     objects: Vec<Object>,
+    anchored: Vec<Anchored>,
 }
 
 impl Builder<'_> {
@@ -306,7 +320,17 @@ impl Builder<'_> {
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
                 RunContent::PageBreakHint => {}
                 RunContent::Drawing(drawing) => {
-                    if drawing.anchor.is_some() {
+                    let picture = drawing.picture.as_ref();
+                    let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
+                    let crop = picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0));
+                    if let Some(anchor) = &drawing.anchor {
+                        self.anchored.push(Anchored {
+                            width: emu(drawing.width),
+                            height: emu(drawing.height),
+                            part: picture.and_then(|p| p.part.clone()),
+                            crop,
+                            anchor: anchor.clone(),
+                        });
                         continue;
                     }
                     // In the line an object is a character as wide and as
@@ -314,13 +338,11 @@ impl Builder<'_> {
                     // in Word, docx4j's probe `image-inline`: the bottom of
                     // the picture is the baseline of its line, the top of
                     // the picture the top of the line.)
-                    let picture = drawing.picture.as_ref();
-                    let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
                     self.objects.push(Object {
                         width: emu(drawing.width),
                         height: emu(drawing.height),
                         part: picture.and_then(|p| p.part.clone()),
-                        crop: picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0)),
+                        crop,
                     });
                     // The font is chosen as for a space, which every font has.
                     push(self, ' ', Kind::Char, None);
@@ -543,6 +565,7 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
         after_cjk: false,
         missing_fonts: Vec::new(),
         objects: Vec::new(),
+        anchored: Vec::new(),
     };
 
     if let Some(label) = &paragraph.label {
@@ -567,8 +590,16 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
 }
 
 pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
+    layout_within(paragraph, fonts, context, &[])
+}
+
+/// Lays the paragraph out where something stands in the way of its lines.
+/// `shape` gives, line by line from the first, the left and right bounds the
+/// line is to keep between, measured as the paragraph's own indents are; a
+/// line past the end of `shape` has the full width.
+pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, shape: &[(f32, f32)]) -> Laid {
     let props = paragraph.props;
-    let Builder { styles, mut atoms, missing_fonts, objects, .. } = prepare(paragraph, fonts, context);
+    let Builder { styles, mut atoms, missing_fonts, objects, anchored, .. } = prepare(paragraph, fonts, context);
 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
@@ -627,6 +658,9 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     let mut is_first = true;
     while start < atoms.len() {
         let origin = if is_first { left + first } else { left };
+        let bounds = shape.get(breaks.len()).copied();
+        let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
         // A right-aligned label ends at the origin, so it starts before it;
         // the tab after it must be measured from where the label really ends.
         let mut x = origin;
@@ -807,6 +841,9 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     for (number, br) in breaks.iter().enumerate() {
         let range = &atoms[br.start..br.end];
         let origin = if number == 0 { left + first } else { left };
+        let bounds = shape.get(number).copied();
+        let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
         // Trailing spaces and the break itself take no part in alignment.
         // ... unless they are underlined blanks to be filled in ("编号：____"),
         // which are part of the text when the document says to draw them.
@@ -1202,6 +1239,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     };
     Laid {
         missing_fonts,
+        anchored,
         lines,
         space_before: space(props.spacing.before_lines, props.spacing.before, props.spacing.before_auto),
         space_after: space(props.spacing.after_lines, props.spacing.after, props.spacing.after_auto),
