@@ -1,0 +1,10 @@
+[package]
+name = "oco-doc"
+description = "The binary Word format (.doc) turned into the document form: a WordprocessingML package"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+oco-docx.workspace = true

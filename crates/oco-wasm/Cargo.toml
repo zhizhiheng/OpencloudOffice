@@ -11,4 +11,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 oco-docx.workspace = true
+oco-formats.workspace = true
 oco-layout.workspace = true

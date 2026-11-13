@@ -19,9 +19,17 @@ name = "oco-cli"
 version = "0.0.1"
 dependencies = [
  "oco-docx",
+ "oco-formats",
  "oco-layout",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oco-doc"
+version = "0.0.1"
+dependencies = [
+ "oco-docx",
 ]
 
 [[package]]
@@ -29,6 +37,15 @@ name = "oco-docx"
 version = "0.0.1"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "oco-formats"
+version = "0.0.1"
+dependencies = [
+ "oco-doc",
+ "oco-docx",
+ "oco-markdown",
 ]
 
 [[package]]
@@ -40,10 +57,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oco-markdown"
+version = "0.0.1"
+dependencies = [
+ "oco-docx",
+]
+
+[[package]]
 name = "oco-wasm"
 version = "0.0.1"
 dependencies = [
  "oco-docx",
+ "oco-formats",
  "oco-layout",
 ]
 

@@ -8,10 +8,13 @@ mod score;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: oco inspect <file.docx> [--json]
+usage: oco inspect <file> [--json]
        oco corpus <dir>... [--json <report.json>] [--jobs <n>] [--layout]
-       oco render <file.docx> [--out <dir>] [--fonts <dir>]... [--model word|libreoffice]
+       oco render <file> [--out <dir>] [--fonts <dir>]... [--model word|libreoffice]
+       oco convert <file> <out.docx>
        oco score <dir or file>... [--json <report.json>] [--jobs <n>] [--explain]
+
+A <file> is a Word document (.docx, or the older .doc) or Markdown (.md).
 
 inspect  Prints every paragraph and run with its effective formatting, that
          is, after the style hierarchy and document defaults have been
@@ -29,6 +32,9 @@ render   Lays the document out and writes one SVG per page, plus lines.json
          (line height from the replacement fonts' own metrics, for one),
          which is only useful for comparing against LibreOffice.
 
+convert  Writes a .doc or a Markdown file as a .docx: the document form
+         that every kind of file is shown from. Word opens the result.
+
 score    Lays out every document that Word saved and compares the result
          with what Word recorded in the file: its page count and where
          each page began. This measures layout fidelity against Word
@@ -45,6 +51,7 @@ fn main() -> ExitCode {
             Some(options) => corpus::run(&options),
             None => usage(),
         },
+        ["convert", input, output] => convert(input, output),
         ["score", rest @ ..] => match score::Arguments::parse(rest) {
             Some(arguments) => score::run(&arguments),
             None => usage(),
@@ -54,6 +61,28 @@ fn main() -> ExitCode {
             None => usage(),
         },
         _ => usage(),
+    }
+}
+
+fn convert(input: &str, output: &str) -> ExitCode {
+    let path = std::path::Path::new(input);
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned());
+    // Images of a Markdown file are looked for beside it, and nowhere above it.
+    let beside = |address: &str| {
+        let relative = std::path::Path::new(address);
+        let inside = relative.components().all(|part| matches!(part, std::path::Component::Normal(_)));
+        inside.then(|| std::fs::read(path.parent()?.join(relative)).ok()).flatten()
+    };
+    let written = std::fs::read(path).map_err(oco_formats::Error::Io).and_then(|bytes| {
+        let package = oco_formats::converted(&bytes, name.as_deref(), &beside)?;
+        std::fs::write(output, package.as_deref().unwrap_or(&bytes)).map_err(oco_formats::Error::Io)
+    });
+    match written {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("oco: {input}: {error}");
+            ExitCode::FAILURE
+        }
     }
 }
 

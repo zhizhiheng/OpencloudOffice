@@ -101,15 +101,32 @@ pub unsafe extern "C" fn oco_add_font(ptr: *mut u8, len: usize) -> u32 {
     })
 }
 
-/// Opens a `.docx` file from its bytes and returns a handle to it, or 0 with
-/// the reason in the result buffer. The bytes are only read during the call.
+/// Opens a document from its bytes and returns a handle to it, or 0 with
+/// the reason in the result buffer. The bytes are only read during the
+/// call. What kind of document it is, a Word document (`.docx` or the older
+/// `.doc`) or Markdown, is told from the bytes; text is taken for Markdown.
 ///
 /// # Safety
 /// `ptr` must point at `len` readable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn oco_open(ptr: *const u8, len: usize) -> u32 {
-    let bytes = std::slice::from_raw_parts(ptr, len);
-    with(|state| match Docx::from_bytes(bytes) {
+    open(std::slice::from_raw_parts(ptr, len), None)
+}
+
+/// As [`oco_open`], with the file's name (UTF-8), which settles what the
+/// bytes alone leave open: text named `.docx` is a damaged Word document,
+/// not Markdown.
+///
+/// # Safety
+/// `ptr` must point at `len` readable bytes and `name` at `name_len`.
+#[no_mangle]
+pub unsafe extern "C" fn oco_open_named(ptr: *const u8, len: usize, name: *const u8, name_len: usize) -> u32 {
+    let name = String::from_utf8_lossy(std::slice::from_raw_parts(name, name_len));
+    open(std::slice::from_raw_parts(ptr, len), Some(&name))
+}
+
+fn open(bytes: &[u8], name: Option<&str>) -> u32 {
+    with(|state| match oco_formats::open(bytes, name) {
         Ok(docx) => {
             let document = Some(Document { docx, layout: None });
             match state.documents.iter().position(Option::is_none) {
@@ -326,7 +343,13 @@ mod tests {
         // The handle of a closed document is given out again.
         assert_eq!(unsafe { oco_open(bytes.as_ptr(), bytes.len()) }, 1);
 
-        assert_eq!(unsafe { oco_open(b"junk".as_ptr(), 4) }, 0);
+        // Bytes that are no kind of document, and text that is called a Word document.
+        assert_eq!(unsafe { oco_open(b"\0junk".as_ptr(), 5) }, 0);
+        assert!(result().contains("not a kind of document"), "{}", result());
+        assert_eq!(unsafe { oco_open_named(b"junk".as_ptr(), 4, b"a.docx".as_ptr(), 6) }, 0);
         assert!(result().contains("zip"), "{}", result());
+        // Text is Markdown.
+        let markdown = "# 标题";
+        assert_eq!(unsafe { oco_open(markdown.as_ptr(), markdown.len()) }, 2);
     }
 }

@@ -9,7 +9,7 @@ use oco_docx::{
 use serde_json::{json, Value};
 
 pub fn run(path: &str, as_json: bool) -> ExitCode {
-    let docx = match Docx::open(path) {
+    let docx = match oco_formats::open_path(path) {
         Ok(docx) => docx,
         Err(error) => {
             eprintln!("oco: {path}: {error}");

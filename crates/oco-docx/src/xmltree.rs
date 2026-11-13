@@ -673,6 +673,32 @@ fn decode(text: &str, start: usize, end: usize, references: bool, attribute: boo
     Ok(Cow::Owned(out))
 }
 
+/// Writes `text` so that it can stand as character data or in a quoted
+/// attribute value and reads back as itself: the markup characters become
+/// references, as do tabs and line ends, which an attribute would otherwise
+/// turn into spaces. Characters XML cannot hold at all are left out.
+pub fn escape(text: &str) -> Cow<'_, str> {
+    let plain = |c: char| !matches!(c, '&' | '<' | '>' | '"' | '\t' | '\n' | '\r') && is_xml_char(c);
+    if text.chars().all(plain) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 16);
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\t' => out.push_str("&#9;"),
+            '\n' => out.push_str("&#10;"),
+            '\r' => out.push_str("&#13;"),
+            c if is_xml_char(c) => out.push(c),
+            _ => {}
+        }
+    }
+    Cow::Owned(out)
+}
+
 fn is_xml_char(c: char) -> bool {
     matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..)
 }
@@ -758,6 +784,18 @@ mod tests {
         let error = Document::parse("<a>\n  <b>\n</a>").unwrap_err();
         assert_eq!((error.line, error.column), (3, 1));
         assert_eq!(error.to_string(), "expected the end of 'b', not of 'a' at 3:1");
+    }
+
+    #[test]
+    fn what_is_escaped_reads_back_as_itself() {
+        let text = "a < b && \"c\" > 'd'\ttab\r\nline \u{1}中";
+        assert_eq!(escape("plain 中文"), "plain 中文");
+        assert_eq!(escape(text), "a &lt; b &amp;&amp; &quot;c&quot; &gt; 'd'&#9;tab&#13;&#10;line 中");
+        let xml = format!("<a v=\"{0}\">{0}</a>", escape(text));
+        let document = Document::parse(&xml).unwrap();
+        let expected = text.replace('\u{1}', "");
+        assert_eq!(document.root_element().attribute("v"), Some(expected.as_str()));
+        assert_eq!(document.root_element().text(), Some(expected.as_str()));
     }
 
     #[test]

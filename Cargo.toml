@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/oco-docx", "crates/oco-layout", "crates/oco-cli", "crates/oco-wasm"]
+members = [
+    "crates/oco-docx",
+    "crates/oco-doc",
+    "crates/oco-markdown",
+    "crates/oco-formats",
+    "crates/oco-layout",
+    "crates/oco-cli",
+    "crates/oco-wasm",
+]
 
 [workspace.package]
 version = "0.0.1"
@@ -9,8 +17,11 @@ rust-version = "1.88"
 publish = false
 
 [workspace.dependencies]
+oco-doc = { path = "crates/oco-doc" }
 oco-docx = { path = "crates/oco-docx" }
+oco-formats = { path = "crates/oco-formats" }
 oco-layout = { path = "crates/oco-layout" }
+oco-markdown = { path = "crates/oco-markdown" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

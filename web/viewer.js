@@ -147,7 +147,7 @@ function show(bytes, name) {
   let opened;
   const began = performance.now();
   try {
-    opened = oco.open(bytes);
+    opened = oco.open(bytes, name);
   } catch (error) {
     say(`无法打开“${name}”：${error.message}`, true);
     return;

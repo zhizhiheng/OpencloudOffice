@@ -50,7 +50,7 @@ pub const DEFAULT_FONT_DIRS: &[&str] = &[
 ];
 
 pub fn run(arguments: &Arguments) -> ExitCode {
-    let docx = match Docx::open(&arguments.input) {
+    let docx = match oco_formats::open_path(&arguments.input) {
         Ok(docx) => docx,
         Err(error) => {
             eprintln!("oco: {}: {error}", arguments.input.display());

@@ -104,6 +104,165 @@ impl<R: Read + Seek> Package<R> {
     }
 }
 
+/// Content types of the parts of a word-processing package.
+pub mod content_type {
+    pub const DOCUMENT: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+    pub const STYLES: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+    pub const NUMBERING: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+    pub const SETTINGS: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+    pub const FONT_TABLE: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
+    pub const HEADER: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+    pub const FOOTER: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+    pub const FOOTNOTES: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+    pub const ENDNOTES: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
+    pub const THEME: &str = "application/vnd.openxmlformats-officedocument.theme+xml";
+    pub const APP_PROPERTIES: &str = "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+    pub const CORE_PROPERTIES: &str = "application/vnd.openxmlformats-package.core-properties+xml";
+}
+
+/// Kinds of relationship between the parts of a word-processing package.
+pub mod relationship {
+    const OFFICE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    pub const DOCUMENT: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
+    pub const STYLES: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
+    pub const NUMBERING: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering";
+    pub const SETTINGS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+    pub const FONT_TABLE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable";
+    pub const HEADER: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
+    pub const FOOTER: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
+    pub const FOOTNOTES: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
+    pub const ENDNOTES: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes";
+    pub const THEME: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+    pub const IMAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+    pub const HYPERLINK: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+    pub const APP_PROPERTIES: &str =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
+    pub const CORE_PROPERTIES: &str =
+        "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+    /// The namespace the ids of relationships are written in (`r:id`, `r:embed`).
+    pub const NAMESPACE: &str = OFFICE;
+}
+
+/// Puts a package together: the parts, what kind each is, and how they
+/// refer to one another. What [`Builder::finish`] returns is a `.docx` file
+/// that this crate reads back and that Word opens.
+///
+/// ```
+/// use oco_docx::opc::{content_type, relationship, Builder};
+/// let mut package = Builder::new();
+/// let w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+/// let document = format!(r#"<w:document xmlns:w="{w}"><w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>"#);
+/// package.part("word/document.xml", content_type::DOCUMENT, document.as_bytes());
+/// package.relate(None, relationship::DOCUMENT, "word/document.xml");
+/// let docx = oco_docx::Docx::from_bytes(&package.finish()).unwrap();
+/// assert_eq!(docx.document.paragraphs()[0].text(), "Hello");
+/// ```
+#[derive(Default)]
+pub struct Builder {
+    zip: crate::zip::Writer,
+    /// Parts with a content type of their own.
+    overrides: Vec<(String, String)>,
+    /// Extensions of the files added, which are told by them.
+    extensions: Vec<String>,
+    /// The relationships of each source part; of the package itself under "".
+    relationships: Vec<(String, Vec<String>)>,
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a part, named from the root of the package without a leading
+    /// slash, such as `word/document.xml`, with its content type.
+    pub fn part(&mut self, name: &str, content_type: &str, content: &[u8]) {
+        self.overrides.push((name.to_owned(), content_type.to_owned()));
+        self.zip.add(name, content);
+    }
+
+    /// Adds a file whose kind its extension tells, such as a picture:
+    /// `word/media/image1.png`.
+    pub fn file(&mut self, name: &str, content: &[u8]) {
+        let extension = name.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+        if !self.extensions.contains(&extension) {
+            self.extensions.push(extension);
+        }
+        self.zip.add(name, content);
+    }
+
+    /// Records that `source` refers to the part `target` (both named from
+    /// the root of the package), and returns the id to refer to it by.
+    /// The package itself is the source when `source` is `None`.
+    pub fn relate(&mut self, source: Option<&str>, kind: &str, target: &str) -> String {
+        self.add_relationship(source, kind, &format!("/{target}"), false)
+    }
+
+    /// As [`Builder::relate`], for something outside the package, such as
+    /// the address a hyperlink leads to.
+    pub fn relate_outside(&mut self, source: Option<&str>, kind: &str, address: &str) -> String {
+        self.add_relationship(source, kind, address, true)
+    }
+
+    fn add_relationship(&mut self, source: Option<&str>, kind: &str, target: &str, outside: bool) -> String {
+        let source = source.unwrap_or_default();
+        let at = match self.relationships.iter().position(|(part, _)| part == source) {
+            Some(at) => at,
+            None => {
+                self.relationships.push((source.to_owned(), Vec::new()));
+                self.relationships.len() - 1
+            }
+        };
+        let list = &mut self.relationships[at].1;
+        let id = format!("rId{}", list.len() + 1);
+        let mode = if outside { r#" TargetMode="External""# } else { "" };
+        let (kind, target) = (crate::xmltree::escape(kind), crate::xmltree::escape(target));
+        list.push(format!(r#"<Relationship Id="{id}" Type="{kind}" Target="{target}"{mode}/>"#));
+        id
+    }
+
+    /// The finished package.
+    pub fn finish(mut self) -> Vec<u8> {
+        const PACKAGE: &str = "http://schemas.openxmlformats.org/package/2006";
+        const HEAD: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
+        for (source, list) in &self.relationships {
+            let name = match source.rsplit_once('/') {
+                _ if source.is_empty() => "_rels/.rels".to_owned(),
+                Some((folder, file)) => format!("{folder}/_rels/{file}.rels"),
+                None => format!("_rels/{source}.rels"),
+            };
+            let xml =
+                format!(r#"{HEAD}<Relationships xmlns="{PACKAGE}/relationships">{}</Relationships>"#, list.concat());
+            self.zip.add(&name, xml.as_bytes());
+        }
+        let mut types = format!(
+            r#"{HEAD}<Types xmlns="{PACKAGE}/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>"#
+        );
+        for extension in &self.extensions {
+            let kind = match extension.as_str() {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "bmp" => "image/bmp",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "tif" | "tiff" => "image/tiff",
+                "emf" => "image/x-emf",
+                "wmf" => "image/x-wmf",
+                "rels" | "xml" => continue,
+                _ => "application/octet-stream",
+            };
+            types.push_str(&format!(r#"<Default Extension="{extension}" ContentType="{kind}"/>"#));
+        }
+        for (part, kind) in &self.overrides {
+            let (part, kind) = (crate::xmltree::escape(part), crate::xmltree::escape(kind));
+            types.push_str(&format!(r#"<Override PartName="/{part}" ContentType="{kind}"/>"#));
+        }
+        types.push_str("</Types>");
+        self.zip.add("[Content_Types].xml", types.as_bytes());
+        self.zip.finish()
+    }
+}
+
 /// Part names compare case-insensitively (Part 2 §6.2.2.3), and some producers
 /// write backslashes or a leading slash into zip entry names.
 fn normalize(name: &str) -> String {
@@ -166,6 +325,31 @@ mod tests {
         assert_eq!(resolve_target("word/", "/word/styles.xml"), "word/styles.xml");
         assert_eq!(resolve_target("", "word/document.xml"), "word/document.xml");
         assert_eq!(resolve_target("", "../../escape.xml"), "escape.xml");
+    }
+
+    #[test]
+    fn a_built_package_reads_back_with_its_parts_and_relationships() {
+        let mut builder = Builder::new();
+        builder.part("word/document.xml", content_type::DOCUMENT, b"<document/>");
+        builder.file("word/media/image1.PNG", b"picture");
+        let document = builder.relate(None, relationship::DOCUMENT, "word/document.xml");
+        let picture = builder.relate(Some("word/document.xml"), relationship::IMAGE, "word/media/image1.PNG");
+        let link =
+            builder.relate_outside(Some("word/document.xml"), relationship::HYPERLINK, "https://example.org/?a=1&b=2");
+        assert_eq!((document.as_str(), picture.as_str(), link.as_str()), ("rId1", "rId1", "rId2"));
+
+        let mut package = Package::new(std::io::Cursor::new(builder.finish())).unwrap();
+        assert_eq!(package.relationships(None).unwrap()[0].target, "word/document.xml");
+        let own = package.relationships(Some("word/document.xml")).unwrap();
+        assert_eq!((own[0].target.as_str(), own[0].external), ("word/media/image1.PNG", false));
+        assert_eq!((own[1].target.as_str(), own[1].external), ("https://example.org/?a=1&b=2", true));
+        assert_eq!(package.read_part("word/media/image1.png").unwrap().as_deref(), Some(&b"picture"[..]));
+        let types = package.read_xml("[Content_Types].xml").unwrap().unwrap();
+        assert!(types.contains(r#"<Default Extension="png" ContentType="image/png"/>"#), "{types}");
+        assert!(types.contains(&format!(
+            r#"<Override PartName="/word/document.xml" ContentType="{}"/>"#,
+            content_type::DOCUMENT
+        )));
     }
 
     #[test]

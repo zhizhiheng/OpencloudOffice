@@ -1,0 +1,12 @@
+[package]
+name = "oco-formats"
+description = "Tells what kind of document a file is and reads it into the document form"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+oco-doc.workspace = true
+oco-docx.workspace = true
+oco-markdown.workspace = true

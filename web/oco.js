@@ -3,7 +3,7 @@
 //
 //   const oco = await Oco.load("oco.wasm");
 //   oco.addFont(await (await fetch("fonts/SourceHanSerifCN-Regular.otf")).arrayBuffer());
-//   const doc = oco.open(await file.arrayBuffer());
+//   const doc = oco.open(await file.arrayBuffer(), file.name);   // .docx, .doc or Markdown
 //   for (let i = 0; i < doc.pageCount; i++) container.innerHTML += doc.pageSvg(i);
 //   doc.close();
 
@@ -53,14 +53,24 @@ export class Oco {
   }
 
   /**
-   * Opens a .docx file.
+   * Opens a document: a Word document (.docx, or the older .doc) or Markdown.
+   * What it is is told from the bytes; the file's name, when given, settles
+   * what they leave open (text named .docx is a damaged Word document, not Markdown).
    * @param {BufferSource} bytes
+   * @param {string} [name]
    * @returns {OcoDocument}
    * @throws {Error} with the reason when the bytes are not a readable document
    */
-  open(bytes) {
+  open(bytes, name) {
     const [ptr, length] = this.#give(bytes);
-    const handle = this.#call(() => this.#wasm.oco_open(ptr, length));
+    let handle;
+    if (name) {
+      const [namePtr, nameLength] = this.#give(new TextEncoder().encode(name));
+      handle = this.#call(() => this.#wasm.oco_open_named(ptr, length, namePtr, nameLength));
+      this.#wasm.oco_free(namePtr, nameLength);
+    } else {
+      handle = this.#call(() => this.#wasm.oco_open(ptr, length));
+    }
     this.#wasm.oco_free(ptr, length);
     if (handle === 0) throw new Error(this.#result());
     return new OcoDocument(this.#api(), handle);

@@ -1,6 +1,6 @@
 # OpencloudOffice
 
-自研的云端 Office 内核：在浏览器和 App 内渲染、编辑 Word、Excel、PDF 等文档，以 SDK 形式嵌入。
+自研的云端 Office 内核：在浏览器和 App 内渲染、编辑 Word、Excel、PDF 等文档，以 SDK 形式嵌入。当前阶段只做一件事：把文档预览做到极致，范围是 DOCX、DOC 和 Markdown。
 
 内核用 Rust 编写，编译成 WebAssembly 供浏览器使用，也可编译成原生库供 App 和服务端使用，各端排版结果一致。
 
@@ -66,6 +66,9 @@ python3 -m http.server -d web 8000     # 然后打开 http://localhost:8000
 | 路径 | 内容 |
 |---|---|
 | `crates/oco-docx` | docx 读取：zip 和 XML 的读取、容器、样式、主题字体、编号、页面设置、图片、格式继承计算 |
+| `crates/oco-doc` | 二进制 Word 格式（.doc）转成文档形式（进行中） |
+| `crates/oco-markdown` | Markdown 转成文档形式（进行中） |
+| `crates/oco-formats` | 统一入口：判断文件是哪一种，读成文档形式 |
 | `crates/oco-layout` | 排版：字体文件解析、字体度量与替换、断行、行高、编号、表格、图片、分页，输出 SVG |
 | `crates/oco-wasm` | 内核的 WebAssembly 接口：一组 C 接口函数，不引入任何外部符号 |
 | `web` | 浏览器查看器，以及给 JavaScript 用的接口 `oco.js` |
