@@ -118,14 +118,35 @@ impl Item {
     }
 }
 
-/// Where a line of text ended up, for comparing against a reference.
-#[derive(Debug, Clone)]
+/// Where a line of text ended up: for comparing against a reference, and
+/// for the text a viewer lets one select and search.
+#[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PlacedLine {
     pub baseline: f32,
     pub x0: f32,
     pub x1: f32,
     pub text: String,
+    /// Where each character of `text` begins, one for each `char`.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub xs: Vec<f32>,
+    /// The size of the largest text on the line, in points.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub size: f32,
+}
+
+impl PlacedLine {
+    /// The line moved by `dx` across and `dy` down.
+    pub fn moved(&self, dx: f32, dy: f32) -> PlacedLine {
+        PlacedLine {
+            baseline: self.baseline + dy,
+            x0: self.x0 + dx,
+            x1: self.x1 + dx,
+            text: self.text.clone(),
+            xs: self.xs.iter().map(|x| x + dx).collect(),
+            size: self.size,
+        }
+    }
 }
 
 /// A place in the document's content: a paragraph, by its index in
@@ -277,8 +298,8 @@ struct Unit {
 /// items from its own left and top, and the lines of text among them.
 type Drawn = ((usize, usize), Vec<Item>, TextLines);
 
-/// Lines of text inside something drawn as one: each with its baseline, where it begins and ends, and its text.
-type TextLines = Vec<(f32, f32, f32, String)>;
+/// Lines of text inside something drawn as one, from its left and top.
+type TextLines = Vec<PlacedLine>;
 
 /// An object on a page that text keeps clear of.
 struct Float {
@@ -685,11 +706,10 @@ impl Row {
                     }
                     line.x1 = line.x1.max(part.x + part.line.x1);
                     if part.line.parts.is_empty() {
-                        let own = (y + part.line.baseline, part.x + part.line.x0, part.x + part.line.x1);
-                        line.parts.push((own.0, own.1, own.2, part.line.text.clone()));
+                        line.parts.push(part.line.placed().moved(part.x, y));
                     }
-                    for (baseline, x0, x1, text) in part.line.parts.drain(..) {
-                        line.parts.push((y + baseline, part.x + x0, part.x + x1, text));
+                    for placed in part.line.parts.drain(..) {
+                        line.parts.push(placed.moved(part.x, y));
                     }
                     texts.push(part.line.text);
                 }
@@ -833,9 +853,7 @@ fn put_object(page: &mut Page, object: &paragraph::Anchored, x: f32, y: f32) {
         }
         false => page.items.extend(items),
     }
-    for (baseline, x0, x1, text) in &object.inner {
-        page.lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
-    }
+    page.lines.extend(object.inner.iter().map(|placed| placed.moved(x, y)));
 }
 
 /// Puts the text boxes that stand in a paragraph's lines, already drawn, where the lines have them.
@@ -848,10 +866,7 @@ fn put_boxes(laid: &mut paragraph::Laid, drawn: &[Drawn]) {
             item.translate(inline.x, inline.top);
             line.items.push(item);
         }
-        let moved = inner
-            .iter()
-            .map(|(baseline, x0, x1, text)| (inline.top + baseline, inline.x + x0, inline.x + x1, text.clone()));
-        line.inner.extend(moved);
+        line.inner.extend(inner.iter().map(|placed| placed.moved(inline.x, inline.top)));
     }
 }
 
@@ -978,7 +993,7 @@ fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (boo
             if let Some((above, border)) = over {
                 let room = above + rule_room(border) + space(border);
                 line.items.iter_mut().for_each(|item| item.translate(0.0, room));
-                line.parts.iter_mut().chain(&mut line.inner).for_each(|part| part.0 += room);
+                line.parts.iter_mut().chain(&mut line.inner).for_each(|part| part.baseline += room);
                 line.baseline += room;
                 line.height += room;
                 line.needed += room;
@@ -1213,9 +1228,7 @@ impl Builder<'_> {
                 item.translate(left, down + offset);
                 items.push(item);
             }
-            let mut placed_lines = Vec::new();
-            record(&line, left, down + offset, &mut placed_lines);
-            lines.extend(placed_lines.into_iter().map(|line| (line.baseline, line.x0, line.x1, line.text)));
+            record(&line, left, down + offset, &mut lines);
         }
         (items, lines)
     }
@@ -2010,23 +2023,14 @@ fn paragraphs_in(blocks: &[Block]) -> usize {
 /// Notes where the text of a line placed at (`x`, `y`) is: the line itself,
 /// or the lines it is made of if it is the row of a table inside a cell.
 fn record(line: &paragraph::Line, x: f32, y: f32, lines: &mut Vec<PlacedLine>) {
-    for (baseline, x0, x1, text) in &line.inner {
-        lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
-    }
+    lines.extend(line.inner.iter().map(|placed| placed.moved(x, y)));
     if line.text.trim().is_empty() {
         return;
     }
     if line.parts.is_empty() {
-        lines.push(PlacedLine {
-            baseline: y + line.baseline,
-            x0: x + line.x0,
-            x1: x + line.x1,
-            text: line.text.clone(),
-        });
+        lines.push(line.placed().moved(x, y));
     }
-    for (baseline, x0, x1, text) in &line.parts {
-        lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
-    }
+    lines.extend(line.parts.iter().map(|placed| placed.moved(x, y)));
 }
 
 /// How many columns a table has: those of its grid, or as many as its

@@ -13,7 +13,7 @@ use oco_docx::{
 
 use crate::fonts::{Choice, FontDb, Model};
 use crate::text::{self, Slot};
-use crate::{Item, Rgb};
+use crate::{Item, PlacedLine, Rgb};
 
 /// What a paragraph needs to know about its surroundings.
 #[derive(Debug, Clone, Copy)]
@@ -71,13 +71,31 @@ pub struct Line {
     pub page_break_after: bool,
     /// How many pieces of the paragraph's [`crate::content`] come before this line.
     pub offset: usize,
+    /// Where each character of `text` begins, from the left margin.
+    pub xs: Vec<f32>,
+    /// The size of the largest text on the line.
+    pub size: f32,
     /// The lines of text this line is made of, where it is not one itself
-    /// but the row of a table inside a cell: each with its baseline from
-    /// the line's top, where it begins and ends, and its text.
-    pub parts: Vec<(f32, f32, f32, String)>,
+    /// but the row of a table inside a cell, placed from the line's left
+    /// margin and top.
+    pub parts: Vec<PlacedLine>,
     /// The lines of text inside the text boxes that stand in this line,
-    /// each given as in `parts`.
-    pub inner: Vec<(f32, f32, f32, String)>,
+    /// placed as `parts` are.
+    pub inner: Vec<PlacedLine>,
+}
+
+impl Line {
+    /// The line's own text, placed from its left margin and top.
+    pub fn placed(&self) -> PlacedLine {
+        PlacedLine {
+            baseline: self.baseline,
+            x0: self.x0,
+            x1: self.x1,
+            text: self.text.clone(),
+            xs: self.xs.clone(),
+            size: self.size,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -124,8 +142,8 @@ pub struct Anchored {
     /// What to draw in place of a picture, from the object's left and top:
     /// filled in by the caller for a text box.
     pub content: Vec<Item>,
-    /// The lines of text in `content`: baseline, start, end and text.
-    pub inner: Vec<(f32, f32, f32, String)>,
+    /// The lines of text in `content`, from the object's left and top.
+    pub inner: Vec<PlacedLine>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1131,6 +1149,8 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                     // The text of a line is its characters; a picture is none.
                     if atom.object.is_none() {
                         line.text.push(atom.ch);
+                        line.xs.push(x);
+                        line.size = line.size.max(atom.size);
                     }
                     let stretches = if align == "distribute" {
                         index >= stretch_from && index + 1 < visible
@@ -1179,6 +1199,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                         }
                     }
                     line.text.push('\t');
+                    line.xs.push(x);
                     x += atom.advance;
                 }
                 Kind::LineBreak | Kind::PageBreak => {}

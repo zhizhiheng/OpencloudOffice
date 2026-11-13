@@ -235,6 +235,109 @@ pub extern "C" fn oco_info(handle: u32) -> u32 {
     })
 }
 
+/// Writes the text of a page into the result buffer, a line to a line, in
+/// reading order. Returns 1, or 0 when there is no such page.
+#[no_mangle]
+pub extern "C" fn oco_page_text(handle: u32, page: u32) -> u32 {
+    with(|state| {
+        let text = state
+            .laid_out(handle)
+            .and_then(|(_, layout, _)| layout.pages.get(page as usize))
+            .map(|page| page.lines.iter().map(|line| line.text.replace('\t', " ")).collect::<Vec<_>>().join("\n"));
+        match text {
+            Some(text) => {
+                state.say(text);
+                1
+            }
+            None => 0,
+        }
+    })
+}
+
+/// Finds a text (UTF-8, `len` bytes at `ptr`) in a document and writes
+/// where it is into the result buffer as JSON: for each place, the page
+/// and the boxes it covers there, in points from the page's top left, one
+/// for each line it is on. A match may run from one line to the next.
+/// Letters are matched without regard to case. Returns how many places
+/// there are, at most `limit`.
+///
+/// ```json
+/// [{"page": 0, "boxes": [[72.0, 101.5, 48.0, 14.4]]}]
+/// ```
+///
+/// # Safety
+/// `ptr` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn oco_find(handle: u32, ptr: *const u8, len: usize, limit: u32) -> u32 {
+    let query = String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned();
+    with(|state| {
+        let Some((_, layout, _)) = state.laid_out(handle) else {
+            state.say("[]");
+            return 0;
+        };
+        let found = find(&layout.pages, &query, limit as usize);
+        let mut json = String::from("[");
+        list(&mut json, found.iter(), |json, (page, boxes)| {
+            let _ = write!(json, "{{\"page\":{page},\"boxes\":[");
+            list(json, boxes.iter(), |json, [x, y, width, height]| {
+                let _ = write!(json, "[{x:.2},{y:.2},{width:.2},{height:.2}]");
+            });
+            json.push_str("]}");
+        });
+        json.push(']');
+        let count = found.len() as u32;
+        state.say(json);
+        count
+    })
+}
+
+/// The places `query` is found on `pages`, without regard to case, at most
+/// `limit`: each a page and the boxes it covers there.
+fn find(pages: &[oco_layout::Page], query: &str, limit: usize) -> Vec<(usize, Vec<[f32; 4]>)> {
+    let wanted: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
+    let mut found = Vec::new();
+    if wanted.is_empty() || wanted.iter().all(|c| c.is_whitespace()) {
+        return found;
+    }
+    for (number, page) in pages.iter().enumerate() {
+        // The page's text as one run of characters, each with the line it is on and its place there.
+        let mut text: Vec<(char, usize, usize)> = Vec::new();
+        for (line_number, line) in page.lines.iter().enumerate() {
+            for (at, ch) in line.text.chars().enumerate() {
+                let ch = if ch == '\t' { ' ' } else { ch };
+                text.extend(ch.to_lowercase().map(|lower| (lower, line_number, at)));
+            }
+        }
+        let mut start = 0;
+        while start + wanted.len() <= text.len() {
+            if text[start..start + wanted.len()].iter().map(|(c, ..)| *c).eq(wanted.iter().copied()) {
+                let mut boxes: Vec<[f32; 4]> = Vec::new();
+                let covered = &text[start..start + wanted.len()];
+                let mut from = 0;
+                while from < covered.len() {
+                    let line_number = covered[from].1;
+                    let to = from + covered[from..].iter().take_while(|(_, line, _)| *line == line_number).count();
+                    let line = &page.lines[line_number];
+                    let (first, last) = (covered[from].2, covered[to - 1].2);
+                    let left = line.xs.get(first).copied().unwrap_or(line.x0);
+                    let right = line.xs.get(last + 1).copied().unwrap_or(line.x1).max(left);
+                    let size = if line.size > 0.0 { line.size } else { 10.0 };
+                    boxes.push([left, line.baseline - 0.9 * size, right - left, 1.2 * size]);
+                    from = to;
+                }
+                found.push((number, boxes));
+                if found.len() >= limit {
+                    return found;
+                }
+                start += wanted.len();
+            } else {
+                start += 1;
+            }
+        }
+    }
+    found
+}
+
 /// Where the text of the last result starts in the module's memory.
 #[no_mangle]
 pub extern "C" fn oco_result_ptr() -> *const u8 {
@@ -314,6 +417,35 @@ fn string(json: &mut String, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_text_across_lines_and_without_regard_to_case() {
+        let line = |baseline: f32, text: &str| oco_layout::PlacedLine {
+            baseline,
+            x0: 72.0,
+            x1: 72.0 + 6.0 * text.chars().count() as f32,
+            text: text.to_owned(),
+            xs: (0..text.chars().count()).map(|at| 72.0 + 6.0 * at as f32).collect(),
+            size: 12.0,
+        };
+        let page =
+            oco_layout::Page { lines: vec![line(100.0, "Hello wor"), line(114.0, "ld, 世界")], ..Default::default() };
+        let pages = vec![oco_layout::Page::default(), page];
+        let found = find(&pages, "world", 10);
+        assert_eq!(found.len(), 1);
+        let (number, boxes) = &found[0];
+        assert_eq!(*number, 1);
+        assert_eq!(boxes.len(), 2, "on two lines: {boxes:?}");
+        // "wor": from the seventh character to the end of the first line.
+        assert_eq!(boxes[0][0], 72.0 + 36.0);
+        assert!((boxes[0][2] - 18.0).abs() < 0.01 && (boxes[0][1] - (100.0 - 10.8)).abs() < 0.01);
+        // "ld": the first two characters of the second line.
+        assert_eq!((boxes[1][0], boxes[1][2]), (72.0, 12.0));
+        assert_eq!(find(&pages, "HELLO", 10).len(), 1);
+        assert_eq!(find(&pages, "世界", 10)[0].1[0][0], 72.0 + 24.0);
+        assert_eq!(find(&pages, "o", 1).len(), 1, "no more than the limit");
+        assert!(find(&pages, " ", 10).is_empty() && find(&pages, "", 10).is_empty());
+    }
 
     #[test]
     fn writes_json_strings() {

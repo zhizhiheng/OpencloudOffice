@@ -226,8 +226,62 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
     }
     out.push_str("</defs>\n");
     out.push_str(&body);
+    text_layer(page, &mut out);
     out.push_str("</svg>\n");
     out
+}
+
+/// The text of the page, invisible, over what is drawn: each line with
+/// every character at the place its glyph is drawn, so that a viewer can
+/// select it, copy it and find it as it finds the text of any web page.
+fn text_layer(page: &Page, out: &mut String) {
+    if page.lines.is_empty() {
+        return;
+    }
+    out.push_str(r#"<g fill-opacity="0" font-family="sans-serif" xml:space="preserve" style="white-space:pre">"#);
+    out.push('\n');
+    for line in &page.lines {
+        let (mut xs, mut text) = (String::new(), String::new());
+        for (ch, x) in line.text.chars().zip(&line.xs) {
+            let ch = match ch {
+                '\t' => ' ',
+                '&' => {
+                    text.push_str("&amp;");
+                    '\0'
+                }
+                '<' => {
+                    text.push_str("&lt;");
+                    '\0'
+                }
+                '>' => {
+                    text.push_str("&gt;");
+                    '\0'
+                }
+                // What XML cannot hold is left out, with its place.
+                c if c < ' ' || ('\u{FFFE}'..='\u{FFFF}').contains(&c) => continue,
+                c => c,
+            };
+            if ch != '\0' {
+                text.push(ch);
+            }
+            if !xs.is_empty() {
+                xs.push(' ');
+            }
+            xs.push_str(&n(*x));
+            // An addressable character is a UTF-16 code unit: one beyond the
+            // basic plane takes two places.
+            if ch.len_utf16() == 2 {
+                xs.push(' ');
+                xs.push_str(&n(*x));
+            }
+        }
+        if text.trim().is_empty() {
+            continue;
+        }
+        let size = if line.size > 0.0 { line.size } else { 10.0 };
+        let _ = writeln!(out, r#"<text x="{xs}" y="{}" font-size="{}">{text}</text>"#, n(line.baseline), n(size));
+    }
+    out.push_str("</g>\n");
 }
 
 #[cfg(test)]

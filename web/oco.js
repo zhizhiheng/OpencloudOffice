@@ -107,7 +107,12 @@ export class Oco {
   }
 
   #api() {
-    return { wasm: this.#wasm, call: (run) => this.#call(run), result: () => this.#result() };
+    return {
+      wasm: this.#wasm,
+      call: (run) => this.#call(run),
+      result: () => this.#result(),
+      give: (bytes) => this.#give(bytes),
+    };
   }
 }
 
@@ -150,6 +155,35 @@ export class OcoDocument {
   info() {
     this.#core.call(() => this.#core.wasm.oco_info(this.#handle));
     return JSON.parse(this.#core.result());
+  }
+
+  /**
+   * The text of a page, a line to a line, in reading order.
+   * @returns {string}
+   */
+  pageText(page) {
+    const found = this.#core.call(() => this.#core.wasm.oco_page_text(this.#handle, page));
+    if (!found) throw new RangeError(`no page ${page}`);
+    return this.#core.result();
+  }
+
+  /**
+   * Finds a text in the document, without regard to case; a match may run
+   * from one line to the next. Each place found is a page and the boxes it
+   * covers there, one for each line, in points from the page's top left.
+   * @param {string} text
+   * @param {number} [limit=1000]
+   * @returns {{page: number, boxes: [number, number, number, number][]}[]}
+   */
+  find(text, limit = 1000) {
+    const { wasm, call, give, result } = this.#core;
+    const [ptr, length] = give(new TextEncoder().encode(text));
+    try {
+      call(() => wasm.oco_find(this.#handle, ptr, length, limit));
+    } finally {
+      wasm.oco_free(ptr, length);
+    }
+    return JSON.parse(result());
   }
 
   /** Frees the document. It must not be used afterwards. */
