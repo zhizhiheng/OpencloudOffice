@@ -3490,7 +3490,7 @@
       11,
       10
      ],
-     "placed": 90,
+     "placed": 104,
      "plain": true,
      "same": 139
     },
@@ -3507,7 +3507,7 @@
       11,
       10
      ],
-     "placed": 90,
+     "placed": 104,
      "plain": true,
      "same": 139
     },
@@ -3524,7 +3524,7 @@
       11,
       10
      ],
-     "placed": 90,
+     "placed": 104,
      "plain": true,
      "same": 139
     },
@@ -3541,7 +3541,7 @@
       11,
       10
      ],
-     "placed": 90,
+     "placed": 104,
      "plain": true,
      "same": 139
     },
@@ -5144,8 +5144,8 @@
    "multipage_pages_equal": 501,
    "multipage_pages_within_one": 595,
    "page_starts": 2044,
-   "page_starts_equal": 499,
-   "page_starts_same_paragraph": 636
+   "page_starts_equal": 496,
+   "page_starts_same_paragraph": 634
   },
   "covered": {
    "documents": 537,
@@ -5189,7 +5189,7 @@
     "page_starts": 193,
     "page_starts_equal": 178,
     "pages_equal": 121,
-    "placed": 5521,
+    "placed": 5577,
     "same": 6557
    },
    "covered": {
@@ -5207,7 +5207,7 @@
     "page_starts": 61,
     "page_starts_equal": 54,
     "pages_equal": 55,
-    "placed": 1762,
+    "placed": 1818,
     "same": 2301
    }
   },

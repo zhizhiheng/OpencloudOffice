@@ -92,6 +92,9 @@ pub struct Laid {
     pub anchored: Vec<Anchored>,
     /// The text boxes that stand in the paragraph's lines, to be filled by the caller.
     pub boxes: Vec<InlineBox>,
+    /// The paragraph's indents in points: left, right, and of the first
+    /// line beyond the left one (negative when it hangs).
+    pub indents: (f32, f32, f32),
 }
 
 /// Where a text box stands in a line: the line, and the box's left and top
@@ -1289,6 +1292,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         missing_fonts,
         anchored,
         boxes,
+        indents: (left, right, first),
         lines,
         space_before: space(props.spacing.before_lines, props.spacing.before, props.spacing.before_auto),
         space_after: space(props.spacing.after_lines, props.spacing.after, props.spacing.after_auto),

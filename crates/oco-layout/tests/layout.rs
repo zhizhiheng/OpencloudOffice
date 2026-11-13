@@ -1866,3 +1866,167 @@ fn each_section_is_set_at_its_own_width_and_new_paper_begins_a_new_page() {
     let same = lay(&portrait);
     assert_eq!(same.len(), 1, "the same paper: the section goes on in the page");
 }
+
+/// The fills on a page as (left, top, right, bottom), and its rules as
+/// (x1, y1, x2, y2, width), in the order they are drawn.
+fn fills(page: &Page) -> Vec<(f32, f32, f32, f32)> {
+    page.items
+        .iter()
+        .filter_map(|item| match *item {
+            Item::Rect { x, y, width, height, .. } => Some((x, y, x + width, y + height)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn rules(page: &Page) -> Vec<(f32, f32, f32, f32, f32)> {
+    page.items
+        .iter()
+        .filter_map(|item| match *item {
+            Item::Rule { x1, y1, x2, y2, width, .. } => Some((x1, y1, x2, y2, width)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A paragraph of 12 pt Liberation Serif, single spaced, with the given borders, fill and spacing.
+fn boxed_paragraph(borders: &str, fill: &str, extra: &str, text: &str) -> String {
+    let borders = if borders.is_empty() { String::new() } else { format!("<w:pBdr>{borders}</w:pBdr>") };
+    let fill = if fill.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>"#)
+    };
+    let spacing = if extra.contains("w:spacing") { "" } else { r#"<w:spacing w:before="0" w:after="0"/>"# };
+    paragraph(&font("Liberation Serif", 24), &format!("{borders}{fill}{spacing}{extra}"), text)
+}
+
+fn edges(names: &[&str], size: u32, space: u32) -> String {
+    names
+        .iter()
+        .map(|name| format!(r#"<w:{name} w:val="single" w:sz="{size}" w:space="{space}" w:color="000000"/>"#))
+        .collect()
+}
+
+#[test]
+fn a_paragraphs_borders_stand_outside_its_text_and_take_room_above_and_below() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (a probe made for this; its paragraph "P06"): a
+    // box of 1 pt rules kept 1 pt from the text, in a column from 72 to
+    // 523.3 pt. The rule on the left is drawn from 70.02 to 70.98, ending
+    // 1 pt before the text; the one on the right from 524.27. The rule over
+    // the paragraph and its space put the first line 2 pt lower, the rule
+    // under it and its space put what follows 2 pt lower; and they run from
+    // the outer edge of the left rule to that of the right.
+    let body = boxed_paragraph("", "", "", "above")
+        + &boxed_paragraph(&edges(&["top", "left", "bottom", "right"], 8, 1), "", "", LONG)
+        + &boxed_paragraph("", "", "", "below");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.starts_with(text)).unwrap().baseline;
+    let (top, bottom) = (line("above") + 2.6, line("below") - 11.2);
+    let last = page.lines.iter().rfind(|line| line.baseline < bottom).unwrap().baseline;
+    assert!(close(line("The quick"), top + 2.0 + 11.2, 0.03), "{} under a box that begins at {top}", line("The quick"));
+    assert!(close(bottom, last + 2.6 + 2.0, 0.03), "{bottom} after a last line at {last}");
+
+    let rules = rules(&page);
+    let upright: Vec<_> = rules.iter().filter(|rule| rule.0 == rule.2).collect();
+    let level: Vec<_> = rules.iter().filter(|rule| rule.1 == rule.3).collect();
+    assert!(upright.iter().all(|rule| close(rule.4, 0.96, 0.001)), "a rule of 1 pt is drawn 0.96 pt wide");
+    let (left, right) =
+        (upright.iter().map(|r| r.0).fold(f32::MAX, f32::min), upright.iter().map(|r| r.0).fold(0.0, f32::max));
+    assert!(close(left, 70.5, 0.03) && close(right, 524.8, 0.03), "the middles of the side rules: {left} {right}");
+    // The sides run from the top of the box to its bottom without a gap.
+    let (from, to) =
+        (upright.iter().map(|r| r.1).fold(f32::MAX, f32::min), upright.iter().map(|r| r.3).fold(0.0, f32::max));
+    assert!(close(from, top, 0.03) && close(to, bottom, 0.03), "{from} to {to} beside a box from {top} to {bottom}");
+    assert_eq!(level.len(), 2);
+    assert!(close(level[0].1, top + 0.5, 0.03) && close(level[1].1, bottom - 0.5, 0.03));
+    assert!(level.iter().all(|rule| close(rule.0, 70.0, 0.03) && close(rule.2, 525.3, 0.03)), "{level:?}");
+}
+
+#[test]
+fn paragraphs_with_the_same_borders_are_boxed_as_one_and_the_fill_goes_through_their_spacing() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (the probe's "P10" to "P12"): three paragraphs
+    // with the same box of half-point rules 4 pt from the text, a fill, and
+    // 6 pt after each. One rule over the first and one under the last; the
+    // 6 pt between two of them is inside the box, filled and with the side
+    // rules passing; the 6 pt after the last is outside.
+    let boxed = |text: &str| {
+        boxed_paragraph(
+            &edges(&["top", "left", "bottom", "right"], 4, 4),
+            "E2EFDA",
+            r#"<w:spacing w:before="0" w:after="120"/>"#,
+            text,
+        )
+    };
+    let body = boxed_paragraph("", "", "", "above")
+        + &boxed("one")
+        + &boxed("two")
+        + &boxed("three")
+        + &boxed_paragraph("", "", "", "below");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.starts_with(text)).unwrap().baseline;
+    let top = line("above") + 2.6;
+    // Rule and space above the first line; 13.8 pt and 6 pt between the lines; space and rule, then 6 pt, below.
+    assert!(close(line("one"), top + 0.5 + 4.0 + 11.2, 0.03));
+    assert!(close(line("two") - line("one"), 19.8, 0.03) && close(line("three") - line("two"), 19.8, 0.03));
+    assert!(close(line("below"), line("three") + 2.6 + 4.0 + 0.5 + 6.0 + 11.2, 0.03), "{}", line("below"));
+
+    let rules = rules(&page);
+    assert_eq!(rules.iter().filter(|rule| rule.1 == rule.3).count(), 2, "one rule above and one below");
+    let bottom = line("three") + 2.6 + 4.0 + 0.5;
+    // The fill: from under the top rule to the bottom rule, from 68 to 527.3 pt, in pieces that leave no gap.
+    let mut fills = fills(&page);
+    fills.sort_by(|a, b| a.1.total_cmp(&b.1));
+    assert!(fills.iter().all(|fill| close(fill.0, 68.0, 0.01) && close(fill.2, 527.3, 0.01)), "{fills:?}");
+    assert!(close(fills[0].1, top + 0.5, 0.03) && close(fills.last().unwrap().3, bottom - 0.5, 0.03), "{fills:?}");
+    assert!(fills.windows(2).all(|pair| close(pair[0].3, pair[1].1, 0.01)), "{fills:?}");
+    // The side rules too.
+    let mut left: Vec<_> = rules.iter().filter(|rule| rule.0 == rule.2 && rule.0 < 72.0).collect();
+    left.sort_by(|a, b| a.1.total_cmp(&b.1));
+    assert!(close(left[0].1, top, 0.03) && close(left.last().unwrap().3, bottom, 0.03));
+    assert!(left.windows(2).all(|pair| close(pair[0].3, pair[1].1, 0.01)), "{left:?}");
+}
+
+#[test]
+fn a_fill_runs_between_the_indents_and_through_the_space_that_is_the_paragraphs_own() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (a second probe; its "A02" to "A10"). The fill of
+    // a shaded paragraph without borders runs from its left indent to its
+    // right one, whatever the first line's indent. It covers the lines and
+    // the space after; of the space before, as much as exceeds the space
+    // after of the paragraph above, which is that paragraph's.
+    let shaded = |spacing: &str, text: &str| boxed_paragraph("", "D9D9D9", spacing, text);
+    let plain = |spacing: &str, text: &str| boxed_paragraph("", "", spacing, text);
+    let body = plain(r#"<w:spacing w:before="0" w:after="120"/>"#, "first")
+        + &shaded(r#"<w:spacing w:before="120" w:after="240"/>"#, "own after")
+        + &plain("", "second")
+        + &shaded(r#"<w:spacing w:before="240" w:after="0"/>"#, "own before")
+        + &plain("", "third")
+        + &shaded(r#"<w:ind w:left="720" w:right="720" w:firstLine="360"/>"#, "indented");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.starts_with(text)).unwrap().baseline;
+    let extent = |from: f32, to: f32| {
+        let inside: Vec<_> =
+            fills(&page).into_iter().filter(|fill| fill.1 > from - 0.05 && fill.3 < to + 0.05).collect();
+        (inside.iter().map(|f| f.1).fold(f32::MAX, f32::min), inside.iter().map(|f| f.3).fold(0.0, f32::max), inside)
+    };
+    // The 6 pt above "own after" are the first paragraph's space after: not filled. Its own 12 pt after are.
+    let (top, bottom, pieces) = extent(line("first"), line("second") - 11.0);
+    assert!(
+        close(top, line("own after") - 11.2, 0.03) && close(bottom, line("own after") + 2.6 + 12.0, 0.03),
+        "{pieces:?}"
+    );
+    assert!(pieces.iter().all(|fill| close(fill.0, 72.0, 0.01) && close(fill.2, 523.3, 0.01)));
+    // Nothing is above "own before" to claim the 12 pt before it: they are filled.
+    let (top, bottom, pieces) = extent(line("second"), line("third") - 11.0);
+    assert!(
+        close(top, line("own before") - 11.2 - 12.0, 0.03) && close(bottom, line("own before") + 2.6, 0.03),
+        "{pieces:?}"
+    );
+    // Between the indents, not from where the first line begins.
+    let (_, _, pieces) = extent(line("third"), 800.0);
+    assert!(pieces.iter().all(|fill| close(fill.0, 108.0, 0.01) && close(fill.2, 487.3, 0.01)), "{pieces:?}");
+    assert!(close(starts(&page, "indented"), 126.0, 0.01));
+}

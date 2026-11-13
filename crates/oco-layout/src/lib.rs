@@ -21,8 +21,8 @@ pub mod text;
 use std::collections::HashMap;
 
 use oco_docx::{
-    format_number, Alignment, Block, BreakKind, Counters, Docx, GridKind, Offset, ParaProps, RelativeTo, Resolver,
-    RunContent, RunProps, Section, SectionStart, StoryRefs, VerticalMerge, Wrap, WrapSide,
+    format_number, Alignment, Block, BreakKind, Counters, Docx, GridKind, Offset, ParaBorders, ParaProps, RelativeTo,
+    Resolver, RunContent, RunProps, Section, SectionStart, StoryRefs, VerticalMerge, Wrap, WrapSide,
 };
 #[cfg(feature = "serde")]
 use serde::Serialize;
@@ -264,7 +264,10 @@ struct Unit {
     /// with the paragraph below: what it takes to lay it out a second time,
     /// around an object, without counting it again as a list item.
     label: Option<paragraph::LabelSpec>,
-    joined: bool,
+    /// The paragraph above (below) has the same borders and is boxed with this one.
+    joined: (bool, bool),
+    /// The paragraph's box, where it has borders or shading.
+    frame: Option<ParaBox>,
     /// The text boxes that stand in the paragraph's lines, as drawn: which
     /// box, its items from its own left and top, and its lines of text.
     boxes: Vec<Drawn>,
@@ -746,28 +749,159 @@ fn put_boxes(laid: &mut paragraph::Laid, drawn: &[Drawn]) {
     }
 }
 
-/// Draws the border under a paragraph below its last line and gives the
-/// line the room the border takes.
-fn border_below(lines: &mut [paragraph::Line], props: &ParaProps, width: f32) {
-    let Some(border) = props.borders.bottom.as_ref().filter(|b| b.is_visible()) else { return };
-    let Some(line) = lines.last_mut() else { return };
-    let color = match border.color {
+/// How wide a border is drawn. Word and WPS both draw one device unit of
+/// 1/600 inch to each eighth of a point of the border's size: a border of
+/// 1 pt is 0.96 pt wide, one of 3 pt 2.88 pt. (Measured in both: a border of
+/// size 18 is 2.16 pt in Word's PDF, of size 24 2.88 pt in WPS's.)
+fn rule_width(border: &oco_docx::Border) -> f32 {
+    border.size as f32 * 0.12
+}
+
+/// The room a border takes in the layout: its size as written. (Measured in
+/// WPS: a border of 3 pt kept 6 pt from the text moves what follows down by
+/// 9 pt.) The line is drawn in the middle of that room.
+fn rule_room(border: &oco_docx::Border) -> f32 {
+    border.size as f32 / 8.0
+}
+
+fn rule_colour(border: &oco_docx::Border) -> Rgb {
+    match border.color {
         Some(oco_docx::Color::Rgb(r, g, b)) => [r, g, b],
         _ => [0, 0, 0],
+    }
+}
+
+/// The dashes and gaps a border's style is drawn with; none for a solid line.
+fn rule_dash(border: &oco_docx::Border, width: f32) -> [f32; 2] {
+    match border.style.as_str() {
+        "dotted" => [width, width],
+        "dashed" | "dashSmallGap" | "dotDash" | "dotDotDash" => [3.0 * width.max(0.5), 2.0 * width.max(0.5)],
+        _ => [0.0, 0.0],
+    }
+}
+
+/// The box a paragraph stands in, as far as the page has to know of it: its
+/// fill and the rules at its sides, which go on through the space between
+/// the paragraph and its neighbours where no rule closes the box there.
+#[derive(Debug, Clone)]
+struct ParaBox {
+    shade: Option<Rgb>,
+    /// Where the fill begins and ends, from the text margin.
+    fill: (f32, f32),
+    /// The rules at the sides: the middle of each, its width, colour and dashes.
+    sides: Vec<(f32, f32, Rgb, [f32; 2])>,
+    /// No rule closes the box above (below): the space there is inside it.
+    open: (bool, bool),
+}
+
+impl ParaBox {
+    /// Draws the part of the box between `top` and `bottom` on a page, `x`
+    /// being where the text margin is.
+    fn draw(&self, page: &mut Page, x: f32, top: f32, bottom: f32) {
+        if bottom - top < 0.01 {
+            return;
+        }
+        if let Some(color) = self.shade {
+            let (from, to) = self.fill;
+            page.items.push(Item::Rect { x: x + from, y: top, width: to - from, height: bottom - top, color });
+        }
+        for &(at, width, color, dash) in &self.sides {
+            page.items.push(Item::Rule { x1: x + at, y1: top, x2: x + at, y2: bottom, width, color, dash });
+        }
+    }
+}
+
+/// Puts a paragraph's borders and shading on its lines and gives the lines
+/// the room the borders take. `joined` says whether the paragraph above and
+/// the one below have the same borders, in which case they are boxed as one.
+///
+/// Measured in WPS (a probe of 23 paragraphs made for this, and where Word's
+/// PDFs show the same they agree):
+/// - a border stands outside the text by its space: the left one ends that
+///   far before the leftmost text edge, which is the first line's where it
+///   hangs; the right one begins that far after the right indent;
+/// - the top border and its space take room above the first line, the
+///   bottom border and its space below the last;
+/// - top and bottom borders run from the outer edge of the left border to
+///   that of the right, or between the text edges where there are none;
+/// - the fill covers the lines and the borders' spaces, inside the borders;
+/// - paragraphs with the same borders and indents are one box: no border
+///   between them, and the space between them is inside the box.
+fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (bool, bool)) -> Option<ParaBox> {
+    let shown = |border: &Option<oco_docx::Border>| border.clone().filter(|b| b.is_visible());
+    let borders = &props.borders;
+    let (top, bottom) = (shown(&borders.top).filter(|_| !joined.0), shown(&borders.bottom).filter(|_| !joined.1));
+    let (left, right) = (shown(&borders.left), shown(&borders.right));
+    let between = shown(&borders.between).filter(|_| joined.0);
+    let shade = match props.shade {
+        Some(oco_docx::Color::Rgb(r, g, b)) => Some([r, g, b]),
+        _ => None,
     };
-    let (rule, space) = (border.size as f32 / 8.0, border.space as f32);
-    let at = line.height + space + rule / 2.0;
-    line.items.push(Item::Rule {
-        x1: props.indent.left.unwrap_or(0) as f32 * TWIP,
-        y1: at,
-        x2: width - props.indent.right.unwrap_or(0) as f32 * TWIP,
-        y2: at,
-        width: rule,
-        color,
-        dash: [0.0, 0.0],
-    });
-    line.height += space + rule;
-    line.needed += space + rule;
+    if shade.is_none() && top.is_none() && bottom.is_none() && left.is_none() && right.is_none() && between.is_none() {
+        return None;
+    }
+    let (indent_left, indent_right, first) = laid.indents;
+    let (text_left, text_right) = (indent_left + first.min(0.0), width - indent_right);
+    let space = |border: &oco_docx::Border| border.space as f32;
+    // Where the fill begins and ends, and the outer edges of the box.
+    let fill = (text_left - left.as_ref().map_or(0.0, space), text_right + right.as_ref().map_or(0.0, space));
+    let outer = (fill.0 - left.as_ref().map_or(0.0, rule_room), fill.1 + right.as_ref().map_or(0.0, rule_room));
+    let side = |border: &oco_docx::Border, inner: f32, outward: f32| {
+        let width = rule_width(border);
+        (inner + outward * rule_room(border) / 2.0, width, rule_colour(border), rule_dash(border, width))
+    };
+    let mut sides = Vec::new();
+    sides.extend(left.as_ref().map(|border| side(border, fill.0, -1.0)));
+    sides.extend(right.as_ref().map(|border| side(border, fill.1, 1.0)));
+    let across = |border: &oco_docx::Border, y: f32| {
+        let width = rule_width(border);
+        let (color, dash) = (rule_colour(border), rule_dash(border, width));
+        Item::Rule { x1: outer.0, y1: y, x2: outer.1, y2: y, width, color, dash }
+    };
+
+    let count = laid.lines.len();
+    for (number, line) in laid.lines.iter_mut().enumerate() {
+        // The fill lies behind the line from `from` to `to` below the line's top.
+        let (mut from, mut to) = (0.0, line.height);
+        let mut rules = Vec::new();
+        if number == 0 {
+            // A rule over the paragraph, or between it and the one above that it is boxed
+            // with: the line moves down by the rule and the space kept from it.
+            let over =
+                top.as_ref().map(|border| (0.0, border)).or(between.as_ref().map(|border| (space(border), border)));
+            if let Some((above, border)) = over {
+                let room = above + rule_room(border) + space(border);
+                line.items.iter_mut().for_each(|item| item.translate(0.0, room));
+                line.parts.iter_mut().chain(&mut line.inner).for_each(|part| part.0 += room);
+                line.baseline += room;
+                line.height += room;
+                line.needed += room;
+                rules.push(across(border, above + rule_room(border) / 2.0));
+                // The fill begins under a rule that closes the box, and goes on under one inside it.
+                from = if top.is_some() { rule_room(border) } else { 0.0 };
+                to = line.height;
+            }
+        }
+        if number + 1 == count {
+            if let Some(border) = &bottom {
+                let under = line.height + space(border);
+                rules.push(across(border, under + rule_room(border) / 2.0));
+                to = under;
+                line.height = under + rule_room(border);
+                line.needed = line.height;
+            }
+        }
+        // The sides run the whole height of the line, the borders above and below included.
+        for &(at, width, color, dash) in &sides {
+            rules.push(Item::Rule { x1: at, y1: 0.0, x2: at, y2: line.height, width, color, dash });
+        }
+        if let Some(color) = shade {
+            let fill = Item::Rect { x: fill.0, y: from, width: fill.1 - fill.0, height: to - from, color };
+            line.items.insert(0, fill);
+        }
+        line.items.extend(rules);
+    }
+    Some(ParaBox { shade, fill, sides, open: (top.is_none(), bottom.is_none()) })
 }
 
 impl Builder<'_> {
@@ -834,12 +968,13 @@ impl Builder<'_> {
         extent
     }
 
-    /// Lays out a paragraph. `next` is the paragraph right after it, if
-    /// there is one: paragraphs with the same borders share them.
+    /// Lays out a paragraph. `around` are the paragraphs right before and
+    /// after it, where there are any: paragraphs with the same borders are
+    /// boxed as one.
     fn paragraph(
         &mut self,
         source: &oco_docx::Paragraph,
-        next: Option<&oco_docx::Paragraph>,
+        around: (Option<&oco_docx::Paragraph>, Option<&oco_docx::Paragraph>),
         section: &Section,
         width: f32,
     ) -> Unit {
@@ -856,14 +991,6 @@ impl Builder<'_> {
         let index = self.paragraphs;
         self.paragraphs += 1;
 
-        // The border under a paragraph is drawn its space below the last
-        // line, and the paragraph is taller by that space and by the width
-        // of the border: what follows begins under the border. Measured in
-        // WPS, in the body (a 3 pt border 6 pt away moves the next paragraph
-        // down 9 pt) and under a header that reaches below the top margin.
-        //
-        // Paragraphs one after the other with the same borders and indents
-        // are bordered as one, so only the last of them has the border.
         // Text boxes are stories of their own, laid out once.
         let shown: Vec<&oco_docx::Run> =
             source.runs.iter().filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content())).collect();
@@ -881,15 +1008,19 @@ impl Builder<'_> {
                 (object.content, object.inner) = self.text_box(text_box, section, object.width, object.height);
             }
         }
-        let joined = props.borders.bottom.as_ref().is_some_and(|b| b.is_visible())
-            && next.is_some_and(|next| {
-                let below = self.resolver.paragraph_in(&next.props, &self.table_styles);
-                below.borders == props.borders
-                    && (below.indent.left, below.indent.right) == (props.indent.left, props.indent.right)
-            });
-        if !joined {
-            border_below(&mut laid.lines, &props, width);
-        }
+        // Paragraphs one after the other with the same borders and indents
+        // are boxed as one.
+        let bordered = props.borders != ParaBorders::default();
+        let same = |other: Option<&oco_docx::Paragraph>| {
+            bordered
+                && other.is_some_and(|other| {
+                    let other = self.resolver.paragraph_in(&other.props, &self.table_styles);
+                    other.borders == props.borders
+                        && (other.indent.left, other.indent.right) == (props.indent.left, props.indent.right)
+                })
+        };
+        let joined = (same(around.0), same(around.1));
+        let frame = boxed(&mut laid, &props, width, joined);
         Unit {
             lines: laid.lines,
             before: laid.space_before,
@@ -912,6 +1043,7 @@ impl Builder<'_> {
             anchored: laid.anchored,
             label,
             joined,
+            frame,
             boxes,
         }
     }
@@ -997,9 +1129,7 @@ impl Builder<'_> {
         let ctx = context(self.docx, section, width, self.options.model);
         let mut laid = paragraph::layout_within(&input, self.fonts, &ctx, shape);
         put_boxes(&mut laid, &unit.boxes);
-        if !unit.joined {
-            border_below(&mut laid.lines, &props, width);
-        }
+        boxed(&mut laid, &props, width, unit.joined);
         laid.lines
     }
 
@@ -1578,7 +1708,8 @@ impl Builder<'_> {
                 header: repeated.clone().filter(|_| number >= heading),
                 anchored: Vec::new(),
                 label: None,
-                joined: false,
+                joined: (false, false),
+                frame: None,
                 boxes: Vec::new(),
             });
         }
@@ -1670,11 +1801,12 @@ impl Builder<'_> {
         for (index, block) in blocks.iter().enumerate() {
             match block {
                 Block::Paragraph(paragraph) => {
-                    let next = match blocks.get(index + 1) {
-                        Some(Block::Paragraph(next)) => Some(next),
+                    let beside = |at: Option<usize>| match at.and_then(|at| blocks.get(at)) {
+                        Some(Block::Paragraph(other)) => Some(other),
                         _ => None,
                     };
-                    let mut unit = self.paragraph(paragraph, next, section, width);
+                    let around = (beside(index.checked_sub(1)), beside(Some(index + 1)));
+                    let mut unit = self.paragraph(paragraph, around, section, width);
                     if let Some(before) = previous.map(|at| &mut units[at]) {
                         if before.list.is_some() && before.list == unit.list {
                             if before.automatic.1 {
@@ -1861,6 +1993,8 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     };
 
     let sources = docx.document.paragraphs();
+    // The box of the paragraph placed last, and where its text margin is.
+    let mut above: Option<(ParaBox, f32)> = None;
     // The objects on the page being filled that text keeps clear of.
     let mut floats: Vec<Float> = Vec::new();
     let mut floats_page = 0;
@@ -1920,7 +2054,27 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             after_break = true;
             turned = true;
         }
-        y += gap(page_is_empty, after_break);
+        let space = gap(page_is_empty, after_break);
+        if !page_is_empty {
+            // The space between two paragraphs is the upper one's space
+            // after, and then what the lower one's space before adds to
+            // it; each part is inside its paragraph's box unless a border
+            // closes the box there. (Measured in WPS: the fill of a shaded
+            // paragraph goes on through its space after, and through as
+            // much of its space before as exceeds the space after of the
+            // paragraph above. Word's PDFs show the same of a border at
+            // the left, which runs on through the space after.)
+            let own = previous_after.min(space);
+            let page = pages.last_mut().expect("a page is always open");
+            if let Some((upper, x)) = above.as_ref().filter(|(upper, _)| upper.open.1) {
+                upper.draw(page, *x, y, y + own);
+            }
+            if let Some(lower) = unit.frame.as_ref().filter(|lower| lower.open.0) {
+                lower.draw(page, left + unit.left, y + own, y + space);
+            }
+        }
+        above = None;
+        y += space;
         if let Some(row) = &unit.row {
             // Where each cell has got to: the next of its lines to place.
             let mut cursors = vec![0usize; row.cells.len()];
@@ -2159,6 +2313,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         }
         previous_after = unit.after;
         previous_style = Some((unit.style.clone(), unit.contextual));
+        above = unit.frame.clone().map(|frame| (frame, left + unit.left));
 
         if unit.ends_section.is_some() {
             section_index += 1;
