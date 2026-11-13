@@ -6,11 +6,9 @@
 //! self-contained SVG. Nothing here depends on a platform's text system, so
 //! the same input gives the same pages everywhere.
 //!
-//! This is a research prototype. It covers body text: fonts and sizes,
-//! character effects, indents, alignment, line and paragraph spacing, the
-//! document grid, tabs, list numbering, page breaks and a rough grid for
-//! tables. Headers, footers, footnotes, images, columns and floating objects
-//! are not laid out.
+//! This is a research prototype. It covers body text, tables, headers and
+//! footers, page-number fields, pictures and DrawingML text boxes. Footnotes,
+//! columns and floating tables still need layout support.
 
 pub mod fonts;
 mod paragraph;
@@ -89,6 +87,8 @@ pub enum Item {
         part: Option<String>,
         /// The share of the image cut away at the left, top, right and bottom.
         crop: [f32; 4],
+        /// Reflect the visible (already cropped) image horizontally and vertically.
+        flip: [bool; 2],
     },
 }
 
@@ -229,7 +229,10 @@ pub fn content(docx: &Docx, paragraph: &oco_docx::Paragraph, mut visit: impl FnM
                         visit(Content::Object);
                     }
                 }
-                RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
+                RunContent::PageNumber(shown)
+                | RunContent::PageCount(shown)
+                | RunContent::SectionPageCount(shown)
+                | RunContent::FormattedPageNumber { shown, .. } => {
                     shown.chars().for_each(|ch| visit(Content::Char(ch)));
                 }
             }
@@ -844,6 +847,7 @@ fn put_object(page: &mut Page, object: &paragraph::Anchored, x: f32, y: f32) {
             height: object.height,
             part: object.part.clone(),
             crop: object.crop,
+            flip: object.flip,
         }]
     };
     items.iter_mut().for_each(|item| item.translate(x, y));
@@ -1591,9 +1595,24 @@ impl Builder<'_> {
         // left, 2 below, 3 at the right): its own if it says, else the
         // table's, which at the table's edge is the outer one and elsewhere
         // the one between rows or columns.
+        let color_resolver = self.docx.resolver();
+        let cell_edges: Vec<Vec<_>> = table
+            .rows
+            .iter()
+            .map(|row| {
+                row.cells
+                    .iter()
+                    .map(|cell| {
+                        let mut edges = cell.props.borders.clone();
+                        color_resolver.border_colors(&mut edges);
+                        edges
+                    })
+                    .collect()
+            })
+            .collect();
         let wish = |row: usize, index: usize, side: usize| -> Option<&oco_docx::Border> {
             let (cells, edges) = (&table.rows[row].cells, &props.edges);
-            let own = &cells[index].props.borders;
+            let own = &cell_edges[row][index];
             let (own, of_table) = match side {
                 0 => (&own.top, if row == 0 { &edges.top } else { &edges.inside_h }),
                 1 => (&own.left, if index == 0 { &edges.left } else { &edges.inside_v }),
@@ -1621,7 +1640,7 @@ impl Builder<'_> {
                 stronger(wish(row, index, 3), after),
             ]
         };
-        let fill_of = |color: Option<oco_docx::Color>| match color {
+        let fill_of = |color: Option<oco_docx::Color>| match color.map(|color| color_resolver.color(color)) {
             Some(oco_docx::Color::Rgb(r, g, b)) => Some([r, g, b]),
             _ => None,
         };
@@ -1897,7 +1916,7 @@ impl Builder<'_> {
     /// Lays out the content of a header or footer, with the page number and
     /// count written in when they are known. The body's own numbering of
     /// paragraphs and of list items is left as it was.
-    fn story(&mut self, blocks: &[Block], section: &Section, numbers: Option<&(String, String)>) -> Vec<Unit> {
+    fn story(&mut self, blocks: &[Block], section: &Section, numbers: Option<&PageNumbers>) -> Vec<Unit> {
         let filled = numbers.map(|numbers| with_numbers(blocks, numbers));
         // The header and the footer of a page are numbered as one, apart
         // from the body. (Measured in Word, docx4j's probe
@@ -2080,6 +2099,8 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
 
     let mut pages: Vec<Page> = Vec::new();
     let mut section_index = 0;
+    let mut section_starts = vec![0usize; setups.len()];
+    let mut section_ends = vec![0usize; setups.len()];
     // A header or footer that a section does not name is the one of the
     // section before.
     let mut stories: Vec<(StoryRefs, StoryRefs)> = Vec::with_capacity(setups.len());
@@ -2485,6 +2506,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         above = unit.frame.clone().map(|frame| (frame, left + unit.left));
 
         if unit.ends_section.is_some() {
+            section_ends[section_index] = pages.len();
             section_index += 1;
             let next = setups[section_index.min(setups.len() - 1)];
             // A section that goes on in the same page cannot do so on paper
@@ -2499,8 +2521,12 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                 after_break = false;
                 previous_after = 0.0;
             }
+            // A continuous section starts on the existing page, so that
+            // shared page belongs to both sections' SECTIONPAGES counts.
+            section_starts[section_index] = pages.len() - 1;
         }
     }
+    section_ends[section_index] = pages.len();
     // Headers and footers go on last, when the number of pages is known.
     let count = pages.len();
     for (page, frame) in pages.iter_mut().zip(&frames) {
@@ -2509,8 +2535,15 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         // The page's number is written the way its section numbers pages;
         // the count of pages is always in figures (as WPS shows it: a page
         // numbered ii of a document of ten pages is "ii" of "10").
-        let number = format_number(section.page_number_format.as_deref().unwrap_or("decimal"), frame.number);
-        let numbers = (number, count.to_string());
+        let numbers = PageNumbers {
+            page: frame.number,
+            pages: count.min(i32::MAX as usize) as i32,
+            section_pages: section_ends[frame.section]
+                .saturating_sub(section_starts[frame.section])
+                .max(1)
+                .min(i32::MAX as usize) as i32,
+            format: section.page_number_format.as_deref().unwrap_or("decimal"),
+        };
         let mut lines = Vec::new();
         builder.story_counters = Counters::default();
         for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
@@ -2600,16 +2633,48 @@ fn stack(units: Vec<Unit>) -> Stacked {
 
 /// A copy of `blocks` with the page number and page count written out
 /// where the fields for them are.
-fn with_numbers(blocks: &[Block], numbers: &(String, String)) -> Vec<Block> {
+struct PageNumbers<'a> {
+    page: i32,
+    pages: i32,
+    section_pages: i32,
+    format: &'a str,
+}
+
+fn with_numbers(blocks: &[Block], numbers: &PageNumbers) -> Vec<Block> {
     let mut blocks = blocks.to_vec();
-    fn fill(blocks: &mut [Block], numbers: &(String, String)) {
+    fn fill(blocks: &mut [Block], numbers: &PageNumbers) {
         for block in blocks {
             match block {
                 Block::Paragraph(paragraph) => {
+                    for text_box in paragraph.runs.iter_mut().flat_map(|run| &mut run.text_boxes) {
+                        fill(&mut text_box.blocks, numbers);
+                    }
                     for piece in paragraph.runs.iter_mut().flat_map(|run| &mut run.content) {
                         match piece {
-                            RunContent::PageNumber(_) => *piece = RunContent::Text(numbers.0.clone()),
-                            RunContent::PageCount(_) => *piece = RunContent::Text(numbers.1.clone()),
+                            RunContent::PageNumber(_) => {
+                                *piece = RunContent::Text(format_number(numbers.format, numbers.page))
+                            }
+                            RunContent::PageCount(_) => *piece = RunContent::Text(numbers.pages.to_string()),
+                            RunContent::SectionPageCount(_) => {
+                                *piece = RunContent::Text(numbers.section_pages.to_string())
+                            }
+                            RunContent::FormattedPageNumber { kind, format, .. } => {
+                                let value = match kind {
+                                    oco_docx::PageFieldKind::Page => numbers.page,
+                                    oco_docx::PageFieldKind::Pages => numbers.pages,
+                                    oco_docx::PageFieldKind::SectionPages => numbers.section_pages,
+                                };
+                                let text = if format == "arabicDash" {
+                                    format!("- {value} -")
+                                } else if matches!(format.as_str(), "cardinalText" | "ordinalText") {
+                                    // The field switches default to lowercase; list
+                                    // numbering uses initial capitals for these formats.
+                                    format_number(format, value).to_lowercase()
+                                } else {
+                                    format_number(format, value)
+                                };
+                                *piece = RunContent::Text(text);
+                            }
                             _ => {}
                         }
                     }

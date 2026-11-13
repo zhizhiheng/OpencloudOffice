@@ -37,6 +37,8 @@ pub struct Font {
     families: Vec<String>,
     pub bold: bool,
     pub italic: bool,
+    weight: u16,
+    width: u16,
     pub units_per_em: f32,
     /// Has Chinese, Japanese or Korean glyphs.
     pub east_asian: bool,
@@ -97,6 +99,8 @@ impl Font {
         Font {
             bold: face.is_bold(),
             italic: face.is_italic(),
+            weight: face.weight(),
+            width: face.width(),
             units_per_em: upm,
             east_asian: ['中', 'あ', '한'].iter().any(|ch| face.glyph_index(*ch).is_some()),
             box_word,
@@ -297,7 +301,11 @@ impl FontDb {
         let candidates = self.by_family.get(family)?;
         candidates.iter().copied().min_by_key(|id| {
             let font = self.get(*id);
-            u8::from(font.bold != bold) * 2 + u8::from(font.italic != italic)
+            (
+                u8::from(font.bold != bold) * 2 + u8::from(font.italic != italic),
+                font.width.abs_diff(5),
+                font.weight.abs_diff(if bold { 700 } else { 400 }),
+            )
         })
     }
 

@@ -14,15 +14,46 @@ use crate::props::{FontRef, Indent, NumRef, ParaProps, RunProps};
 use crate::styles::{Style, StyleKind, StyleSheet};
 use crate::table::{CellMargins, TableProps};
 use crate::theme::{ThemeFontLang, ThemeFonts};
+use crate::{Color, ThemeSlot};
+use std::collections::HashMap;
 
 pub struct Resolver<'a> {
     pub(crate) styles: &'a StyleSheet,
     pub(crate) theme: Option<&'a ThemeFonts>,
     pub(crate) theme_lang: &'a ThemeFontLang,
+    pub(crate) color_mapping: &'a HashMap<ThemeSlot, ThemeSlot>,
     pub(crate) numbering: &'a Numbering,
 }
 
 impl<'a> Resolver<'a> {
+    /// Resolve a theme colour, including the document's colour map. If the
+    /// theme/slot is missing, the stored RGB is already a final colour.
+    pub fn color(&self, color: Color) -> Color {
+        let Color::Theme(reference) = color else { return color };
+        let slot = self.color_mapping.get(&reference.slot).copied().unwrap_or(reference.slot);
+        let rgb = self
+            .theme
+            .and_then(|theme| theme.color(slot))
+            .map(|rgb| crate::colors::luminance(rgb, reference.tint, reference.shade))
+            .or(reference.fallback);
+        rgb.map_or(Color::Auto, |[r, g, b]| Color::Rgb(r, g, b))
+    }
+
+    pub fn border_colors(&self, edges: &mut crate::Edges) {
+        for edge in [
+            &mut edges.top,
+            &mut edges.left,
+            &mut edges.bottom,
+            &mut edges.right,
+            &mut edges.inside_h,
+            &mut edges.inside_v,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            edge.color = edge.color.map(|color| self.color(color));
+        }
+    }
     /// Effective paragraph formatting for a paragraph with `direct` properties.
     ///
     /// `style_id` in the result is the style actually used, which is the
@@ -65,6 +96,8 @@ impl<'a> Resolver<'a> {
         let margins = &mut out.cell_margins;
         (margins.left, margins.right) = (margins.left.or(Some(0)), margins.right.or(Some(0)));
         (margins.top, margins.bottom) = (margins.top.or(Some(0)), margins.bottom.or(Some(0)));
+        out.shade = out.shade.map(|color| self.color(color));
+        self.border_colors(&mut out.edges);
         out
     }
 
@@ -114,6 +147,15 @@ impl<'a> Resolver<'a> {
                 out.numbering = None;
             }
             None => out.numbering = None,
+        }
+        out.shade = out.shade.map(|color| self.color(color));
+        let borders = &mut out.borders;
+        for border in
+            [&mut borders.top, &mut borders.left, &mut borders.bottom, &mut borders.right, &mut borders.between]
+                .into_iter()
+                .flatten()
+        {
+            border.color = border.color.map(|color| self.color(color));
         }
         out
     }
@@ -198,6 +240,12 @@ impl<'a> Resolver<'a> {
 
         for slot in [&mut out.fonts.ascii, &mut out.fonts.h_ansi, &mut out.fonts.east_asia, &mut out.fonts.cs] {
             self.resolve_theme_font(slot);
+        }
+        for color in [&mut out.color, &mut out.underline_color, &mut out.shade].into_iter().flatten() {
+            *color = self.color(*color);
+        }
+        if let Some(border) = &mut out.border {
+            border.color = border.color.map(|color| self.color(color));
         }
         out
     }

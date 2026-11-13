@@ -140,7 +140,7 @@ impl Border {
             style: val(node).unwrap_or("single").to_owned(),
             size: int(w_attr(node, "sz")).unwrap_or(4),
             space: int(w_attr(node, "space")).unwrap_or(0),
-            color: w_attr(node, "color").and_then(Color::parse),
+            color: Color::read(node, "color"),
         }
     }
 
@@ -151,7 +151,7 @@ impl Border {
 
 /// The fill of a `w:shd`. A pattern other than a plain fill is not modelled.
 fn shade(node: Node) -> Option<Color> {
-    w_attr(node, "fill").and_then(Color::parse)
+    Color::read(node, "fill")
 }
 
 impl RunProps {
@@ -198,7 +198,7 @@ impl RunProps {
                 // it must not overwrite a value read earlier.
                 Some("u") => {
                     p.underline = Underline::parse(val(child)).or(p.underline);
-                    p.underline_color = w_attr(child, "color").and_then(Color::parse).or(p.underline_color);
+                    p.underline_color = Color::read(child, "color").or(p.underline_color);
                 }
                 Some("em") => p.emphasis = val(child).and_then(Emphasis::from_exact).or(p.emphasis),
                 Some("szCs") => p.size_cs = half_points(val(child)),
@@ -210,7 +210,7 @@ impl RunProps {
                 Some("bdr") => p.border = Some(Border::parse(child)),
                 // Proofing language and editing aids: no effect on how text looks.
                 Some("lang" | "noProof" | "webHidden" | "specVanish" | "effect" | "oMath") => {}
-                Some("color") => p.color = val(child).and_then(Color::parse).or(p.color),
+                Some("color") => p.color = Color::read(child, "val").or(p.color),
                 Some("highlight") => p.highlight = val(child).and_then(Highlight::from_exact).or(p.highlight),
                 Some("vertAlign") => p.vert_align = val(child).and_then(VertAlign::from_exact).or(p.vert_align),
                 Some("sz") => p.size = half_points(val(child)),
