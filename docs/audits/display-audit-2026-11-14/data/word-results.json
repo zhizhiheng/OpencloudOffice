@@ -1,0 +1,2059 @@
+{
+ "anchor-side-by-side.docx": {
+  "lines": 23,
+  "same": 23,
+  "placed": 23,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "border-hanging.docx": {
+  "lines": 37,
+  "same": 37,
+  "placed": 37,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "break-justified.docx": {
+  "lines": 86,
+  "same": 77,
+  "placed": 68,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.09,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "break-longword.docx": {
+  "lines": 42,
+  "same": 42,
+  "placed": 42,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.01,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "break-opportunities.docx": {
+  "lines": 86,
+  "same": 82,
+  "placed": 82,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "break-ragged.docx": {
+  "lines": 68,
+  "same": 68,
+  "placed": 68,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.08,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "fonts-author-had.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 1,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 2.71,
+  "plain": true,
+  "missing_fonts": [
+   "Docx4j Probe NameOnly",
+   "Docx4j Probe Signed"
+  ]
+ },
+ "fonts-cjk-linebox.docx": {
+  "lines": 220,
+  "same": 106,
+  "placed": 0,
+  "pages": [
+   5,
+   4
+  ],
+  "page_starts": 4,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 324.89,
+  "plain": true,
+  "missing_fonts": [
+   "Meiryo",
+   "Yu Gothic",
+   "MS Gothic",
+   "MS Mincho",
+   "Malgun Gothic",
+   "Microsoft JhengHei"
+  ]
+ },
+ "fonts-cs-off.docx": {
+  "lines": 13,
+  "same": 11,
+  "placed": 11,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.09,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "fonts-georgia.docx": {
+  "lines": 8,
+  "same": 3,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 28.77,
+  "plain": true,
+  "missing_fonts": [
+   "Georgia"
+  ]
+ },
+ "fonts-hebrew-no-cs.docx": {
+  "lines": 7,
+  "same": 2,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 17.22,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "fonts-light-bold.docx": {
+  "lines": 6,
+  "same": 4,
+  "placed": 2,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.55,
+  "plain": true,
+  "missing_fonts": [
+   "Calibri Light"
+  ]
+ },
+ "fonts-missing-slots.docx": {
+  "lines": 9,
+  "same": 8,
+  "placed": 4,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 7.22,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "fonts-segoe-ui.docx": {
+  "lines": 10,
+  "same": 5,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 30.18,
+  "plain": true,
+  "missing_fonts": [
+   "Segoe UI",
+   "Segoe UI Light"
+  ]
+ },
+ "fonts-space-cjk.docx": {
+  "lines": 6,
+  "same": 4,
+  "placed": 4,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.08,
+  "plain": true,
+  "missing_fonts": [
+   "MS Gothic"
+  ]
+ },
+ "fonts-symbol-and-emoji.docx": {
+  "lines": 6,
+  "same": 1,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 3.87,
+  "plain": true,
+  "missing_fonts": [
+   "symbol",
+   "wingdings",
+   "Symbol",
+   "Wingdings"
+  ]
+ },
+ "fonts-theme-lang.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.07,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "fonts-unresolvable.docx": {
+  "lines": 16,
+  "same": 10,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 4.22,
+  "plain": true,
+  "missing_fonts": [
+   "Docx4j Probe A",
+   "Docx4j Probe B",
+   "Docx4j Probe C",
+   "Docx4j Probe D",
+   "Docx4j Probe E",
+   "Docx4j Probe F"
+  ]
+ },
+ "footer-offpage-shape.docx": {
+  "lines": 129,
+  "same": 126,
+  "placed": 126,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 2,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "footnote-space-after.docx": {
+  "lines": 166,
+  "same": 149,
+  "placed": 91,
+  "pages": [
+   6,
+   6
+  ],
+  "page_starts": 5,
+  "page_starts_equal": 3,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "footnotes.docx": {
+  "lines": 99,
+  "same": 82,
+  "placed": 4,
+  "pages": [
+   3,
+   2
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 1.6,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "frame-stacking-2.docx": {
+  "lines": 40,
+  "same": 40,
+  "placed": 40,
+  "pages": [
+   4,
+   4
+  ],
+  "page_starts": 3,
+  "page_starts_equal": 3,
+  "dx": 0.02,
+  "dy": 0.13,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "frame-stacking.docx": {
+  "lines": 30,
+  "same": 30,
+  "placed": 30,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 2,
+  "dx": 0.02,
+  "dy": 0.13,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "image-anchored.docx": {
+  "lines": 66,
+  "same": 59,
+  "placed": 50,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "image-inline.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.04,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "justification-crossover-2.docx": {
+  "lines": 33,
+  "same": 27,
+  "placed": 25,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.23,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "justification-crossover.docx": {
+  "lines": 63,
+  "same": 63,
+  "placed": 42,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.3,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "kern-title.docx": {
+  "lines": 40,
+  "same": 31,
+  "placed": 31,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.2,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "line-auto.docx": {
+  "lines": 86,
+  "same": 86,
+  "placed": 66,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 2,
+  "dx": 0.02,
+  "dy": 0.15,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "line-box-bold.docx": {
+  "lines": 74,
+  "same": 74,
+  "placed": 38,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.49,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "line-box-typo-metrics.docx": {
+  "lines": 167,
+  "same": 57,
+  "placed": 4,
+  "pages": [
+   4,
+   4
+  ],
+  "page_starts": 3,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 107.36,
+  "plain": true,
+  "missing_fonts": [
+   "Bierstadt",
+   "DokChampa",
+   "Aptos"
+  ]
+ },
+ "line-exact-atleast.docx": {
+  "lines": 26,
+  "same": 26,
+  "placed": 26,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "line-mixed.docx": {
+  "lines": 17,
+  "same": 17,
+  "placed": 17,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.04,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "list-label-baseline.docx": {
+  "lines": 42,
+  "same": 42,
+  "placed": 31,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.19,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "list-label-width.docx": {
+  "lines": 16,
+  "same": 16,
+  "placed": 16,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.09,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "mc-textbox-branches-bound-sdt.docx": {
+  "lines": 10,
+  "same": 8,
+  "placed": 7,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.11,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "mc-textbox-branches-numbered.docx": {
+  "lines": 15,
+  "same": 15,
+  "placed": 15,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "missing-family-weight-2.docx": {
+  "lines": 26,
+  "same": 20,
+  "placed": 3,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 7.41,
+  "plain": true,
+  "missing_fonts": [
+   "Plutext Probe Alt",
+   "Plutext Probe Thin",
+   "Plutext Probe Light",
+   "Plutext Probe Theme Light"
+  ]
+ },
+ "missing-family-weight.docx": {
+  "lines": 26,
+  "same": 15,
+  "placed": 2,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 5.39,
+  "plain": true,
+  "missing_fonts": [
+   "Plutext Probe Serif",
+   "Plutext Probe Sans",
+   "Plutext Probe Ghost",
+   "Plutext Probe Theme"
+  ]
+ },
+ "numbering-default-style-numbered.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.03,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-leader-kinds.docx": {
+  "lines": 17,
+  "same": 12,
+  "placed": 12,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.1,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "numbering-level-pstyle-in-ppr.docx": {
+  "lines": 13,
+  "same": 13,
+  "placed": 13,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-level-vs-style-indent.docx": {
+  "lines": 10,
+  "same": 10,
+  "placed": 10,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-linked-level-other-style.docx": {
+  "lines": 26,
+  "same": 26,
+  "placed": 26,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-lvlrestart.docx": {
+  "lines": 18,
+  "same": 18,
+  "placed": 18,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-numstylelink-separate.docx": {
+  "lines": 11,
+  "same": 5,
+  "placed": 5,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-override-rpr.docx": {
+  "lines": 9,
+  "same": 9,
+  "placed": 9,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.18,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-shared-abstract-styles.docx": {
+  "lines": 10,
+  "same": 10,
+  "placed": 10,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-shared-abstract.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-stories.docx": {
+  "lines": 29,
+  "same": 18,
+  "placed": 10,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.3,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "numbering-unlinked-level-claim.docx": {
+  "lines": 29,
+  "same": 29,
+  "placed": 29,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-blank-landscape.docx": {
+  "lines": 54,
+  "same": 54,
+  "placed": 54,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 2,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "page-break-line.docx": {
+  "lines": 134,
+  "same": 134,
+  "placed": 58,
+  "pages": [
+   11,
+   10
+  ],
+  "page_starts": 9,
+  "page_starts_equal": 9,
+  "dx": 0.02,
+  "dy": 0.19,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-first-even-odd-heights.docx": {
+  "lines": 318,
+  "same": 318,
+  "placed": 318,
+  "pages": [
+   7,
+   7
+  ],
+  "page_starts": 6,
+  "page_starts_equal": 6,
+  "dx": 0.02,
+  "dy": 0.08,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-first-even-odd.docx": {
+  "lines": 251,
+  "same": 251,
+  "placed": 251,
+  "pages": [
+   6,
+   6
+  ],
+  "page_starts": 5,
+  "page_starts_equal": 5,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "page-header-footer.docx": {
+  "lines": 139,
+  "same": 139,
+  "placed": 139,
+  "pages": [
+   4,
+   4
+  ],
+  "page_starts": 3,
+  "page_starts_equal": 3,
+  "dx": 0.02,
+  "dy": 0.08,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "page-header-footnotes.docx": {
+  "lines": 135,
+  "same": 103,
+  "placed": 10,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 126.65,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "page-landscape-margins.docx": {
+  "lines": 80,
+  "same": 80,
+  "placed": 80,
+  "pages": [
+   3,
+   3
+  ],
+  "page_starts": 2,
+  "page_starts_equal": 2,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "page-tall-header-image.docx": {
+  "lines": 167,
+  "same": 167,
+  "placed": 167,
+  "pages": [
+   4,
+   4
+  ],
+  "page_starts": 3,
+  "page_starts_equal": 3,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-tall-header.docx": {
+  "lines": 192,
+  "same": 192,
+  "placed": 192,
+  "pages": [
+   4,
+   4
+  ],
+  "page_starts": 3,
+  "page_starts_equal": 3,
+  "dx": 0.02,
+  "dy": 0.24,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "page-top-space-before-compat12.docx": {
+  "lines": 139,
+  "same": 139,
+  "placed": 104,
+  "pages": [
+   11,
+   10
+  ],
+  "page_starts": 9,
+  "page_starts_equal": 9,
+  "dx": 0.02,
+  "dy": 0.19,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-top-space-before-compat14.docx": {
+  "lines": 139,
+  "same": 139,
+  "placed": 104,
+  "pages": [
+   11,
+   10
+  ],
+  "page_starts": 9,
+  "page_starts_equal": 9,
+  "dx": 0.02,
+  "dy": 0.19,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-top-space-before-set.docx": {
+  "lines": 139,
+  "same": 139,
+  "placed": 104,
+  "pages": [
+   11,
+   10
+  ],
+  "page_starts": 9,
+  "page_starts_equal": 9,
+  "dx": 0.02,
+  "dy": 0.19,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "page-top-space-before.docx": {
+  "lines": 139,
+  "same": 139,
+  "placed": 104,
+  "pages": [
+   11,
+   10
+  ],
+  "page_starts": 9,
+  "page_starts_equal": 9,
+  "dx": 0.02,
+  "dy": 0.19,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "ptab-right.docx": {
+  "lines": 13,
+  "same": 13,
+  "placed": 13,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "section-continuous-geometry.docx": {
+  "lines": 302,
+  "same": 302,
+  "placed": 222,
+  "pages": [
+   9,
+   9
+  ],
+  "page_starts": 8,
+  "page_starts_equal": 7,
+  "dx": 0.02,
+  "dy": 0.2,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "spacing-adjacent.docx": {
+  "lines": 48,
+  "same": 48,
+  "placed": 48,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "spacing-autospacing-cell-list.docx": {
+  "lines": 35,
+  "same": 35,
+  "placed": 35,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.15,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "spacing-autospacing-context.docx": {
+  "lines": 21,
+  "same": 21,
+  "placed": 21,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "spacing-autospacing.docx": {
+  "lines": 12,
+  "same": 12,
+  "placed": 12,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "spacing-char.docx": {
+  "lines": 28,
+  "same": 28,
+  "placed": 28,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "spacing-contextual.docx": {
+  "lines": 20,
+  "same": 20,
+  "placed": 20,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.04,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "spacing-empty-before.docx": {
+  "lines": 20,
+  "same": 20,
+  "placed": 9,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 13.26,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "spacing-empty-heading.docx": {
+  "lines": 31,
+  "same": 31,
+  "placed": 31,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.08,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "spacing-in-table.docx": {
+  "lines": 11,
+  "same": 11,
+  "placed": 11,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "spacing-page-top.docx": {
+  "lines": 92,
+  "same": 92,
+  "placed": 65,
+  "pages": [
+   7,
+   7
+  ],
+  "page_starts": 6,
+  "page_starts_equal": 6,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "spacing-section-start.docx": {
+  "lines": 19,
+  "same": 19,
+  "placed": 10,
+  "pages": [
+   6,
+   6
+  ],
+  "page_starts": 5,
+  "page_starts_equal": 5,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "styles-default-pstyle.docx": {
+  "lines": 33,
+  "same": 33,
+  "placed": 33,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.18,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "styles-linerule.docx": {
+  "lines": 18,
+  "same": 0,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": null,
+  "dy": null,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "styles-no-size-anywhere.docx": {
+  "lines": 16,
+  "same": 16,
+  "placed": 16,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "styles-numpr-ilvl-only.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.12,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "styles-table-default.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "surrogate-pairs-bidi.docx": {
+  "lines": 7,
+  "same": 2,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 5.12,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "surrogate-pairs.docx": {
+  "lines": 6,
+  "same": 2,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 6.54,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "tab-leader-in-cell-2.docx": {
+  "lines": 18,
+  "same": 16,
+  "placed": 16,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.03,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "tab-leader-in-cell.docx": {
+  "lines": 23,
+  "same": 23,
+  "placed": 23,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "tab-leader-kinds.docx": {
+  "lines": 31,
+  "same": 30,
+  "placed": 25,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.2,
+  "plain": true,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "tab-leader-sizes.docx": {
+  "lines": 12,
+  "same": 9,
+  "placed": 9,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.1,
+  "dy": 0.16,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "tab-trailing-cell.docx": {
+  "lines": 21,
+  "same": 21,
+  "placed": 21,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.13,
+  "dy": 0.12,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-autofit.docx": {
+  "lines": 19,
+  "same": 19,
+  "placed": 19,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-cellspacing.docx": {
+  "lines": 19,
+  "same": 19,
+  "placed": 19,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-fixed.docx": {
+  "lines": 28,
+  "same": 28,
+  "placed": 28,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-floating.docx": {
+  "lines": 46,
+  "same": 28,
+  "placed": 2,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 56.7,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-grid-overwide-auto.docx": {
+  "lines": 91,
+  "same": 91,
+  "placed": 91,
+  "pages": [
+   9,
+   9
+  ],
+  "page_starts": 8,
+  "page_starts_equal": 8,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-grid-vs-tcw-compat12.docx": {
+  "lines": 37,
+  "same": 37,
+  "placed": 37,
+  "pages": [
+   5,
+   5
+  ],
+  "page_starts": 4,
+  "page_starts_equal": 4,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-grid-vs-tcw-compat14.docx": {
+  "lines": 37,
+  "same": 37,
+  "placed": 37,
+  "pages": [
+   5,
+   5
+  ],
+  "page_starts": 4,
+  "page_starts_equal": 4,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-grid-vs-tcw-compat15.docx": {
+  "lines": 37,
+  "same": 37,
+  "placed": 37,
+  "pages": [
+   5,
+   5
+  ],
+  "page_starts": 4,
+  "page_starts_equal": 4,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-hidemark.docx": {
+  "lines": 24,
+  "same": 24,
+  "placed": 24,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.17,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-indent-compat14.docx": {
+  "lines": 11,
+  "same": 11,
+  "placed": 11,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-indent-compat15.docx": {
+  "lines": 11,
+  "same": 11,
+  "placed": 11,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-nested-trailing.docx": {
+  "lines": 38,
+  "same": 38,
+  "placed": 38,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-nested.docx": {
+  "lines": 18,
+  "same": 18,
+  "placed": 18,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.05,
+  "dy": 0.05,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-row-keepnext.docx": {
+  "lines": 225,
+  "same": 225,
+  "placed": 218,
+  "pages": [
+   12,
+   12
+  ],
+  "page_starts": 11,
+  "page_starts_equal": 10,
+  "dx": 0.13,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-rowheight.docx": {
+  "lines": 13,
+  "same": 12,
+  "placed": 12,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-rowsplit-2.docx": {
+  "lines": 508,
+  "same": 508,
+  "placed": 508,
+  "pages": [
+   19,
+   19
+  ],
+  "page_starts": 18,
+  "page_starts_equal": 18,
+  "dx": 0.1,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-rowsplit.docx": {
+  "lines": 448,
+  "same": 448,
+  "placed": 448,
+  "pages": [
+   13,
+   13
+  ],
+  "page_starts": 12,
+  "page_starts_equal": 12,
+  "dx": 0.1,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": [
+   "Aptos"
+  ]
+ },
+ "table-span.docx": {
+  "lines": 17,
+  "same": 17,
+  "placed": 17,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "table-width.docx": {
+  "lines": 33,
+  "same": 33,
+  "placed": 33,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-banding-band-size.docx": {
+  "lines": 27,
+  "same": 27,
+  "placed": 27,
+  "pages": [
+   2,
+   2
+  ],
+  "page_starts": 1,
+  "page_starts_equal": 1,
+  "dx": 0.0,
+  "dy": 0.04,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-banding-col-band-size.docx": {
+  "lines": 9,
+  "same": 9,
+  "placed": 9,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.0,
+  "dy": 0.04,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-banding-merged-row.docx": {
+  "lines": 13,
+  "same": 13,
+  "placed": 13,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.0,
+  "dy": 0.07,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-compat-size-jc-absent.docx": {
+  "lines": 9,
+  "same": 9,
+  "placed": 9,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.05,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-compat-size-jc-mode12.docx": {
+  "lines": 9,
+  "same": 8,
+  "placed": 3,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 44.07,
+  "dy": 0.06,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-compat-size-jc-mode14.docx": {
+  "lines": 9,
+  "same": 8,
+  "placed": 3,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 44.07,
+  "dy": 0.06,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-compat-size-jc-on.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.06,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-compat-size-jc.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.06,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-footnote-in-cell.docx": {
+  "lines": 6,
+  "same": 0,
+  "placed": 0,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": null,
+  "dy": null,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-named-normal-table.docx": {
+  "lines": 7,
+  "same": 7,
+  "placed": 7,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.07,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-normal-table-text.docx": {
+  "lines": 10,
+  "same": 10,
+  "placed": 10,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.02,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-numbered-in-cell.docx": {
+  "lines": 8,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.02,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-renamed-default-margins.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.03,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-renamed-default-nomargins.docx": {
+  "lines": 6,
+  "same": 6,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.01,
+  "dy": 0.03,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "tables-textbox-in-cell.docx": {
+  "lines": 8,
+  "same": 7,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.0,
+  "dy": 0.11,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "theme-fonts-no-theme-part.docx": {
+  "lines": 24,
+  "same": 24,
+  "placed": 10,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 1.0,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "toggle-levels-docdefaults.docx": {
+  "lines": 7,
+  "same": 7,
+  "placed": 7,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": true,
+  "missing_fonts": []
+ },
+ "toggle-levels.docx": {
+  "lines": 13,
+  "same": 8,
+  "placed": 8,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.1,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "vml-textbox-vertical.docx": {
+  "lines": 43,
+  "same": 9,
+  "placed": 6,
+  "pages": [
+   1,
+   1
+  ],
+  "page_starts": 0,
+  "page_starts_equal": 0,
+  "dx": 0.02,
+  "dy": 0.22,
+  "plain": false,
+  "missing_fonts": []
+ },
+ "widow-orphan.docx": {
+  "lines": 272,
+  "same": 272,
+  "placed": 272,
+  "pages": [
+   6,
+   6
+  ],
+  "page_starts": 5,
+  "page_starts_equal": 5,
+  "dx": 0.02,
+  "dy": 0.0,
+  "plain": false,
+  "missing_fonts": []
+ }
+}

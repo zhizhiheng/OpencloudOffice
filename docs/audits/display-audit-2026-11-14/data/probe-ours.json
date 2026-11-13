@@ -1,0 +1,221 @@
+{
+  "body-page-fields.docx": {
+    "pages": 2,
+    "texts": [
+      [
+        "PAGE=99"
+      ],
+      [
+        "PAGE=99"
+      ]
+    ],
+    "svg_sha256": [
+      "76d02a834f53a30674d32ee1ee722d6882ddd0f8cfe2092bd2d5cf070260e228",
+      "76d02a834f53a30674d32ee1ee722d6882ddd0f8cfe2092bd2d5cf070260e228"
+    ]
+  },
+  "exact-row-clipping.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "CELL LINE 1",
+        "BODY AFTER THE TABLE",
+        "CELL LINE 2",
+        "CELL LINE 3",
+        "CELL LINE 4"
+      ]
+    ],
+    "svg_sha256": [
+      "a04f96a277150729ba8c650f8e99fcf91dd1bae026541b2964372cac4c7296a9"
+    ]
+  },
+  "paragraph-border-double.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "BORDER"
+      ]
+    ],
+    "svg_sha256": [
+      "8e773518c5cb87569a27e32d375678eaa77b1722c2c8df4a00c279a8f57490c4"
+    ]
+  },
+  "paragraph-border-single.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "BORDER"
+      ]
+    ],
+    "svg_sha256": [
+      "8e773518c5cb87569a27e32d375678eaa77b1722c2c8df4a00c279a8f57490c4"
+    ]
+  },
+  "picture-rotation-0.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "PICTURE"
+      ]
+    ],
+    "svg_sha256": [
+      "63cf945fc01b53a22c5cbcca703a8d2695c8c3ee0f1957969093df62d4d77b16"
+    ]
+  },
+  "picture-rotation-5400000.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "PICTURE"
+      ]
+    ],
+    "svg_sha256": [
+      "63cf945fc01b53a22c5cbcca703a8d2695c8c3ee0f1957969093df62d4d77b16"
+    ]
+  },
+  "section-evenPage.docx": {
+    "pages": 2,
+    "texts": [
+      [
+        "BEFORE SECTION"
+      ],
+      [
+        "AFTER SECTION"
+      ]
+    ],
+    "svg_sha256": [
+      "fb9a3e8fe63d19e1ec5ecd6aba34602b902bdd1d7b12287706431d1a58641929",
+      "c8aa72b9fc19a4697684c0745dd050367032aef0ad38efb7886ae7bb21fa6e94"
+    ]
+  },
+  "section-oddPage.docx": {
+    "pages": 2,
+    "texts": [
+      [
+        "BEFORE SECTION"
+      ],
+      [
+        "AFTER SECTION"
+      ]
+    ],
+    "svg_sha256": [
+      "fb9a3e8fe63d19e1ec5ecd6aba34602b902bdd1d7b12287706431d1a58641929",
+      "c8aa72b9fc19a4697684c0745dd050367032aef0ad38efb7886ae7bb21fa6e94"
+    ]
+  },
+  "table-vertical-text.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "VERTICAL"
+      ]
+    ],
+    "svg_sha256": [
+      "fb13e47569002d977a19c9b3355e2cfaacb4753716560d187848f4c3f055b0e2"
+    ]
+  },
+  "text-effect-outline.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "VISIBLE EFFECT"
+      ]
+    ],
+    "svg_sha256": [
+      "1b7c87ebb1fe15aa95a9ca0698d66abc38a76931423fa4c5a454da734437ad3d"
+    ]
+  },
+  "text-effect-plain.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "VISIBLE EFFECT"
+      ]
+    ],
+    "svg_sha256": [
+      "1b7c87ebb1fe15aa95a9ca0698d66abc38a76931423fa4c5a454da734437ad3d"
+    ]
+  },
+  "text-effect-shadow.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "VISIBLE EFFECT"
+      ]
+    ],
+    "svg_sha256": [
+      "1b7c87ebb1fe15aa95a9ca0698d66abc38a76931423fa4c5a454da734437ad3d"
+    ]
+  },
+  "textbox-overflow.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "BOX LINE 1",
+        "BOX LINE 2",
+        "BODY AFTER THE BOX",
+        "BOX LINE 3",
+        "BOX LINE 4"
+      ]
+    ],
+    "svg_sha256": [
+      "5a66c07a2eac09ffe6b8b1e99acb4a831f91bd72b33456b9da0fd5c51a954977"
+    ]
+  },
+  "two-columns.docx": {
+    "pages": 1,
+    "texts": [
+      [
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. Column content alpha beta gamma delta. Column ",
+        "content alpha beta gamma delta. Column content alpha beta gamma delta. Column content ",
+        "alpha beta gamma delta. Column content alpha beta gamma delta. Column content alpha beta ",
+        "gamma delta. Column content alpha beta gamma delta. Column content alpha beta gamma ",
+        "delta. Column content alpha beta gamma delta. Column content alpha beta gamma delta. ",
+        "Column content alpha beta gamma delta. "
+      ]
+    ],
+    "svg_sha256": [
+      "41ce8712123079e17759e4678742d5389c29b26cefee1b35fcb4dd7c4fbf0df3"
+    ]
+  }
+}

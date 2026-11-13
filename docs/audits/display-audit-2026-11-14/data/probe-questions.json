@@ -1,0 +1,16 @@
+{
+  "section-oddPage.docx": "奇偶页分节是否插入所需空白页",
+  "section-evenPage.docx": "奇偶页分节是否插入所需空白页",
+  "picture-rotation-0.docx": "90 度旋转与未旋转的图像是否有区别",
+  "picture-rotation-5400000.docx": "90 度旋转与未旋转的图像是否有区别",
+  "text-effect-plain.docx": "空心和阴影效果是否区别于普通文字",
+  "text-effect-outline.docx": "空心和阴影效果是否区别于普通文字",
+  "text-effect-shadow.docx": "空心和阴影效果是否区别于普通文字",
+  "paragraph-border-single.docx": "双线边框是否真的绘制两条线",
+  "paragraph-border-double.docx": "双线边框是否真的绘制两条线",
+  "body-page-fields.docx": "正文页码是否仍显示保存值 99",
+  "textbox-overflow.docx": "超出文本框高度的文字是否遮盖后续正文",
+  "exact-row-clipping.docx": "固定行高单元格内容是否被裁切",
+  "two-columns.docx": "分栏显示及未支持内容提示是否准确",
+  "table-vertical-text.docx": "单元格文字方向是否生效"
+}

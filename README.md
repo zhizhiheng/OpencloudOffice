@@ -10,13 +10,14 @@
 
 **原生实现。** zip 解压、XML 解析、字体文件解析（TrueType 和 CFF 轮廓、字符映射、度量）都是自己写的，约 3500 行；内核不依赖任何第三方库，只有开发用的命令行工具为了输出 JSON 报告用了 serde。浏览器接口是手写的，不用 wasm-bindgen 之类的生成工具。字体解析替换前与原来的库逐字形对比过：316 个字体文件、147 万个字形，轮廓、字宽、度量没有一处不同。换掉通用 zip 库之后，4 份带重名条目的探针文档读得和 Word 一样了（通用库取后一个条目，Word 取目录里的前一个）。
 
-还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 92.9% 的行断行相同、78.2% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.3% 和 95.7%。见 [docs/fidelity.md](docs/fidelity.md)。
+还原度以 Word 为主要参照，按文档记录基线。2026-11-14 对照 Word 桌面版导出的 128 份固定 PDF，92.9% 的行断行相同、79.0% 的行位置在 0.5pt 以内；只含正文且字体可用的 28 份是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.4% 和 96.0%。现场导出的 11 份 WPS 12 中文样例为 80.3% 和 53.2%。这些是行级指标，图片、边框、裁切及内容完整性还需独立检查。详细结果、字体环境限制和修复顺序见 [显示能力审计](docs/audits/display-audit-2026-11-14/README.md)，度量工具说明见 [docs/fidelity.md](docs/fidelity.md)。
 
 | 文档 | 内容 |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | 目标、技术决定、原型计划和进度 |
 | [docs/strategy.md](docs/strategy.md) | 如何做得比现有方案更好 |
 | [docs/fidelity.md](docs/fidelity.md) | 还原度怎么量：标准答案的来源、当前记分表、只升不降的基线、接入 Word 输出 |
+| [2026-11-14 显示能力审计](docs/audits/display-audit-2026-11-14/README.md) | Word 基准与 WPS 12 实测、对照图、显示缺口和优化顺序 |
 | [docs/layout.md](docs/layout.md) | 排版规则：行高、字号、缩进、编号、字体效果、标点，以及各自的依据 |
 | [docs/corpus-report.md](docs/corpus-report.md) | 语料测试的方法、数据和发现的问题 |
 | [docs/word-behaviour.md](docs/word-behaviour.md) | Word 的实际行为与规范不同的地方 |
