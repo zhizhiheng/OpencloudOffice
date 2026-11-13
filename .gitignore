@@ -11,3 +11,5 @@ __pycache__/
 /web/oco.wasm
 /web/fonts/
 /web/samples/
+/corpus-doc
+/corpus-md
