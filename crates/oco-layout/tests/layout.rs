@@ -1752,3 +1752,87 @@ fn a_picture_behind_the_text_moves_nothing_and_is_drawn_first() {
     let lines = |page: &Page| page.lines.iter().map(|l| (l.baseline, l.x0, l.x1, l.text.clone())).collect::<Vec<_>>();
     assert_eq!(lines(&with), lines(&without));
 }
+
+/// A `w:drawing` in the line that is a text box of the given size in
+/// points, with the usual insets, a white fill and a half-point outline.
+fn inline_text_box(width: u32, height: u32, content: &str) -> String {
+    format!(
+        r#"<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+           <wp:extent cx="{}" cy="{}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+           <a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">
+           <wps:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="6350"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></wps:spPr>
+           <wps:txbx><w:txbxContent>{content}</w:txbxContent></wps:txbx>
+           <wps:bodyPr lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"/></wps:wsp></a:graphicData></a:graphic>
+           </wp:inline></w:drawing>"#,
+        width * 12700,
+        height * 12700
+    )
+}
+
+const ONE_LIST: &str = r#"<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/>
+    <w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="360" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>
+    <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#;
+
+#[test]
+fn the_text_of_a_text_box_stands_inside_it_and_its_list_items_are_counted_apart() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `mc-textbox-branches-numbered`
+    // and `numbering-stories`). A text box in the line stands on the
+    // baseline like a picture. Its text keeps 7.2 pt from the sides, with
+    // half the outline, and 3.6 pt from the top: the first baseline is
+    // 14.9 pt below the box's top. Items of a list that has reached 3 in
+    // the body are 1 and 2 in the box, and the body goes on with 4.
+    let serif = font("Liberation Serif", 24);
+    let single = r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>"#;
+    let item = |text: &str| {
+        paragraph(&serif, &format!(r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>{single}"#), text)
+    };
+    let body = format!(
+        r#"{}{}{}<w:p><w:pPr>{single}</w:pPr><w:r><w:rPr>{serif}</w:rPr><w:t xml:space="preserve">A box: </w:t></w:r><w:r>{}</w:r></w:p>{}"#,
+        item("body one"),
+        item("body two"),
+        item("body three"),
+        inline_text_box(250, 120, &(item("boxed one") + &item("boxed two"))),
+        item("body four"),
+    );
+    let page = pages(&Source { body: &body, numbering: ONE_LIST, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.contains(text)).unwrap_or_else(|| panic!("{text}"));
+    let labels: Vec<&str> = page.lines.iter().filter_map(|line| line.text.split('\t').next()).collect();
+    assert_eq!(labels, ["1.", "2.", "3.", "1.", "2.", "A box: ", "4."], "in the order of their baselines");
+
+    // The box: 250 by 120 pt, its bottom on the baseline of the line it stands in.
+    let host = line("A box:");
+    let (left, bottom) = (host.x1 - 250.0, host.baseline);
+    let top = bottom - 120.0;
+    assert!(close(line("boxed one").baseline, top + 14.9, 0.15), "{} in a box from {top}", line("boxed one").baseline);
+    assert!(close(line("boxed two").baseline - line("boxed one").baseline, 13.8, 0.03));
+    assert!(close(line("boxed one").x0, left + 7.45, 0.1), "{} in a box from {left}", line("boxed one").x0);
+    // Its outline is drawn where the box is.
+    let outline = page.items.iter().any(|item| {
+        matches!(*item, Item::Rule { x1, y1, x2, y2, width, .. }
+            if close(y1, top, 0.01) && close(y2, top, 0.01) && close(x2 - x1, 250.0, 0.01) && close(width, 0.5, 0.01))
+    });
+    assert!(outline, "the top of the outline, 250 pt long at {top}");
+    assert!(close(line("4.").baseline, bottom + 13.8, 0.05));
+}
+
+#[test]
+fn the_header_and_the_footer_of_a_page_are_numbered_as_one() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (`numbering-stories`): items of one list are 1
+    // and 2 in the header and 3 in the footer, on every page, while the
+    // body's own items begin at 1.
+    let item = |text: &str| paragraph("", r#"<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>"#, text);
+    let references = r#"<w:headerReference w:type="default" r:id="h"/><w:footerReference w:type="default" r:id="f"/>"#;
+    let section = format!("{references}{A4_WITH_STORIES}");
+    let (header, footer) = (item("head a") + &item("head b"), item("foot"));
+    let stories = [("h", "header", header.as_str()), ("f", "footer", footer.as_str())];
+    let body = item("body") + r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"# + &item("more body");
+    let source = Source { body: &body, section: &section, stories: &stories, numbering: ONE_LIST, ..Source::default() };
+    let pages = pages(&source, &fonts, Model::Word);
+    assert_eq!(pages.len(), 2);
+    for (page, body) in pages.iter().zip(["1.\tbody", "2.\tmore body"]) {
+        let texts: Vec<&str> = page.lines.iter().map(|line| line.text.as_str()).collect();
+        assert_eq!(texts, ["1.\thead a", "2.\thead b", body, "3.\tfoot"]);
+    }
+}

@@ -22,6 +22,24 @@ pub struct Drawing {
     pub picture: Option<Picture>,
     /// The words that stand for the object where it cannot be seen.
     pub description: Option<String>,
+    /// The text box the object is, among those of its run
+    /// ([`crate::Run::text_boxes`]).
+    pub text_box: Option<usize>,
+}
+
+/// A shape with text in it.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct TextBox {
+    pub blocks: Vec<crate::Block>,
+    /// The room between the edge of the box and its text: left, top, right, bottom.
+    pub insets: [i64; 4],
+    /// Where the text stands in a box taller than it: at the top, in the middle or at the bottom.
+    pub anchor: Alignment,
+    /// The colour the box is filled with.
+    pub fill: Option<[u8; 3]>,
+    /// The colour and the width of the line around the box.
+    pub outline: Option<([u8; 3], i64)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,7 +189,42 @@ pub(crate) fn read(drawing: Node) -> Option<Drawing> {
             .and_then(|p| p.attribute("descr").or(p.attribute("title")))
             .filter(|text| !text.is_empty())
             .map(str::to_owned),
+        text_box: None,
     })
+}
+
+/// For a `w:drawing` that is a shape with text: the element that holds the
+/// text (`w:txbxContent`) and the box, its `blocks` still to be read.
+pub(crate) fn text_box<'a, 'i>(drawing: Node<'a, 'i>) -> Option<(Node<'a, 'i>, TextBox)> {
+    let frame = elements(drawing).find(|n| matches!(n.tag_name().name(), "inline" | "anchor"))?;
+    let shape = child(child(child(frame, "graphic")?, "graphicData")?, "wsp")?;
+    let content = child(child(shape, "txbx")?, "txbxContent")?;
+    let colour = |holder: Node| -> Option<[u8; 3]> {
+        let value = child(child(holder, "solidFill")?, "srgbClr")?.attribute("val")?;
+        let number = u32::from_str_radix(value, 16).ok().filter(|_| value.len() == 6)?;
+        Some([(number >> 16) as u8, (number >> 8) as u8, number as u8])
+    };
+    let properties = child(shape, "spPr");
+    let line = properties.and_then(|p| child(p, "ln"));
+    let body = child(shape, "bodyPr");
+    // What a box has when it does not say: a tenth of an inch at the sides, half of that above and below.
+    let inset = |name: &str, default: i64| {
+        body.and_then(|b| b.attribute(name)).and_then(|v| v.trim().parse().ok()).unwrap_or(default)
+    };
+    Some((
+        content,
+        TextBox {
+            blocks: Vec::new(),
+            insets: [inset("lIns", 91440), inset("tIns", 45720), inset("rIns", 91440), inset("bIns", 45720)],
+            anchor: match body.and_then(|b| b.attribute("anchor")) {
+                Some("ctr") => Alignment::Center,
+                Some("b") => Alignment::End,
+                _ => Alignment::Start,
+            },
+            fill: properties.and_then(colour),
+            outline: line.and_then(|line| Some((colour(line)?, line.attribute("w").map_or(9525, |w| emu(Some(w)))))),
+        },
+    ))
 }
 
 fn anchor(frame: Node) -> Anchor {

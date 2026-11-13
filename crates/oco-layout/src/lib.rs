@@ -265,7 +265,17 @@ struct Unit {
     /// around an object, without counting it again as a list item.
     label: Option<paragraph::LabelSpec>,
     joined: bool,
+    /// The text boxes that stand in the paragraph's lines, as drawn: which
+    /// box, its items from its own left and top, and its lines of text.
+    boxes: Vec<Drawn>,
 }
+
+/// A text box as drawn: which it is ([`paragraph::InlineBox::source`]), its
+/// items from its own left and top, and the lines of text among them.
+type Drawn = ((usize, usize), Vec<Item>, TextLines);
+
+/// Lines of text inside something drawn as one: each with its baseline, where it begins and ends, and its text.
+type TextLines = Vec<(f32, f32, f32, String)>;
 
 /// An object on a page that text keeps clear of.
 struct Float {
@@ -621,6 +631,12 @@ struct Builder<'a> {
     depth: usize,
     /// Anchored objects met that were not placed: those in table cells.
     unplaced: usize,
+    /// The numbering of the list items in text boxes, which Word counts
+    /// apart from the body's (see [`Builder::text_box`]).
+    box_counters: Counters,
+    /// The numbering of the list items in the header and footer of the
+    /// page being laid out.
+    story_counters: Counters,
 }
 
 /// What the columns of an auto-fit table ask for, each across its whole
@@ -683,6 +699,51 @@ fn portable_bullet(text: &str, props: &mut RunProps) -> String {
             other => other,
         })
         .collect()
+}
+
+/// Draws an anchored object on a page with its left and top at `x` and `y`:
+/// the content of a text box, or else a picture. What lies behind the text
+/// is drawn before it.
+fn put_object(page: &mut Page, object: &paragraph::Anchored, x: f32, y: f32) {
+    let mut items: Vec<Item> = if object.source.is_some() {
+        object.content.clone()
+    } else {
+        vec![Item::Image {
+            x: 0.0,
+            y: 0.0,
+            width: object.width,
+            height: object.height,
+            part: object.part.clone(),
+            crop: object.crop,
+        }]
+    };
+    items.iter_mut().for_each(|item| item.translate(x, y));
+    match object.anchor.behind_text {
+        true => {
+            page.items.splice(0..0, items);
+        }
+        false => page.items.extend(items),
+    }
+    for (baseline, x0, x1, text) in &object.inner {
+        page.lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
+    }
+}
+
+/// Puts the text boxes that stand in a paragraph's lines, already drawn, where the lines have them.
+fn put_boxes(laid: &mut paragraph::Laid, drawn: &[Drawn]) {
+    for inline in &laid.boxes {
+        let Some((_, items, inner)) = drawn.iter().find(|(source, ..)| *source == inline.source) else { continue };
+        let line = &mut laid.lines[inline.line];
+        for item in items {
+            let mut item = item.clone();
+            item.translate(inline.x, inline.top);
+            line.items.push(item);
+        }
+        let moved = inner
+            .iter()
+            .map(|(baseline, x0, x1, text)| (inline.top + baseline, inline.x + x0, inline.x + x1, text.clone()));
+        line.inner.extend(moved);
+    }
 }
 
 /// Draws the border under a paragraph below its last line and gives the
@@ -803,6 +864,23 @@ impl Builder<'_> {
         //
         // Paragraphs one after the other with the same borders and indents
         // are bordered as one, so only the last of them has the border.
+        // Text boxes are stories of their own, laid out once.
+        let shown: Vec<&oco_docx::Run> =
+            source.runs.iter().filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content())).collect();
+        let find = |(run, index): (usize, usize)| shown.get(run).and_then(|run| run.text_boxes.get(index));
+        let mut boxes: Vec<Drawn> = Vec::new();
+        for inline in &laid.boxes {
+            if let Some(text_box) = find(inline.source) {
+                let (items, inner) = self.text_box(text_box, section, inline.width, inline.height);
+                boxes.push((inline.source, items, inner));
+            }
+        }
+        put_boxes(&mut laid, &boxes);
+        for object in &mut laid.anchored {
+            if let Some(text_box) = object.source.and_then(find) {
+                (object.content, object.inner) = self.text_box(text_box, section, object.width, object.height);
+            }
+        }
         let joined = props.borders.bottom.as_ref().is_some_and(|b| b.is_visible())
             && next.is_some_and(|next| {
                 let below = self.resolver.paragraph_in(&next.props, &self.table_styles);
@@ -834,7 +912,74 @@ impl Builder<'_> {
             anchored: laid.anchored,
             label,
             joined,
+            boxes,
         }
+    }
+
+    /// Lays out the content of a text box of the given size and returns
+    /// what to draw, from the box's left and top, with its lines of text.
+    ///
+    /// The text keeps the box's insets from its edges and begins at the
+    /// top unless the box says otherwise. (Measured in Word, docx4j's probe
+    /// `mc-textbox-branches-numbered`: in a box with the usual insets of
+    /// 7.2 and 3.6 pt, text begins 7.5 pt from the left edge and its first
+    /// baseline is 14.9 pt below the top.) List items in text boxes are
+    /// numbered apart from the body's: a list that has reached 3 in the
+    /// body begins at 1 in a box, and goes on with 4 after it (probe
+    /// `numbering-stories`).
+    fn text_box(
+        &mut self,
+        text_box: &oco_docx::TextBox,
+        section: &Section,
+        width: f32,
+        height: f32,
+    ) -> (Vec<Item>, TextLines) {
+        let emu = |length: i64| length as f32 / oco_docx::EMU_PER_POINT as f32;
+        let [left, top, right, bottom] = text_box.insets.map(emu);
+        let rule = text_box.outline.map_or(0.0, |(_, width)| emu(width));
+        let left = left + rule / 2.0;
+        let mut items = Vec::new();
+        if let Some(color) = text_box.fill {
+            items.push(Item::Rect { x: 0.0, y: 0.0, width, height, color });
+        }
+        if let Some((color, _)) = text_box.outline {
+            for (x1, y1, x2, y2) in [
+                (0.0, 0.0, width, 0.0),
+                (width, 0.0, width, height),
+                (width, height, 0.0, height),
+                (0.0, height, 0.0, 0.0),
+            ] {
+                items.push(Item::Rule { x1, y1, x2, y2, width: rule, color, dash: [0.0, 0.0] });
+            }
+        }
+
+        let (paragraphs, body) = (self.paragraphs, std::mem::take(&mut self.counters));
+        self.counters = std::mem::take(&mut self.box_counters);
+        let measured = std::mem::take(&mut self.demands);
+        let mut units = Vec::new();
+        self.blocks(&text_box.blocks, section, (width - left - right - rule / 2.0).max(1.0), &mut units);
+        self.box_counters = std::mem::replace(&mut self.counters, body);
+        (self.paragraphs, self.demands) = (paragraphs, measured);
+
+        let (placed, content, _) = stack(units);
+        let spare = (height - top - bottom - content).max(0.0);
+        let down = top
+            + match text_box.anchor {
+                Alignment::Center => spare / 2.0,
+                Alignment::End => spare,
+                _ => 0.0,
+            };
+        let mut lines = Vec::new();
+        for (offset, mut line) in placed {
+            for mut item in std::mem::take(&mut line.items) {
+                item.translate(left, down + offset);
+                items.push(item);
+            }
+            let mut placed_lines = Vec::new();
+            record(&line, left, down + offset, &mut placed_lines);
+            lines.extend(placed_lines.into_iter().map(|line| (line.baseline, line.x0, line.x1, line.text)));
+        }
+        (items, lines)
     }
 
     /// Lays a paragraph out a second time, its lines kept within `shape`
@@ -851,6 +996,7 @@ impl Builder<'_> {
         let input = paragraph::Paragraph { props: &props, ..input };
         let ctx = context(self.docx, section, width, self.options.model);
         let mut laid = paragraph::layout_within(&input, self.fonts, &ctx, shape);
+        put_boxes(&mut laid, &unit.boxes);
         if !unit.joined {
             border_below(&mut laid.lines, &props, width);
         }
@@ -1433,6 +1579,7 @@ impl Builder<'_> {
                 anchored: Vec::new(),
                 label: None,
                 joined: false,
+                boxes: Vec::new(),
             });
         }
         self.table_styles = outer;
@@ -1443,13 +1590,20 @@ impl Builder<'_> {
     /// paragraphs and of list items is left as it was.
     fn story(&mut self, blocks: &[Block], section: &Section, numbers: Option<&(String, String)>) -> Vec<Unit> {
         let filled = numbers.map(|numbers| with_numbers(blocks, numbers));
-        let (paragraphs, counters) = (self.paragraphs, std::mem::take(&mut self.counters));
+        // The header and the footer of a page are numbered as one, apart
+        // from the body. (Measured in Word, docx4j's probe
+        // `numbering-stories`: three items of one list in the header are
+        // 1 to 3, three more of it in the footer 4 to 6, while the body's
+        // own begin at 1.)
+        let (paragraphs, body) = (self.paragraphs, std::mem::take(&mut self.counters));
+        self.counters = std::mem::take(&mut self.story_counters);
         // Tables measured here may be copies that are gone when this returns,
         // and their addresses may then be those of other tables.
         let measured = std::mem::take(&mut self.demands);
         let mut units = Vec::new();
         self.blocks(filled.as_deref().unwrap_or(blocks), section, section.text_width() as f32 * TWIP, &mut units);
-        (self.paragraphs, self.counters, self.demands) = (paragraphs, counters, measured);
+        self.story_counters = std::mem::replace(&mut self.counters, body);
+        (self.paragraphs, self.demands) = (paragraphs, measured);
         units
     }
 
@@ -1559,6 +1713,9 @@ fn paragraphs_in(blocks: &[Block]) -> usize {
 /// Notes where the text of a line placed at (`x`, `y`) is: the line itself,
 /// or the lines it is made of if it is the row of a table inside a cell.
 fn record(line: &paragraph::Line, x: f32, y: f32, lines: &mut Vec<PlacedLine>) {
+    for (baseline, x0, x1, text) in &line.inner {
+        lines.push(PlacedLine { baseline: y + baseline, x0: x + x0, x1: x + x1, text: text.clone() });
+    }
     if line.text.trim().is_empty() {
         return;
     }
@@ -1603,6 +1760,8 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         demands: HashMap::new(),
         depth: 0,
         unplaced: 0,
+        box_counters: Counters::default(),
+        story_counters: Counters::default(),
     };
     let mut units = Vec::new();
     // Line breaks depend on the text width, which this prototype takes from
@@ -1911,19 +2070,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             }
             let page = pages.last_mut().expect("a page is always open");
             for ((x, y, float), object) in placed(y, page, (top, bottom)).into_iter().zip(&unit.anchored) {
-                let image = Item::Image {
-                    x,
-                    y,
-                    width: object.width,
-                    height: object.height,
-                    part: object.part.clone(),
-                    crop: object.crop,
-                };
-                // What lies behind the text is drawn before it.
-                match object.anchor.behind_text {
-                    true => page.items.insert(0, image),
-                    false => page.items.push(image),
-                }
+                put_object(page, object, x, y);
                 if wraps(object) {
                     floats.push(float);
                 }
@@ -2028,6 +2175,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         let number = format_number(section.page_number_format.as_deref().unwrap_or("decimal"), frame.number);
         let numbers = (number, count.to_string());
         let mut lines = Vec::new();
+        builder.story_counters = Counters::default();
         for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
             let Some(blocks) = story.as_deref().and_then(|id| docx.stories.get(id)) else { continue };
             let (placed, height, anchored) = stack(builder.story(blocks, section, Some(&numbers)));
@@ -2045,18 +2193,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             let column = (left, left + section.text_width() as f32 * TWIP);
             for (offset, object) in anchored {
                 let (x, y) = anchored_at(&object, (page.width, page.height), column, page.body, origin + offset);
-                let image = Item::Image {
-                    x,
-                    y,
-                    width: object.width,
-                    height: object.height,
-                    part: object.part,
-                    crop: object.crop,
-                };
-                match object.anchor.behind_text {
-                    true => page.items.insert(0, image),
-                    false => page.items.push(image),
-                }
+                put_object(page, &object, x, y);
             }
         }
         page.lines.append(&mut lines);

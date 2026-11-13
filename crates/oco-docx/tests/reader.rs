@@ -731,6 +731,40 @@ fn reads_pictures_with_their_size_placement_and_file() {
 }
 
 #[test]
+fn reads_the_content_of_a_text_box_and_how_it_sits_in_the_box() {
+    let shape = |content: &str| {
+        format!(
+            r#"<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+               <wp:extent cx="3175000" cy="1524000"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+               <a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">
+               <wps:spPr><a:solidFill><a:srgbClr val="FFEE00"/></a:solidFill><a:ln w="6350"><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></a:ln></wps:spPr>
+               <wps:txbx><w:txbxContent>{content}</w:txbxContent></wps:txbx><wps:bodyPr lIns="0" tIns="12700" anchor="ctr"/>
+               </wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing>"#
+        )
+    };
+    // The inner box is inside the outer one's text, which is not something Word makes.
+    let inner = shape("<w:p><w:r><w:t>too deep</w:t></w:r></w:p>");
+    let outer = shape(&format!("<w:p><w:r><w:t>in the box</w:t></w:r></w:p><w:p><w:r>{inner}</w:r></w:p>"));
+    let docx = docx(&format!("<w:p><w:r><w:t>before</w:t>{outer}</w:r></w:p>"), "");
+    let run = &docx.document.paragraphs()[0].runs[0];
+    let [RunContent::Text(_), RunContent::Drawing(drawing)] = &run.content[..] else { panic!("{:?}", run.content) };
+    assert_eq!(drawing.text_box, Some(0));
+    let text_box = &run.text_boxes[0];
+    // Insets a box does not state are a tenth of an inch at the sides and half of that above and below.
+    assert_eq!(text_box.insets, [0, 12700, 91440, 45720]);
+    assert_eq!(text_box.anchor, Alignment::Center);
+    assert_eq!((text_box.fill, text_box.outline), (Some([0xFF, 0xEE, 0x00]), Some(([0, 0, 0xFF], 6350))));
+    let Block::Paragraph(first) = &text_box.blocks[0] else { panic!("a paragraph") };
+    assert_eq!(first.text(), "in the box");
+    let Block::Paragraph(second) = &text_box.blocks[1] else { panic!("a paragraph") };
+    assert!(second.runs[0].text_boxes.is_empty(), "a box inside a box is not read");
+    // What is in a text box is not among the paragraphs of the body.
+    assert_eq!(docx.document.paragraphs().len(), 1);
+    // The box that is read is not reported; the one inside it, which is not shown, is.
+    assert_eq!(docx.coverage.unsupported.get("w:r/w:drawing"), Some(&1), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
 fn of_two_entries_with_one_name_the_first_in_the_directory_is_read() {
     let part =
         |text: &str| format!("<w:document {W}><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>");

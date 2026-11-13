@@ -75,6 +75,9 @@ pub struct Line {
     /// but the row of a table inside a cell: each with its baseline from
     /// the line's top, where it begins and ends, and its text.
     pub parts: Vec<(f32, f32, f32, String)>,
+    /// The lines of text inside the text boxes that stand in this line,
+    /// each given as in `parts`.
+    pub inner: Vec<(f32, f32, f32, String)>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -87,6 +90,22 @@ pub struct Laid {
     pub missing_fonts: Vec<String>,
     /// The objects anchored in the paragraph, which are placed apart from its lines.
     pub anchored: Vec<Anchored>,
+    /// The text boxes that stand in the paragraph's lines, to be filled by the caller.
+    pub boxes: Vec<InlineBox>,
+}
+
+/// Where a text box stands in a line: the line, and the box's left and top
+/// measured as the line's items are.
+#[derive(Debug, Clone)]
+pub struct InlineBox {
+    pub line: usize,
+    pub x: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+    /// Which text box it is: the run it is in, counting the runs given, and
+    /// its number among that run's text boxes.
+    pub source: (usize, usize),
 }
 
 /// A picture or another object anchored in a paragraph.
@@ -97,6 +116,13 @@ pub struct Anchored {
     pub part: Option<String>,
     pub crop: [f32; 4],
     pub anchor: oco_docx::Anchor,
+    /// Which text box it is, if it is one (see [`InlineBox::source`]).
+    pub source: Option<(usize, usize)>,
+    /// What to draw in place of a picture, from the object's left and top:
+    /// filled in by the caller for a text box.
+    pub content: Vec<Item>,
+    /// The lines of text in `content`: baseline, start, end and text.
+    pub inner: Vec<(f32, f32, f32, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,6 +177,7 @@ struct Object {
     height: f32,
     part: Option<String>,
     crop: [f32; 4],
+    source: Option<(usize, usize)>,
 }
 
 const TWIP: f32 = 1.0 / 20.0;
@@ -201,6 +228,8 @@ struct Builder<'a> {
     missing_fonts: Vec<String>,
     objects: Vec<Object>,
     anchored: Vec<Anchored>,
+    /// The number of the run being pushed, among the paragraph's own.
+    run: usize,
 }
 
 impl Builder<'_> {
@@ -323,6 +352,7 @@ impl Builder<'_> {
                     let picture = drawing.picture.as_ref();
                     let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
                     let crop = picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0));
+                    let source = drawing.text_box.filter(|_| !label).map(|index| (self.run, index));
                     if let Some(anchor) = &drawing.anchor {
                         self.anchored.push(Anchored {
                             width: emu(drawing.width),
@@ -330,6 +360,9 @@ impl Builder<'_> {
                             part: picture.and_then(|p| p.part.clone()),
                             crop,
                             anchor: anchor.clone(),
+                            source,
+                            content: Vec::new(),
+                            inner: Vec::new(),
                         });
                         continue;
                     }
@@ -343,6 +376,7 @@ impl Builder<'_> {
                         height: emu(drawing.height),
                         part: picture.and_then(|p| p.part.clone()),
                         crop,
+                        source,
                     });
                     // The font is chosen as for a space, which every font has.
                     push(self, ' ', Kind::Char, None);
@@ -566,6 +600,7 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
         missing_fonts: Vec::new(),
         objects: Vec::new(),
         anchored: Vec::new(),
+        run: 0,
     };
 
     if let Some(label) = &paragraph.label {
@@ -583,6 +618,7 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
     }
     for (run, content) in &paragraph.runs {
         builder.push_run(run, content, false);
+        builder.run += 1;
     }
     let auto_space = props.auto_space_de != Some(false);
     builder.adjust_neighbours(auto_space);
@@ -838,6 +874,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
     let grid = context.grid_pitch.filter(|_| snaps);
 
     let mut lines = Vec::with_capacity(breaks.len());
+    let mut boxes: Vec<InlineBox> = Vec::new();
     for (number, br) in breaks.iter().enumerate() {
         let range = &atoms[br.start..br.end];
         let origin = if number == 0 { left + first } else { left };
@@ -1041,14 +1078,25 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
             match atom.kind {
                 Kind::Char => {
                     if let Some(object) = atom.object.map(|index| &objects[index]) {
-                        line.items.push(Item::Image {
-                            x,
-                            y: baseline - style.rise - object.height,
-                            width: object.width,
-                            height: object.height,
-                            part: object.part.clone(),
-                            crop: object.crop,
-                        });
+                        let top = baseline - style.rise - object.height;
+                        match object.source {
+                            Some(source) => boxes.push(InlineBox {
+                                line: number,
+                                x,
+                                top,
+                                width: object.width,
+                                height: object.height,
+                                source,
+                            }),
+                            None => line.items.push(Item::Image {
+                                x,
+                                y: top,
+                                width: object.width,
+                                height: object.height,
+                                part: object.part.clone(),
+                                crop: object.crop,
+                            }),
+                        }
                         first_ink.get_or_insert(x);
                         last_ink = x + atom.advance;
                     } else if atom.ch != ' ' && atom.ch != '\u{3000}' {
@@ -1240,6 +1288,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
     Laid {
         missing_fonts,
         anchored,
+        boxes,
         lines,
         space_before: space(props.spacing.before_lines, props.spacing.before, props.spacing.before_auto),
         space_after: space(props.spacing.after_lines, props.spacing.after, props.spacing.after_auto),

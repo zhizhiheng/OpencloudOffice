@@ -11,7 +11,7 @@ use crate::xmltree::Node;
 use serde::Serialize;
 
 use crate::coverage::Coverage;
-use crate::drawing::Drawing;
+use crate::drawing::{Drawing, TextBox};
 use crate::props::{ParaProps, RunProps};
 use crate::section::Section;
 use crate::table::{CellProps, RowProps, TableProps};
@@ -60,6 +60,8 @@ pub struct Run {
     pub content: Vec<RunContent>,
     /// Set when the run sits inside a tracked change.
     pub revision: Option<Revision>,
+    /// The text boxes among the run's drawings ([`Drawing::text_box`]).
+    pub text_boxes: Vec<TextBox>,
     /// Where the parts of complex fields fall in `content`, while the
     /// paragraph is being read; empty afterwards.
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -647,10 +649,21 @@ fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
         }
         Some("instrText") => run.field_marks.push((run.content.len(), FieldMark::Code(text_of(child)))),
         Some("drawing") => {
-            let drawing = crate::drawing::read(child);
-            // A picture is laid out and drawn. Any other object is read,
-            // and given its room if it is in the line, but not shown yet.
-            if !drawing.as_ref().is_some_and(|d| d.picture.is_some()) {
+            let mut drawing = crate::drawing::read(child);
+            // A text box holds content of its own. One inside another is
+            // not read: Word does not make them, and nesting must end.
+            if let (Some(drawing), Some((content, mut text_box))) = (&mut drawing, crate::drawing::text_box(child)) {
+                if coverage.boxes_open == 0 {
+                    coverage.boxes_open += 1;
+                    parse_blocks(content, 0, &mut text_box.blocks, coverage);
+                    coverage.boxes_open -= 1;
+                    drawing.text_box = Some(run.text_boxes.len());
+                    run.text_boxes.push(text_box);
+                }
+            }
+            // A picture or a text box is laid out and drawn. Any other
+            // object is read, and given its room, but not shown yet.
+            if !drawing.as_ref().is_some_and(|d| d.picture.is_some() || d.text_box.is_some()) {
                 coverage.miss(Some("w:r"), child);
             }
             run.content.extend(drawing.map(|drawing| RunContent::Drawing(Box::new(drawing))));

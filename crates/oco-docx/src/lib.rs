@@ -37,7 +37,9 @@ pub use coverage::Coverage;
 pub use document::{
     Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell, TableRow,
 };
-pub use drawing::{Alignment, Anchor, Drawing, Offset, Picture, Placement, RelativeTo, Wrap, WrapSide, EMU_PER_POINT};
+pub use drawing::{
+    Alignment, Anchor, Drawing, Offset, Picture, Placement, RelativeTo, TextBox, Wrap, WrapSide, EMU_PER_POINT,
+};
 pub use error::{Error, OtherFormat, Result};
 pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering, Suffix};
 pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
@@ -74,6 +76,10 @@ fn resolve_pictures(
     for block in blocks {
         match block {
             Block::Paragraph(paragraph) => {
+                // Pictures inside a text box belong to the same part.
+                for text_box in paragraph.runs.iter_mut().flat_map(|run| &mut run.text_boxes) {
+                    resolve_pictures(&mut text_box.blocks, relationships, package, media);
+                }
                 for piece in paragraph.runs.iter_mut().flat_map(|run| &mut run.content) {
                     let RunContent::Drawing(drawing) = piece else { continue };
                     let Some(picture) = &mut drawing.picture else { continue };

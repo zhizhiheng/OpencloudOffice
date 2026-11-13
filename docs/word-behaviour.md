@@ -48,6 +48,7 @@
 
 | 规则 | 验证 | 测试 |
 |---|---|---|
+| 列表编号按"故事"分开计数：正文、文本框各数各的，同一页的页眉和页脚连着数。同一个列表在正文里数到 3，在文本框里仍从 1 开始，正文随后接着数 4 | PDF（`numbering-stories`、`mc-textbox-branches-numbered`） | `the_text_of_a_text_box_stands_inside_it_and_its_list_items_are_counted_apart`、`the_header_and_the_footer_of_a_page_are_numbered_as_one` |
 | zip 包内有重名条目时，取目录（文件末尾的中央目录）里排在前面的那个，不看它们在文件里的先后 | 配对（`dup-entry-document`、`dup-central-reversed` 等 4 份） | `of_two_entries_with_one_name_the_first_in_the_directory_is_read` |
 | 兼容性标记（`mc:AlternateContent`）取第一个所需命名空间全部认识的分支；都不认识时取后备分支；没有后备分支则什么都不读 | 配对 | `takes_the_first_compatibility_choice_word_understands` |
 | 未知的 `w:` 命名空间元素不会被跳过，其子元素被当作直接出现在该位置，可以嵌套。其他命名空间的未知元素连同内容一起忽略 | 配对 | `reads_through_unknown_elements_of_the_main_namespace` |

@@ -15,6 +15,9 @@ use crate::xml::qualified_name;
 pub struct Coverage {
     /// Element name (or `parent/child` for properties) -> number of occurrences.
     pub unsupported: BTreeMap<String, usize>,
+    /// How many text boxes the content being read is inside.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) boxes_open: u32,
 }
 
 impl Coverage {

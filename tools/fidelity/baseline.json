@@ -3062,7 +3062,7 @@
     },
     "corpus-word/docx4j/mc-textbox-branches-bound-sdt.docx": {
      "dx": 0.02,
-     "dy": 0.02,
+     "dy": 0.11,
      "lines": 10,
      "missing_fonts": [
       "Aptos"
@@ -3073,9 +3073,9 @@
       1,
       1
      ],
-     "placed": 5,
+     "placed": 7,
      "plain": false,
-     "same": 5
+     "same": 8
     },
     "corpus-word/docx4j/mc-textbox-branches-numbered.docx": {
      "dx": 0.05,
@@ -3090,9 +3090,9 @@
       1,
       1
      ],
-     "placed": 12,
+     "placed": 15,
      "plain": false,
-     "same": 12
+     "same": 15
     },
     "corpus-word/docx4j/missing-family-weight-2.docx": {
      "dx": 0.02,
@@ -3315,9 +3315,9 @@
       1,
       1
      ],
-     "placed": 7,
+     "placed": 10,
      "plain": false,
-     "same": 12
+     "same": 18
     },
     "corpus-word/docx4j/numbering-unlinked-level-claim.docx": {
      "dx": 0.02,
@@ -4453,7 +4453,7 @@
     },
     "corpus-word/docx4j/tables-textbox-in-cell.docx": {
      "dx": 0.0,
-     "dy": 0.1,
+     "dy": 0.11,
      "lines": 8,
      "missing_fonts": [],
      "page_starts": 0,
@@ -4462,9 +4462,9 @@
       1,
       1
      ],
-     "placed": 5,
+     "placed": 6,
      "plain": false,
-     "same": 5
+     "same": 7
     },
     "corpus-word/docx4j/theme-fonts-no-theme-part.docx": {
      "dx": 0.02,
@@ -5189,8 +5189,8 @@
     "page_starts": 193,
     "page_starts_equal": 168,
     "pages_equal": 120,
-    "placed": 5254,
-    "same": 6385
+    "placed": 5263,
+    "same": 6399
    },
    "covered": {
     "documents": 28,
