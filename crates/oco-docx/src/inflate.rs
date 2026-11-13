@@ -13,6 +13,22 @@ pub enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+/// Decompresses a zlib stream (RFC 1950): a deflate stream behind a
+/// two-byte header and before a checksum, as PNG and the pictures in
+/// binary Office files have it. The checksum is not verified.
+pub fn inflate_zlib(input: &[u8], expected: usize, limit: usize) -> Result<Vec<u8>> {
+    let [method, flags, rest @ ..] = input else {
+        return Err(Error::Truncated);
+    };
+    if method & 0x0F != 8 || (u16::from(*method) << 8 | u16::from(*flags)) % 31 != 0 {
+        return Err(Error::Invalid("zlib header"));
+    }
+    if flags & 0x20 != 0 {
+        return Err(Error::Invalid("zlib stream with a preset dictionary"));
+    }
+    inflate(rest, expected, limit)
+}
+
 /// Decompresses a whole deflate stream, refusing to produce more than `limit` bytes.
 /// `expected` is the size the container claims, used only to reserve memory.
 pub fn inflate(input: &[u8], expected: usize, limit: usize) -> Result<Vec<u8>> {
@@ -346,6 +362,15 @@ mod tests {
             0x34, 0x4D, 0xA7, 0x69, 0x3A, 0x4D, 0xD3, 0x69, 0x9A, 0xEE, 0x01,
         ];
         assert_eq!(inflate(&packed, 0, 1000).unwrap(), text.as_bytes());
+    }
+
+    #[test]
+    fn inflates_a_zlib_stream() {
+        // "abc" as zlib writes it: header 78 9C, the deflate stream, the Adler-32.
+        let packed = [0x78, 0x9C, 0x4B, 0x4C, 0x4A, 0x06, 0x00, 0x02, 0x4D, 0x01, 0x27];
+        assert_eq!(inflate_zlib(&packed, 0, 100).unwrap(), b"abc");
+        assert_eq!(inflate_zlib(&[0x78], 0, 100), Err(Error::Truncated));
+        assert_eq!(inflate_zlib(&[0x79, 0x9C, 0x4B], 0, 100), Err(Error::Invalid("zlib header")));
     }
 
     #[test]

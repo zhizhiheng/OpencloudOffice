@@ -13,7 +13,7 @@ mod coverage;
 mod document;
 mod drawing;
 mod error;
-mod inflate;
+pub mod inflate;
 mod numbering;
 pub mod opc;
 mod props;
