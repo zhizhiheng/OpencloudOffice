@@ -47,7 +47,7 @@ pub use resolve::Resolver;
 pub use section::{DocGrid, GridKind, Section, SectionStart, StoryRefs};
 pub use statistics::Statistics;
 pub use styles::{Style, StyleKind, StyleSheet};
-pub use table::{CellMargins, CellProps, RowProps, TableProps, VerticalMerge};
+pub use table::{CellMargins, CellProps, Edges, RowProps, TableProps, VerticalMerge};
 pub use theme::{Settings, ThemeFontLang, ThemeFonts};
 pub use values::{Color, Emphasis, Highlight, Underline, VertAlign};
 

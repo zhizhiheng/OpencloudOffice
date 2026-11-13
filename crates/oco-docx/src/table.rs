@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use crate::coverage::Coverage;
 use crate::props::Border;
+use crate::values::Color;
 use crate::xml::{elements, int, on_off, twips, val, w_attr, w_name};
 
 /// The blank between a cell's edges and its content, in twips.
@@ -69,12 +70,68 @@ pub struct TableProps {
     /// The width of the table's borders in eighths of a point: that of the
     /// widest edge of `w:tblBorders` that is drawn, and 0 when none is.
     pub borders: Option<i32>,
+    /// `w:tblBorders` edge by edge: the lines around the table and between its cells.
+    pub edges: Edges,
+    /// `w:shd`: the fill of every cell that has none of its own.
+    pub shade: Option<Color>,
     /// `w:tblpPr`: the table floats, out of the flow of the text. Where it
     /// floats is not read.
     pub floating: bool,
     /// `w:tblCellSpacing`: the cells stand apart, each within rules of its
     /// own; this much blank, in twips, is on every side of each.
     pub cell_spacing: Option<i32>,
+}
+
+/// The borders of a table (`w:tblBorders`) or of one cell (`w:tcBorders`),
+/// edge by edge. An edge that is absent says nothing; one whose style is
+/// `nil` or `none` says that there is no line.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct Edges {
+    pub top: Option<Border>,
+    pub left: Option<Border>,
+    pub bottom: Option<Border>,
+    pub right: Option<Border>,
+    /// Between the rows inside (a table, or a cell that covers several).
+    pub inside_h: Option<Border>,
+    /// Between the columns inside.
+    pub inside_v: Option<Border>,
+}
+
+impl Edges {
+    fn parse(node: Node) -> Self {
+        let mut edges = Edges::default();
+        for child in elements(node) {
+            let edge = Some(Border::parse_edge(child));
+            match w_name(child) {
+                Some("top") => edges.top = edge,
+                // ISO Strict documents say where the text starts and ends rather than left and right.
+                Some("left" | "start") => edges.left = edge,
+                Some("bottom") => edges.bottom = edge,
+                Some("right" | "end") => edges.right = edge,
+                Some("insideH") => edges.inside_h = edge,
+                Some("insideV") => edges.inside_v = edge,
+                _ => {}
+            }
+        }
+        edges
+    }
+
+    /// Lays `over` on top: each edge it states wins.
+    pub fn apply(&mut self, over: &Edges) {
+        for (mine, theirs) in [
+            (&mut self.top, &over.top),
+            (&mut self.left, &over.left),
+            (&mut self.bottom, &over.bottom),
+            (&mut self.right, &over.right),
+            (&mut self.inside_h, &over.inside_h),
+            (&mut self.inside_v, &over.inside_v),
+        ] {
+            if theirs.is_some() {
+                *mine = theirs.clone();
+            }
+        }
+    }
 }
 
 /// The width of the widest line a set of borders (`w:tblBorders`) draws,
@@ -119,7 +176,11 @@ impl TableProps {
                 Some("jc") => props.align = val(child).map(str::to_owned),
                 Some("tblLayout") => props.fixed_layout = Some(w_attr(child, "type") == Some("fixed")),
                 Some("tblCellMar") => props.cell_margins = CellMargins::parse(child),
-                Some("tblBorders") => props.borders = Some(widest_border(child)),
+                Some("tblBorders") => {
+                    props.borders = Some(widest_border(child));
+                    props.edges = Edges::parse(child);
+                }
+                Some("shd") => props.shade = w_attr(child, "fill").and_then(Color::parse),
                 Some("tblCellSpacing") => props.cell_spacing = length(child).filter(|w| *w > 0),
                 Some("tblpPr") => {
                     props.floating = true;
@@ -147,6 +208,8 @@ impl TableProps {
         self.fixed_layout = over.fixed_layout.or(self.fixed_layout);
         self.cell_margins.apply(&over.cell_margins);
         self.borders = over.borders.or(self.borders);
+        self.edges.apply(&over.edges);
+        self.shade = over.shade.or(self.shade);
         self.floating |= over.floating;
         self.cell_spacing = over.cell_spacing.or(self.cell_spacing);
     }
@@ -228,6 +291,10 @@ pub struct CellProps {
     /// `w:hideMark`: an empty cell does not make its row as tall as its
     /// paragraph mark.
     pub hide_mark: bool,
+    /// `w:tcBorders`: the cell's own lines, where it has a say over the table's.
+    pub borders: Edges,
+    /// `w:shd`: the cell's fill.
+    pub shade: Option<Color>,
 }
 
 impl Default for CellProps {
@@ -240,6 +307,8 @@ impl Default for CellProps {
             margins: CellMargins::default(),
             vertical_align: None,
             hide_mark: false,
+            borders: Edges::default(),
+            shade: None,
         }
     }
 }
@@ -263,8 +332,8 @@ impl CellProps {
                 Some("tcMar") => props.margins = CellMargins::parse(child),
                 Some("vAlign") => props.vertical_align = val(child).map(str::to_owned),
                 Some("hideMark") => props.hide_mark = on_off(child),
-                // Drawn by the table as a whole for now.
-                Some("tcBorders") => {}
+                Some("tcBorders") => props.borders = Edges::parse(child),
+                Some("shd") => props.shade = w_attr(child, "fill").and_then(Color::parse),
                 _ => coverage.miss(Some("w:tcPr"), child),
             }
         }

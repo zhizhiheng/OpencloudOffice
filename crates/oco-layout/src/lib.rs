@@ -389,6 +389,9 @@ struct Row {
     /// The last row of its table, which has the table's bottom rule under
     /// it; that rule takes up room too.
     last: bool,
+    /// The width of the rule under the row, which only the last row of a
+    /// table has room of its own for.
+    under: f32,
     /// What the row is taller by than its own cells ask, for the content
     /// of a cell merged down to it that needs more than its rows give.
     stretch: f32,
@@ -398,6 +401,40 @@ struct Row {
     /// last rows; the sides of each cell's own rules; the sides of the
     /// table's; and whether this is the table's first row.
     apart: Option<Apart>,
+}
+
+/// How a line of a table is drawn, and how much room it takes: the width
+/// it is drawn with, the width it is given, its colour and its dashes.
+#[derive(Clone, Copy, PartialEq)]
+struct Stroke {
+    width: f32,
+    room: f32,
+    color: Rgb,
+    dash: [f32; 2],
+}
+
+impl Stroke {
+    fn of(border: &oco_docx::Border) -> Self {
+        let width = rule_width(border);
+        Stroke { width, room: rule_room(border), color: rule_colour(border), dash: rule_dash(border, width) }
+    }
+
+    fn rule(self, x1: f32, y1: f32, x2: f32, y2: f32) -> Item {
+        Item::Rule { x1, y1, x2, y2, width: self.width, color: self.color, dash: self.dash }
+    }
+}
+
+/// Of the lines two cells that meet would each draw between them, the one
+/// that is drawn: the wider, and of two as wide the darker. (WPS, a probe
+/// made for this: a cell with a blue line of 1.5 pt around it has that
+/// line on every side, in place of the table's black half-point lines, and
+/// a cell that says it has no line above still has the line of the cell
+/// over it.)
+fn stronger(one: Option<&oco_docx::Border>, other: Option<&oco_docx::Border>) -> Option<Stroke> {
+    let darkness =
+        |border: &oco_docx::Border| -> u32 { rule_colour(border).iter().map(|part| 255 - u32::from(*part)).sum() };
+    let rank = |border: &&oco_docx::Border| (border.size, darkness(border));
+    [one, other].into_iter().flatten().filter(|border| border.is_visible()).max_by_key(rank).map(Stroke::of)
 }
 
 #[derive(Clone)]
@@ -424,6 +461,10 @@ struct RowCell {
     /// There is no rule above the cell, or below it: it runs on from the
     /// cell above, or into the one below.
     open: (bool, bool),
+    /// What the cell is filled with.
+    fill: Option<Rgb>,
+    /// The lines over the cell, at its left, under it and at its right.
+    strokes: [Option<Stroke>; 4],
     /// Where the content stands in a cell taller than it: 0 at the top,
     /// 0.5 in the middle, 1 at the bottom.
     align: f32,
@@ -472,7 +513,7 @@ impl Row {
     /// From where the content of the cells ends to the bottom of the row:
     /// the bottom margin and, in the last row, the rule under the table.
     fn foot(&self) -> f32 {
-        self.padding.1 + if self.last { self.border + self.gap() } else { 0.0 }
+        self.padding.1 + if self.last { self.under + self.gap() } else { 0.0 }
     }
 
     fn gap(&self) -> f32 {
@@ -500,7 +541,7 @@ impl Row {
         let natural = self.border + (content + self.padding.0 + self.padding.1).max(least);
         self.gap()
             + self.exact_height.unwrap_or(natural + self.stretch)
-            + if self.last { self.border + self.gap() } else { 0.0 }
+            + if self.last { self.under + self.gap() } else { 0.0 }
     }
 
     /// Puts the lines `ranges` names of each cell on `page`, the row's top
@@ -508,6 +549,10 @@ impl Row {
     /// `bottom`. A row put down `whole` has its content where its cells'
     /// vertical alignment has it.
     fn place(&self, ranges: &[(usize, usize)], whole: bool, left: f32, top: f32, bottom: f32, page: &mut Page) {
+        for mut item in self.fills(top, bottom, whole) {
+            item.translate(left, 0.0);
+            page.items.push(item);
+        }
         for (cell, (from, to)) in self.cells.iter().zip(ranges) {
             let lowered = if whole { self.lowered(cell, bottom - top) } else { 0.0 };
             let mut y = top + self.head() + lowered;
@@ -531,13 +576,38 @@ impl Row {
     /// The rules of the row, or of the part of it between `top` and
     /// `bottom`; `whole` if that is all of the row there is left.
     fn rules(&self, top: f32, bottom: f32, whole: bool) -> Vec<Item> {
+        let Some(apart) = &self.apart else {
+            // Each cell has the lines on its four sides; where it runs on
+            // from the cell above or into the one below there is none. A
+            // line across lies in the room kept for it, its top edge where
+            // that room begins: over a row at the row's top, under the last
+            // row in the room the table keeps under it. (WPS, a probe made
+            // for this: lines of 0.5 and 1.5 pt over one row have their
+            // top edges level.) A line across reaches over the lines
+            // upright at its ends, so that the corners are closed.
+            let mut items = Vec::new();
+            for (cell, sides) in self.cells.iter().zip(self.edges.windows(2)) {
+                let [over, left, under, right] = cell.strokes;
+                let (x1, x2) = (sides[0], sides[1]);
+                let half = |stroke: Option<Stroke>| stroke.map_or(0.0, |stroke| stroke.width / 2.0);
+                let (from, to) = (x1 - half(left), x2 + half(right));
+                let (under_at, end) = self.under_line(cell, bottom, whole);
+                items.extend(left.map(|stroke| stroke.rule(x1, top, x1, end)));
+                items.extend(right.map(|stroke| stroke.rule(x2, top, x2, end)));
+                if let Some(stroke) = over.filter(|_| !cell.open.0) {
+                    let y = top + stroke.width / 2.0;
+                    items.push(stroke.rule(from, y, to, y));
+                }
+                if let Some(stroke) = under.filter(|_| !cell.open.1) {
+                    items.push(stroke.rule(from, under_at, to, under_at));
+                }
+            }
+            return items;
+        };
         if self.border <= 0.0 {
             return Vec::new();
         }
         let open: Vec<(bool, bool)> = self.cells.iter().map(|cell| cell.open).collect();
-        let Some(apart) = &self.apart else {
-            return boxes(&self.edges, &open, top, bottom, self.border);
-        };
         // Cells that stand apart have each their own four rules, and the
         // table has its own around them all.
         let rule =
@@ -559,6 +629,41 @@ impl Row {
         items
     }
 
+    /// Where the middle of the line under a cell is, and how far down the
+    /// cell's own lines and fill go: under the last row, as far as the line
+    /// in the room kept for it; under any other row, to its bottom, the
+    /// line lying in the top of the next row as that row's line over it;
+    /// at the foot of a page, just above the page's part's bottom.
+    fn under_line(&self, cell: &RowCell, bottom: f32, whole: bool) -> (f32, f32) {
+        let width = cell.strokes[2].filter(|_| !cell.open.1).map_or(0.0, |stroke| stroke.width);
+        match (whole, self.last) {
+            (true, true) => (bottom - self.under + width / 2.0, bottom - self.under + width),
+            (true, false) => (bottom + width / 2.0, bottom),
+            (false, _) => (bottom - width / 2.0, bottom),
+        }
+    }
+
+    /// The fills of the row's cells, or of the part of the row between
+    /// `top` and `bottom`: each cell's own box, which the lines are drawn
+    /// over. (WPS, a probe made for this: the fill of a cell reaches from
+    /// the middle of the line at one side to the middle of the line at
+    /// the other, and likewise down.)
+    fn fills(&self, top: f32, bottom: f32, whole: bool) -> Vec<Item> {
+        let boxes: Vec<(f32, f32)> = match &self.apart {
+            Some(apart) => apart.cells.clone(),
+            None => self.edges.windows(2).map(|sides| (sides[0], sides[1])).collect(),
+        };
+        let (top, bottom) = match &self.apart {
+            Some(apart) => (top + apart.gap, if self.last { bottom - apart.gap - self.border } else { bottom }),
+            None => (top, bottom),
+        };
+        let fill = |(cell, (x1, x2)): (&RowCell, &(f32, f32))| {
+            let end = if self.apart.is_some() { bottom } else { self.under_line(cell, bottom, whole).1 };
+            cell.fill.map(|color| Item::Rect { x: *x1, y: top, width: x2 - x1, height: end - top, color })
+        };
+        self.cells.iter().zip(&boxes).filter_map(fill).collect()
+    }
+
     /// The row as one line that cannot break, for a table inside a cell.
     fn into_line(self) -> paragraph::Line {
         let height = self.height();
@@ -566,6 +671,7 @@ impl Row {
         let mut texts = Vec::new();
         let lowered: Vec<f32> = self.cells.iter().map(|cell| self.lowered(cell, height)).collect();
         let (rules, head) = (self.rules(0.0, height, true), self.head());
+        line.items = self.fills(0.0, height, true);
         for (cell, lowered) in self.cells.into_iter().zip(lowered) {
             let mut y = head + lowered;
             for mut part in cell.lines {
@@ -1468,6 +1574,45 @@ impl Builder<'_> {
         // rule's width from the table's own. Down the page the blank is
         // twice the spacing and a rule's width everywhere. The text keeps
         // clear of the whole of its cell's rule.
+        // The line a cell asks for on one of its sides (0 above, 1 at the
+        // left, 2 below, 3 at the right): its own if it says, else the
+        // table's, which at the table's edge is the outer one and elsewhere
+        // the one between rows or columns.
+        let wish = |row: usize, index: usize, side: usize| -> Option<&oco_docx::Border> {
+            let (cells, edges) = (&table.rows[row].cells, &props.edges);
+            let own = &cells[index].props.borders;
+            let (own, of_table) = match side {
+                0 => (&own.top, if row == 0 { &edges.top } else { &edges.inside_h }),
+                1 => (&own.left, if index == 0 { &edges.left } else { &edges.inside_v }),
+                2 => (&own.bottom, if row + 1 == table.rows.len() { &edges.bottom } else { &edges.inside_h }),
+                _ => (&own.right, if index + 1 == cells.len() { &edges.right } else { &edges.inside_v }),
+            };
+            own.as_ref().or(of_table.as_ref())
+        };
+        // The cell of a row that covers a column of the grid.
+        let over = |row: usize, column: usize| -> Option<usize> {
+            let at = starts.get(row)?.iter().rposition(|start| *start <= column)?;
+            let span = (table.rows[row].cells[at].props.grid_span as usize).max(1);
+            (column < starts[row][at] + span).then_some(at)
+        };
+        let strokes = |row: usize, index: usize| -> [Option<Stroke>; 4] {
+            let column = starts[row][index];
+            let above = row.checked_sub(1).and_then(|row| wish(row, over(row, column)?, 2));
+            let below = over(row + 1, column).and_then(|at| wish(row + 1, at, 0));
+            let before = index.checked_sub(1).and_then(|index| wish(row, index, 3));
+            let after = (index + 1 < table.rows[row].cells.len()).then(|| wish(row, index + 1, 1)).flatten();
+            [
+                stronger(wish(row, index, 0), above),
+                stronger(wish(row, index, 1), before),
+                stronger(wish(row, index, 2), below),
+                stronger(wish(row, index, 3), after),
+            ]
+        };
+        let fill_of = |color: Option<oco_docx::Color>| match color {
+            Some(oco_docx::Color::Rgb(r, g, b)) => Some([r, g, b]),
+            _ => None,
+        };
+
         let spacing = points(props.cell_spacing).max(0.0);
         let stands_apart = spacing > 0.0;
         let (beside, at_edge) = (spacing + border / 2.0, 2.0 * spacing + border / 2.0);
@@ -1569,8 +1714,16 @@ impl Builder<'_> {
                     Some("bottom") => 1.0,
                     _ => 0.0,
                 };
-                let mut cell =
-                    RowCell { lines, tail: previous_after, merged: false, own: 0.0, open: (false, false), align };
+                let mut cell = RowCell {
+                    lines,
+                    tail: previous_after,
+                    merged: false,
+                    own: 0.0,
+                    open: (false, false),
+                    fill: fill_of(cell.props.shade).or(fill_of(props.shade)),
+                    strokes: strokes(number, index),
+                    align,
+                };
                 if continues[number][index] {
                     // A cell that runs on from the one above shows nothing
                     // of its own, but the paragraph the file has in it
@@ -1595,6 +1748,17 @@ impl Builder<'_> {
                 }
                 _ => false,
             };
+            // The rule over a row is as wide as the widest line over one of its
+            // cells, and takes no room where there is no line. (WPS, the same
+            // probe: rows under a dotted half-point line are 14.3 pt apart, rows
+            // without lines 13.8 pt, and a row under a cell's line of 1.5 pt 15.3 pt.)
+            let widest = |side: usize| match stands_apart {
+                true => border,
+                false => {
+                    cells.iter().filter_map(|cell| cell.strokes[side]).map(|stroke| stroke.room).fold(0.0, f32::max)
+                }
+            };
+            let (over_row, under_row) = (widest(0), widest(2));
             rows.push((
                 Row {
                     cells,
@@ -1603,7 +1767,8 @@ impl Builder<'_> {
                     exact_height: row.props.exact_height.then_some(height).filter(|h| *h > 0.0),
                     cant_split: row.props.cant_split,
                     padding: (points(margins.top), points(margins.bottom)),
-                    border,
+                    border: over_row,
+                    under: under_row,
                     last: number + 1 == table.rows.len(),
                     stretch: 0.0,
                     apart: stands_apart.then_some(Apart {

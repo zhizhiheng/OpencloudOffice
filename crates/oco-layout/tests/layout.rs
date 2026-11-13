@@ -2030,3 +2030,174 @@ fn a_fill_runs_between_the_indents_and_through_the_space_that_is_the_paragraphs_
     assert!(pieces.iter().all(|fill| close(fill.0, 108.0, 0.01) && close(fill.2, 487.3, 0.01)), "{pieces:?}");
     assert!(close(starts(&page, "indented"), 126.0, 0.01));
 }
+
+/// A cell of 2400 twips with `properties` in its `w:tcPr` and a line of 12 pt text.
+fn styled_cell(properties: &str, text: &str) -> String {
+    format!(
+        r#"<w:tc><w:tcPr><w:tcW w:w="2400" w:type="dxa"/>{properties}</w:tcPr>{}</w:tc>"#,
+        boxed_paragraph("", "", "", text)
+    )
+}
+
+fn shade(fill: &str) -> String {
+    format!(r#"<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>"#)
+}
+
+/// A table of three columns of 2400 twips with the given borders and rows.
+fn styled_table(borders: &str, extra: &str, rows: &[[String; 3]]) -> String {
+    let rows: String = rows.iter().map(|cells| format!("<w:tr>{}</w:tr>", cells.concat())).collect();
+    format!(
+        r#"<w:tbl><w:tblPr><w:tblW w:w="7200" w:type="dxa"/><w:tblBorders>{borders}</w:tblBorders><w:tblLayout w:type="fixed"/>
+           <w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>{extra}</w:tblPr>
+           <w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid>{rows}</w:tbl>"#
+    )
+}
+
+fn coloured(name: &str, size: u32, color: &str) -> String {
+    format!(r#"<w:{name} w:val="single" w:sz="{size}" w:space="0" w:color="{color}"/>"#)
+}
+
+#[test]
+fn each_cell_has_its_fill_and_the_stronger_of_the_lines_where_two_cells_meet() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (a probe made for this, its table "T1"): half-point
+    // black lines everywhere, a header row filled grey, a yellow cell, and a
+    // cell with blue lines of 1.5 pt on all its sides beside one that says
+    // it has no line over it.
+    let lines: String =
+        ["top", "left", "bottom", "right", "insideH", "insideV"].map(|e| coloured(e, 4, "000000")).concat();
+    let blue: String = ["top", "left", "bottom", "right"].map(|e| coloured(e, 12, "0000FF")).concat();
+    let rows = [
+        ["head a", "head b", "head c"].map(|text| styled_cell(&shade("BFBFBF"), text)),
+        [styled_cell("", "plain"), styled_cell(&shade("FFFF00"), "yellow"), styled_cell("", "beside")],
+        [
+            styled_cell(&format!("<w:tcBorders>{}</w:tcBorders>", coloured("bottom", 24, "FF0000")), "red under"),
+            styled_cell(r#"<w:tcBorders><w:top w:val="nil"/></w:tcBorders>"#, "no top"),
+            styled_cell(&format!("<w:tcBorders>{blue}</w:tcBorders>"), "blue box"),
+        ],
+    ];
+    let body = boxed_paragraph("", "", "", "above")
+        + &styled_table(&lines, "", &rows)
+        + &boxed_paragraph("", "", r#"<w:spacing w:before="120" w:after="0"/>"#, "after");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.starts_with(text)).unwrap().baseline;
+    let top = line("above") + 2.6;
+
+    // Rows: a half-point rule over each of the first two, the 1.5 pt one over the third,
+    // and the 3 pt line under the table, each taking the room of its size.
+    assert!(close(line("head a"), top + 0.5 + 11.2, 0.03));
+    assert!(close(line("plain") - line("head a"), 14.3, 0.03));
+    assert!(close(line("red under") - line("plain"), 15.3, 0.03), "{}", line("red under") - line("plain"));
+    let bottom = line("red under") + 2.6 + 3.0;
+    assert!(close(line("after"), bottom + 6.0 + 11.2, 0.03), "{} under a table that ends at {bottom}", line("after"));
+
+    // Fills: a cell's fill reaching over all of the cell, drawn before the text in it.
+    let filled: Vec<_> = page
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(at, item)| match *item {
+            Item::Rect { x, y, width, height, color } => Some((at, x, y, width, height, color)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(filled.len(), 4, "three grey cells and a yellow one: {filled:?}");
+    for &(at, x, y, width, height, _) in &filled {
+        let inside = |item: &Item| matches!(*item, Item::Glyph { x: gx, y: gy, .. } if gx > x && gx < x + width && gy > y && gy < y + height);
+        assert!(page.items[..at].iter().all(|item| !inside(item)), "the fill at {x} {y} comes before its text");
+    }
+    let origin = filled[0].1;
+    let yellow = filled.iter().find(|fill| fill.5 == [0xFF, 0xFF, 0]).unwrap();
+    assert!(close(yellow.1, origin + 120.0, 0.01) && close(yellow.3, 120.0, 0.01), "the middle column: {yellow:?}");
+    assert!(close(yellow.2, top + 14.3, 0.03) && close(yellow.4, 14.3, 0.03), "the second row: {yellow:?}");
+
+    // Lines: the blue ones win on every side of their cell, also over the
+    // half-point black line the cell beside asks for; the cell that says
+    // "no line over me" has the line of the cell over it all the same.
+    let lines_at = |y: f32| -> Vec<(f32, f32, f32, f32, [u8; 3])> {
+        page.items
+            .iter()
+            .filter_map(|item| match *item {
+                Item::Rule { x1, y1, x2, y2, width, color, .. } if y1 == y2 && close(y1, y, 0.8) => {
+                    Some((x1, x2, y1, width, color))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let over_third = lines_at(top + 28.6);
+    let blues: Vec<_> = over_third.iter().filter(|rule| rule.4 == [0, 0, 0xFF]).collect();
+    assert!(!blues.is_empty(), "a blue line over the blue cell");
+    for blue in blues {
+        assert!(
+            close(blue.3, 1.44, 0.001) && close(blue.2, top + 28.6 + 0.72, 0.01),
+            "top edge at the row's top: {blue:?}"
+        );
+    }
+    assert!(
+        over_third.iter().any(|rule| rule.4 == [0, 0, 0] && rule.0 < origin + 180.0 && rule.1 > origin + 180.0),
+        "a line over 'no top' all the same"
+    );
+    let upright_blue = page.items.iter().any(|item| {
+        matches!(*item, Item::Rule { x1, x2, color, width, .. } if x1 == x2 && close(x1, origin + 240.0, 0.01) && color == [0, 0, 0xFF] && close(width, 1.44, 0.001))
+    });
+    assert!(upright_blue, "between 'no top' and the blue cell the line is blue");
+    let red = lines_at(bottom - 1.5);
+    assert!(red.iter().any(|rule| rule.4 == [0xFF, 0, 0] && close(rule.3, 2.88, 0.001)), "{red:?}");
+    // Across the corners: the line over the table reaches over the upright lines' outer halves.
+    let first = lines_at(top + 0.24);
+    assert!(first.iter().any(|rule| close(rule.0, origin - 0.24, 0.01)), "{first:?}");
+}
+
+#[test]
+fn a_table_fill_is_for_the_cells_without_their_own_and_rows_without_lines_take_no_room_for_them() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS (the probe's "T3"): a table without lines has its
+    // rows a line of text apart; the fill a table states is under every
+    // cell that does not state its own.
+    let rows = [
+        [styled_cell("", "one"), styled_cell(&shade("FCE4D6"), "two"), styled_cell("", "three")],
+        [styled_cell("", "four"), styled_cell("", "five"), styled_cell("", "six")],
+    ];
+    let body = styled_table("", &shade("E2EFDA"), &rows);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let line = |text: &str| page.lines.iter().find(|line| line.text.starts_with(text)).unwrap().baseline;
+    assert!(close(line("four") - line("one"), 13.8, 0.03));
+    assert!(!page.items.iter().any(|item| matches!(item, Item::Rule { .. })), "no lines at all");
+    let fills: Vec<[u8; 3]> = page
+        .items
+        .iter()
+        .filter_map(|item| if let Item::Rect { color, .. } = *item { Some(color) } else { None })
+        .collect();
+    assert_eq!(fills.len(), 6);
+    assert_eq!(fills.iter().filter(|color| **color == [0xFC, 0xE4, 0xD6]).count(), 1);
+    assert_eq!(fills.iter().filter(|color| **color == [0xE2, 0xEF, 0xDA]).count(), 5);
+}
+
+#[test]
+fn where_two_cells_meet_only_the_stronger_line_is_drawn() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // A cell with a green line of 3 pt at its right, a plain cell after it:
+    // between them the green line, and no half-point black one over it,
+    // whichever cell is drawn last.
+    let lines: String =
+        ["top", "left", "bottom", "right", "insideH", "insideV"].map(|e| coloured(e, 4, "000000")).concat();
+    let green = format!("<w:tcBorders>{}</w:tcBorders>", coloured("right", 24, "00B050"));
+    let rows = [[styled_cell(&green, "green"), styled_cell("", "plain"), styled_cell("", "plain")]];
+    let page =
+        pages(&Source { body: &styled_table(&lines, "", &rows), ..Source::default() }, &fonts, Model::Word).remove(0);
+    let upright: Vec<(f32, f32, [u8; 3])> = page
+        .items
+        .iter()
+        .filter_map(|item| match *item {
+            Item::Rule { x1, x2, width, color, .. } if x1 == x2 => Some((x1, width, color)),
+            _ => None,
+        })
+        .collect();
+    let left = upright.iter().map(|line| line.0).fold(f32::MAX, f32::min);
+    let between: Vec<_> = upright.iter().filter(|line| close(line.0, left + 120.0, 0.01)).collect();
+    assert!(
+        !between.is_empty() && between.iter().all(|line| line.2 == [0, 0xB0, 0x50] && close(line.1, 2.88, 0.001)),
+        "{between:?}"
+    );
+}

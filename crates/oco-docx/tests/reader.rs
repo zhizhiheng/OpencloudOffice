@@ -765,6 +765,37 @@ fn reads_the_content_of_a_text_box_and_how_it_sits_in_the_box() {
 }
 
 #[test]
+fn reads_the_lines_and_fills_of_tables_and_cells_edge_by_edge() {
+    let body = r#"<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="12" w:color="FF0000"/><w:insideV w:val="nil"/>
+          </w:tblBorders><w:shd w:val="clear" w:color="auto" w:fill="E2EFDA"/></w:tblPr>
+        <w:tr><w:tc><w:tcPr><w:tcBorders><w:start w:val="dotted" w:sz="4"/><w:bottom w:val="none"/></w:tcBorders>
+          <w:shd w:val="clear" w:fill="FFFF00"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>"#;
+    let docx = docx(body, "");
+    let Block::Table(table) = &docx.document.body[0] else { panic!("a table") };
+    let edges = &table.props.edges;
+    assert_eq!(
+        edges.top.as_ref().map(|b| (b.style.as_str(), b.size, b.color)),
+        Some(("single", 12, Some(Color::Rgb(0xFF, 0, 0))))
+    );
+    assert!(edges.inside_v.as_ref().is_some_and(|b| !b.is_visible()), "an edge that says there is no line");
+    assert_eq!(edges.left, None, "an edge that says nothing");
+    assert_eq!(table.props.shade, Some(Color::Rgb(0xE2, 0xEF, 0xDA)));
+    let cell = &table.rows[0].cells[0].props;
+    assert_eq!(
+        cell.borders.left.as_ref().map(|b| b.style.as_str()),
+        Some("dotted"),
+        "start is the left in ISO Strict terms"
+    );
+    assert!(cell.borders.bottom.as_ref().is_some_and(|b| !b.is_visible()));
+    assert_eq!(cell.shade, Some(Color::Rgb(0xFF, 0xFF, 0)));
+    assert!(
+        !docx.coverage.unsupported.keys().any(|key| key.contains("tcBorders") || key.contains("shd")),
+        "{:?}",
+        docx.coverage.unsupported
+    );
+}
+
+#[test]
 fn of_two_entries_with_one_name_the_first_in_the_directory_is_read() {
     let part =
         |text: &str| format!("<w:document {W}><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>");
