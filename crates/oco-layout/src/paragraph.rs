@@ -8,7 +8,7 @@
 
 use oco_docx::{
     BreakKind, Color, Emphasis, FontRef, Highlight, LabelAlign, ParaProps, RunContent, RunProps, Suffix, TabKind,
-    TabStop, Underline, VertAlign,
+    TabStop, Underline, VertAlign, EMU_PER_POINT,
 };
 
 use crate::fonts::{Choice, FontDb, Model};
@@ -127,6 +127,17 @@ struct Atom {
     ascent: f32,
     descent: f32,
     label: bool,
+    /// The object the atom stands for, among the builder's `objects`.
+    object: Option<usize>,
+}
+
+/// A picture or another object in the line: its box, and what to draw in it.
+#[derive(Debug, Clone)]
+struct Object {
+    width: f32,
+    height: f32,
+    part: Option<String>,
+    crop: [f32; 4],
 }
 
 const TWIP: f32 = 1.0 / 20.0;
@@ -175,6 +186,7 @@ struct Builder<'a> {
     /// The last letter seen was Chinese rather than Western.
     after_cjk: bool,
     missing_fonts: Vec<String>,
+    objects: Vec<Object>,
 }
 
 impl Builder<'_> {
@@ -282,6 +294,7 @@ impl Builder<'_> {
                 ascent: choice.line_box.ascent * base,
                 descent: choice.line_box.descent * base,
                 label,
+                object: None,
             });
         };
         for piece in content {
@@ -291,7 +304,33 @@ impl Builder<'_> {
                 RunContent::Break(BreakKind::Line) => push(self, '\n', Kind::LineBreak, None),
                 RunContent::Break(_) => push(self, '\n', Kind::PageBreak, None),
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
-                RunContent::PageBreakHint | RunContent::Drawing(_) => {}
+                RunContent::PageBreakHint => {}
+                RunContent::Drawing(drawing) => {
+                    if drawing.anchor.is_some() {
+                        continue;
+                    }
+                    // In the line an object is a character as wide and as
+                    // tall as its box, standing on the baseline. (Measured
+                    // in Word, docx4j's probe `image-inline`: the bottom of
+                    // the picture is the baseline of its line, the top of
+                    // the picture the top of the line.)
+                    let picture = drawing.picture.as_ref();
+                    let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
+                    self.objects.push(Object {
+                        width: emu(drawing.width),
+                        height: emu(drawing.height),
+                        part: picture.and_then(|p| p.part.clone()),
+                        crop: picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0)),
+                    });
+                    // The font is chosen as for a space, which every font has.
+                    push(self, ' ', Kind::Char, None);
+                    let object = &self.objects[self.objects.len() - 1];
+                    let atom = self.atoms.last_mut().expect("an atom was pushed");
+                    atom.ch = text::OBJECT;
+                    (atom.advance, atom.ascent, atom.descent) = (object.width, object.height, 0.0);
+                    (atom.x_scale, atom.shift) = (1.0, 0.0);
+                    atom.object = Some(self.objects.len() - 1);
+                }
                 // What Word last showed; a header or footer has the real
                 // number put in before it is laid out.
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
@@ -496,8 +535,15 @@ pub fn measure(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Exte
 /// The paragraph's characters, each with its font and its width.
 fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -> Builder<'a> {
     let props = paragraph.props;
-    let mut builder =
-        Builder { fonts, context, styles: Vec::new(), atoms: Vec::new(), after_cjk: false, missing_fonts: Vec::new() };
+    let mut builder = Builder {
+        fonts,
+        context,
+        styles: Vec::new(),
+        atoms: Vec::new(),
+        after_cjk: false,
+        missing_fonts: Vec::new(),
+        objects: Vec::new(),
+    };
 
     if let Some(label) = &paragraph.label {
         let mut text = label.text.clone();
@@ -522,7 +568,7 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
 
 pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
     let props = paragraph.props;
-    let Builder { styles, mut atoms, missing_fonts, .. } = prepare(paragraph, fonts, context);
+    let Builder { styles, mut atoms, missing_fonts, objects, .. } = prepare(paragraph, fonts, context);
 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
@@ -834,6 +880,21 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
         }
         // Word works in 1/600 inch; a single line is a whole number of them.
         let single = ((ascent + descent) * 600.0 / 72.0).round() * 72.0 / 600.0;
+        // What a multiple of single spacing multiplies: the line's text, or
+        // the paragraph mark where the line has none, but not a picture in
+        // the line, whose height counts once. (Not measured in a PDF. Of
+        // three readings tried against the page breaks Word recorded in the
+        // corpus this one restores the most; a document with sixteen
+        // pictures, each alone in a paragraph at 1.15 lines, goes from 4 of
+        // its 10 page starts to all of them.)
+        let multiplied = if context.model == Model::Word && range.iter().any(|a| a.object.is_some()) {
+            let text = range.iter().filter(|a| a.kind == Kind::Char && a.object.is_none());
+            let (above, below) = text.fold((0.0f32, 0.0f32), |(a, d), atom| (a.max(atom.ascent), d.max(atom.descent)));
+            let (above, below) = if above == 0.0 { mark_box } else { (above, below) };
+            ((above + below) * 600.0 / 72.0).round() * 72.0 / 600.0
+        } else {
+            single
+        };
         let (height, baseline, needed) = match (rule, line_value, grid) {
             ("exact", Some(line), _) => {
                 // The text sits in a line of fixed height by the proportions
@@ -894,7 +955,7 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                 // (measured: after a single-spaced line, the first line of a
                 // paragraph at 1.08, 1.15, 1.5 or 2 lines comes one single
                 // pitch later). LibreOffice raises the ascent in proportion.
-                let height = single * line / 240.0;
+                let height = single + multiplied * (line / 240.0 - 1.0);
                 let baseline = match context.model {
                     Model::Word if height >= single => ascent,
                     _ => ascent.min(height - descent).max(ascent * height / single),
@@ -942,7 +1003,18 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
             }
             match atom.kind {
                 Kind::Char => {
-                    if atom.ch != ' ' && atom.ch != '\u{3000}' {
+                    if let Some(object) = atom.object.map(|index| &objects[index]) {
+                        line.items.push(Item::Image {
+                            x,
+                            y: baseline - style.rise - object.height,
+                            width: object.width,
+                            height: object.height,
+                            part: object.part.clone(),
+                            crop: object.crop,
+                        });
+                        first_ink.get_or_insert(x);
+                        last_ink = x + atom.advance;
+                    } else if atom.ch != ' ' && atom.ch != '\u{3000}' {
                         line.items.push(Item::Glyph {
                             font: atom.choice.font,
                             glyph: atom.glyph,
@@ -968,7 +1040,10 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
                             });
                         }
                     }
-                    line.text.push(atom.ch);
+                    // The text of a line is its characters; a picture is none.
+                    if atom.object.is_none() {
+                        line.text.push(atom.ch);
+                    }
                     let stretches = if align == "distribute" {
                         index >= stretch_from && index + 1 < visible
                     } else {

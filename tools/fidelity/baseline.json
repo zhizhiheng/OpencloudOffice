@@ -184,11 +184,11 @@
    "docx4j/docx4j-core-tests/src/test/resources/strict/strict-chart.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "docx4j/docx4j-samples-docx-diffx/sample-docs/test.docx": {
@@ -244,21 +244,21 @@
    "docx4j/docx4j-samples-docx4j/sample-docs/databinding/WordAddIn_walkthrough.docx": {
     "pages": [
      11,
-     6
+     11
     ],
     "starts": [
      10,
-     3
+     10
     ]
    },
    "docx4j/docx4j-samples-docx4j/sample-docs/strict/strict-chart.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/chart2/qa/extras/data/docx/PieChartDataLabels.docx": {
@@ -294,27 +294,27 @@
    "libreoffice/chart2/qa/extras/data/docx/testMultipleChart.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/chart2/qa/extras/data/docx/testMultiplechartembeddings.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/chart2/qa/extras/data/docx/testchartoleobjectembeddings.docx": {
     "pages": [
      81,
-     85
+     92
     ],
     "starts": [
      1,
@@ -324,7 +324,7 @@
    "libreoffice/sw/qa/core/data/ooxml/pass/fdo79129.docx": {
     "pages": [
      7,
-     6
+     7
     ],
     "starts": [
      6,
@@ -1634,11 +1634,11 @@
    "libreoffice/sw/qa/extras/ooxmlimport/data/fdo87488.docx": {
     "pages": [
      1,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlimport/data/n751077.docx": {
@@ -1834,11 +1834,11 @@
    "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-header.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/writerfilter/dmapper/data/floattable-nested.docx": {
@@ -1864,11 +1864,11 @@
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D Column-O12-Word-Charts.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/paperSrc-Paper Source Information.docx": {
@@ -1904,11 +1904,11 @@
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment049.docx": {
     "pages": [
      3,
-     1
+     3
     ],
     "starts": [
      2,
-     0
+     2
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/header.docx": {
@@ -2184,11 +2184,11 @@
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/smart art/SmartArt1.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/style/1.docx": {
@@ -2248,7 +2248,7 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "poi/test-data/document/60293.docx": {
@@ -2368,7 +2368,7 @@
     ],
     "starts": [
      117,
-     24
+     11
     ]
    },
    "poi/test-data/integration/stress016.docx": {
@@ -2378,7 +2378,7 @@
     ],
     "starts": [
      2,
-     0
+     2
     ]
    },
    "poi/test-data/integration/stress018.docx": {
@@ -2474,11 +2474,11 @@
    "tika/tika-server/tika-server-standard/src/test/resources/test-documents/2pic.docx": {
     "pages": [
      2,
-     1
+     2
     ],
     "starts": [
      1,
-     0
+     1
     ]
    }
   },
@@ -2887,18 +2887,20 @@
     },
     "corpus-word/docx4j/image-inline.docx": {
      "dx": 0.02,
-     "dy": 32.0,
+     "dy": 0.04,
      "lines": 8,
-     "missing_fonts": [],
+     "missing_fonts": [
+      "Aptos"
+     ],
      "page_starts": 0,
      "page_starts_equal": 0,
      "pages": [
       1,
       1
      ],
-     "placed": 2,
+     "placed": 8,
      "plain": false,
-     "same": 6
+     "same": 8
     },
     "corpus-word/docx4j/justification-crossover-2.docx": {
      "dx": 0.02,
@@ -3060,7 +3062,7 @@
     },
     "corpus-word/docx4j/mc-textbox-branches-bound-sdt.docx": {
      "dx": 0.02,
-     "dy": 0.1,
+     "dy": 0.02,
      "lines": 10,
      "missing_fonts": [
       "Aptos"
@@ -3071,13 +3073,13 @@
       1,
       1
      ],
-     "placed": 3,
+     "placed": 5,
      "plain": false,
      "same": 5
     },
     "corpus-word/docx4j/mc-textbox-branches-numbered.docx": {
      "dx": 0.05,
-     "dy": 54.5,
+     "dy": 0.1,
      "lines": 15,
      "missing_fonts": [
       "Aptos"
@@ -3088,7 +3090,7 @@
       1,
       1
      ],
-     "placed": 6,
+     "placed": 12,
      "plain": false,
      "same": 12
     },
@@ -3368,16 +3370,18 @@
     },
     "corpus-word/docx4j/page-first-even-odd-heights.docx": {
      "dx": 0.02,
-     "dy": 0.1,
+     "dy": 0.08,
      "lines": 318,
-     "missing_fonts": [],
+     "missing_fonts": [
+      "Aptos"
+     ],
      "page_starts": 6,
-     "page_starts_equal": 3,
+     "page_starts_equal": 6,
      "pages": [
       7,
       7
      ],
-     "placed": 200,
+     "placed": 318,
      "plain": false,
      "same": 318
     },
@@ -3443,18 +3447,20 @@
     },
     "corpus-word/docx4j/page-tall-header-image.docx": {
      "dx": 0.02,
-     "dy": 252.9,
+     "dy": 0.1,
      "lines": 167,
-     "missing_fonts": [],
+     "missing_fonts": [
+      "Aptos"
+     ],
      "page_starts": 3,
-     "page_starts_equal": 0,
+     "page_starts_equal": 3,
      "pages": [
       4,
       4
      ],
-     "placed": 2,
+     "placed": 167,
      "plain": false,
-     "same": 162
+     "same": 167
     },
     "corpus-word/docx4j/page-tall-header.docx": {
      "dx": 0.02,
@@ -4447,7 +4453,7 @@
     },
     "corpus-word/docx4j/tables-textbox-in-cell.docx": {
      "dx": 0.0,
-     "dy": 30.23,
+     "dy": 0.1,
      "lines": 8,
      "missing_fonts": [],
      "page_starts": 0,
@@ -4456,7 +4462,7 @@
       1,
       1
      ],
-     "placed": 1,
+     "placed": 5,
      "plain": false,
      "same": 5
     },
@@ -5132,14 +5138,14 @@
  "layout": {
   "all": {
    "documents": 3272,
-   "forced_page_starts": 410,
-   "forced_page_starts_equal": 386,
+   "forced_page_starts": 407,
+   "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 456,
-   "multipage_pages_within_one": 579,
-   "page_starts": 2041,
-   "page_starts_equal": 385,
-   "page_starts_same_paragraph": 525
+   "multipage_pages_equal": 498,
+   "multipage_pages_within_one": 594,
+   "page_starts": 2044,
+   "page_starts_equal": 474,
+   "page_starts_same_paragraph": 623
   },
   "covered": {
    "documents": 537,
@@ -5157,11 +5163,11 @@
    "forced_page_starts": 113,
    "forced_page_starts_equal": 103,
    "multipage": 229,
-   "multipage_pages_equal": 173,
-   "multipage_pages_within_one": 220,
+   "multipage_pages_equal": 184,
+   "multipage_pages_within_one": 222,
    "page_starts": 467,
-   "page_starts_equal": 139,
-   "page_starts_same_paragraph": 189
+   "page_starts_equal": 147,
+   "page_starts_same_paragraph": 196
   },
   "plain": {
    "documents": 881,
@@ -5181,10 +5187,10 @@
     "documents": 128,
     "lines": 7059,
     "page_starts": 193,
-    "page_starts_equal": 160,
+    "page_starts_equal": 166,
     "pages_equal": 119,
-    "placed": 4884,
-    "same": 6369
+    "placed": 5185,
+    "same": 6376
    },
    "covered": {
     "documents": 28,

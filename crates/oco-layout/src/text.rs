@@ -78,6 +78,9 @@ pub fn is_word_character(ch: char) -> bool {
 /// Whether a line may be broken between `before` and `after`, two adjacent
 /// characters of a paragraph. `kinsoku` applies the start- and end-of-line
 /// prohibitions.
+/// Stands in the text for an object in the line, such as a picture.
+pub const OBJECT: char = '\u{FFFC}';
+
 pub fn can_break_between(before: char, after: char, kinsoku: bool) -> bool {
     if before == ' ' || before == '\u{3000}' || before == '\t' {
         return after != ' ';
@@ -91,6 +94,10 @@ pub fn can_break_between(before: char, after: char, kinsoku: bool) -> bool {
     // A dash or an ellipsis written with two characters is never split.
     if before == after && matches!(before, '—' | '…' | '―') {
         return false;
+    }
+    // A picture in the line can be parted from what stands beside it.
+    if before == OBJECT || after == OBJECT {
+        return true;
     }
     if is_cjk(before) || is_cjk(after) {
         return true;

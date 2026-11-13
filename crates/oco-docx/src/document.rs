@@ -647,11 +647,13 @@ fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
         }
         Some("instrText") => run.field_marks.push((run.content.len(), FieldMark::Code(text_of(child)))),
         Some("drawing") => {
-            if let Some(drawing) = crate::drawing::read(child) {
-                run.content.push(RunContent::Drawing(Box::new(drawing)));
+            let drawing = crate::drawing::read(child);
+            // A picture in the line is laid out and drawn. Anything else is
+            // read, and given its room if it is in the line, but not shown yet.
+            if !drawing.as_ref().is_some_and(|d| d.anchor.is_none() && d.picture.is_some()) {
+                coverage.miss(Some("w:r"), child);
             }
-            // Read, but not laid out yet: it still counts as not shown.
-            coverage.miss(Some("w:r"), child);
+            run.content.extend(drawing.map(|drawing| RunContent::Drawing(Box::new(drawing))));
         }
         // Not modelled yet. Named so that they are not mistaken for wrappers.
         Some(

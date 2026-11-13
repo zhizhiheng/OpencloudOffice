@@ -9,7 +9,7 @@
 use std::path::Path;
 
 use oco_docx::Docx;
-use oco_layout::{content, layout, Content, FontDb, Model, Options, Page, Position};
+use oco_layout::{content, layout, Content, FontDb, Item, Model, Options, Page, Position};
 
 const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
 const RELS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -1535,4 +1535,95 @@ fn cells_that_stand_apart_keep_their_columns_and_have_rules_of_their_own() {
     assert!(close(step(&apart, "above", "first"), 14.3 + 7.7, 0.02), "{}", step(&apart, "above", "first"));
     assert!(close(step(&apart, "first", "below"), 14.3 + 7.7, 0.02));
     assert!(close(step(&apart, "below", "after") - step(&plain, "below", "after"), 7.7, 0.02));
+}
+
+/// A `w:drawing` in the line: a box of the given size in points.
+fn inline_picture(width: u32, height: u32) -> String {
+    format!(
+        r#"<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+           <wp:extent cx="{}" cy="{}"/></wp:inline></w:drawing>"#,
+        width * 12700,
+        height * 12700
+    )
+}
+
+fn images(page: &Page) -> Vec<(f32, f32, f32, f32)> {
+    page.items
+        .iter()
+        .filter_map(|item| match *item {
+            Item::Image { x, y, width, height, .. } => Some((x, y, width, height)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_picture_in_the_line_stands_on_the_baseline_and_sets_the_height_of_its_line() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a'), ("Carlito", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `image-inline`). A picture of 108
+    // by 43.2 pt in a line of 12 pt Liberation Serif: the line begins where
+    // the picture's top is and its baseline is the picture's bottom, so the
+    // next line comes 13.8 pt below as after any line of that text. A picture
+    // alone in a paragraph makes a line exactly as tall as itself: the
+    // paragraph mark, here of 11 pt Carlito, adds nothing below.
+    let serif = font("Liberation Serif", 24);
+    let run = |text: &str| format!(r#"<w:r><w:rPr>{serif}</w:rPr><w:t xml:space="preserve">{text}</w:t></w:r>"#);
+    let single = r#"<w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>"#;
+    let body = format!(
+        "<w:p>{single}{}<w:r>{}</w:r>{}</w:p><w:p>{single}<w:r>{}</w:r></w:p><w:p>{single}{}</w:p>",
+        run("P02 text then image "),
+        inline_picture(108, 43),
+        run(&format!(" then text. {LOREM}")),
+        inline_picture(432, 144),
+        run("after"),
+    );
+    let styles = r#"<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Carlito" w:hAnsi="Carlito"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>"#;
+    let page = pages(&Source { body: &body, styles, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let (small, wide) = (images(&page)[0], images(&page)[1]);
+    let top = page.body.0;
+
+    assert!(close(small.1, top, 0.01), "the picture's top is the line's top: {small:?}");
+    assert!(close(page.lines[0].baseline, top + 43.0, 0.01), "{}", page.lines[0].baseline);
+    assert!(close(small.0, starts(&page, "P02") + 98.63, 0.05), "after the text before it: {small:?}");
+    assert!(close(page.lines[1].baseline - page.lines[0].baseline, 13.8, 0.03));
+    // The text of the line is its characters only.
+    assert!(page.lines[0].text.starts_with("P02 text then image  then text."), "{}", page.lines[0].text);
+
+    let above = page.lines.iter().rfind(|line| line.baseline < wide.1).unwrap().baseline;
+    assert!(close(wide.1, above + 2.6, 0.05), "right under the line above: {wide:?} after {above}");
+    let after = page.lines.iter().find(|line| line.text == "after").unwrap().baseline;
+    assert!(close(after, wide.1 + 144.0 + 11.2, 0.05), "{after} after a picture at {}", wide.1);
+}
+
+#[test]
+fn a_picture_that_does_not_fit_beside_the_text_goes_to_the_next_line() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let serif = font("Liberation Serif", 24);
+    let body = format!(
+        r#"<w:p><w:r><w:rPr>{serif}</w:rPr><w:t>some words before it</w:t></w:r><w:r>{}</w:r><w:r><w:rPr>{serif}</w:rPr><w:t>after</w:t></w:r></w:p>"#,
+        inline_picture(400, 50)
+    );
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let picture = images(&page)[0];
+    assert_eq!(page.lines.len(), 2);
+    assert!(close(picture.0, starts(&page, "some"), 0.01), "at the start of the second line: {picture:?}");
+    assert!(picture.1 > page.lines[0].baseline && close(picture.1 + 50.0, page.lines[1].baseline, 0.01));
+    assert_eq!(page.lines[1].text, "after");
+}
+
+#[test]
+fn a_multiple_of_single_spacing_multiplies_the_text_and_not_the_picture() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // A picture of 100 pt alone in a paragraph set at two lines, its mark in
+    // 12 pt Liberation Serif (13.8 pt to the line): the line is the picture
+    // and one more line of the mark, 113.8 pt, not twice the picture.
+    let serif = font("Liberation Serif", 24);
+    let body = format!(
+        r#"<w:p><w:pPr><w:spacing w:line="480" w:lineRule="auto"/><w:rPr>{serif}</w:rPr></w:pPr><w:r>{}</w:r></w:p>{}"#,
+        inline_picture(100, 100),
+        paragraph(&serif, "", "after"),
+    );
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let after = page.lines.iter().find(|line| line.text == "after").unwrap().baseline;
+    assert!(close(after, page.body.0 + 100.0 + 13.8 + 11.2, 0.05), "{after} below a top of {}", page.body.0);
 }

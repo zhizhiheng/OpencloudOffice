@@ -9,6 +9,8 @@ use std::fmt::Write;
 
 use owned_ttf_parser::OutlineBuilder;
 
+use oco_docx::Media;
+
 use crate::fonts::FontDb;
 use crate::{Item, Page, Rgb};
 
@@ -44,7 +46,41 @@ fn n(value: f32) -> String {
     text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-pub fn render(page: &Page, fonts: &FontDb) -> String {
+/// What kind of image a file is, if it is a kind that viewers of SVG draw.
+/// Windows metafiles (EMF, WMF) and TIFF are not.
+fn media_type(bytes: &[u8]) -> Option<&'static str> {
+    match bytes {
+        [0x89, b'P', b'N', b'G', ..] => Some("image/png"),
+        [0xFF, 0xD8, ..] => Some("image/jpeg"),
+        [b'G', b'I', b'F', b'8', ..] => Some("image/gif"),
+        [b'B', b'M', ..] => Some("image/bmp"),
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => Some("image/webp"),
+        _ => {
+            let start = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes).trim_ascii_start();
+            (start.starts_with(b"<svg") || start.starts_with(b"<?xml")).then_some("image/svg+xml")
+        }
+    }
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let word = chunk.iter().fold(0u32, |word, &byte| word << 8 | u32::from(byte)) << (8 * (3 - chunk.len()));
+        for digit in 0..4 {
+            if digit <= chunk.len() {
+                out.push(DIGITS[(word >> (18 - 6 * digit) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// Draws a page. `media` is where the pictures on it are found
+/// ([`oco_docx::Docx::media`]); they are put into the SVG itself.
+pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> String {
     let mut definitions: BTreeMap<(usize, u16), String> = BTreeMap::new();
     let mut body = String::new();
     for item in &page.items {
@@ -130,6 +166,48 @@ pub fn render(page: &Page, fonts: &FontDb) -> String {
                 };
                 let _ = writeln!(body, r#"<circle cx="{}" cy="{}" r="{}" {paint}/>"#, n(cx), n(cy), n(r));
             }
+            Item::Image { x, y, width, height, ref part, crop } => {
+                let file = part.as_ref().and_then(|part| media.get(part)).and_then(|file| file.bytes().ok());
+                let Some((kind, file)) = file.as_deref().and_then(|bytes| Some((media_type(bytes)?, bytes))) else {
+                    // Nothing to show: a frame with a cross marks the room the object takes.
+                    let (right, bottom) = (n(x + width), n(y + height));
+                    let _ = writeln!(
+                        body,
+                        r##"<path d="M{0} {1}H{right}V{bottom}H{0}ZM{0} {1}L{right} {bottom}M{right} {1}L{0} {bottom}" fill="#f4f4f4" stroke="#b0b0b0" stroke-width="0.5"/>"##,
+                        n(x),
+                        n(y)
+                    );
+                    continue;
+                };
+                let [left, top, right, bottom] = crop;
+                let (across, down) = ((1.0 - left - right).max(0.001), (1.0 - top - bottom).max(0.001));
+                let source = format!(r#"preserveAspectRatio="none" href="data:{kind};base64,{}""#, base64(file));
+                if crop == [0.0; 4] {
+                    let _ = writeln!(
+                        body,
+                        r#"<image x="{}" y="{}" width="{}" height="{}" {source}/>"#,
+                        n(x),
+                        n(y),
+                        n(width),
+                        n(height)
+                    );
+                } else {
+                    // The box shows a part of the image: the whole is laid under it and cut by an inner viewport.
+                    let (whole_width, whole_height) = (width / across, height / down);
+                    let _ = writeln!(
+                        body,
+                        r#"<svg x="{}" y="{}" width="{}" height="{}"><image x="{}" y="{}" width="{}" height="{}" {source}/></svg>"#,
+                        n(x),
+                        n(y),
+                        n(width),
+                        n(height),
+                        n(0.0 - left * whole_width),
+                        n(0.0 - top * whole_height),
+                        n(whole_width),
+                        n(whole_height)
+                    );
+                }
+            }
         }
     }
 
@@ -151,4 +229,86 @@ pub fn render(page: &Page, fonts: &FontDb) -> String {
     out.push_str(&body);
     out.push_str("</svg>\n");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encodes_base64_with_padding() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"M"), "TQ==");
+        assert_eq!(base64(b"Ma"), "TWE=");
+        assert_eq!(base64(b"Man"), "TWFu");
+        assert_eq!(base64(&[0xFB, 0xFF, 0xFE, 0x00]), "+//+AA==");
+    }
+
+    #[test]
+    fn tells_the_images_a_viewer_can_draw() {
+        assert_eq!(media_type(b"\x89PNG\r\n\x1a\n...."), Some("image/png"));
+        assert_eq!(media_type(b"\xFF\xD8\xFF\xE0"), Some("image/jpeg"));
+        assert_eq!(media_type(b"GIF89a"), Some("image/gif"));
+        assert_eq!(media_type(b"\xEF\xBB\xBF <svg xmlns='...'/>"), Some("image/svg+xml"));
+        // An enhanced metafile: nothing a browser draws.
+        assert_eq!(media_type(b"\x01\x00\x00\x00\x6c\x00\x00\x00"), None);
+        assert_eq!(media_type(b""), None);
+    }
+
+    #[test]
+    fn draws_a_picture_from_the_documents_media_and_a_frame_where_there_is_none() {
+        let mut writer = oco_docx::zip::Writer::new();
+        let w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        let wp = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+        let a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        let pic = "http://schemas.openxmlformats.org/drawingml/2006/picture";
+        let r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        writer.add(
+            "word/document.xml",
+            format!(
+                r#"<w:document xmlns:w="{w}"><w:body><w:p><w:r><w:drawing><wp:inline xmlns:wp="{wp}"><wp:extent cx="12700" cy="12700"/>
+                   <a:graphic xmlns:a="{a}"><a:graphicData><pic:pic xmlns:pic="{pic}"><pic:blipFill><a:blip xmlns:r="{r}" r:embed="rId1"/>
+                   </pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p></w:body></w:document>"#
+            )
+            .as_bytes(),
+        );
+        writer.add(
+            "word/_rels/document.xml.rels",
+            format!(
+                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                   <Relationship Id="rId1" Type="{r}/image" Target="media/image1.png"/></Relationships>"#
+            )
+            .as_bytes(),
+        );
+        writer.add("word/media/image1.png", b"\x89PNG and so on");
+        let docx = oco_docx::Docx::from_bytes(&writer.finish()).unwrap();
+        let picture = |part: Option<&str>, crop| Item::Image {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+            part: part.map(str::to_owned),
+            crop,
+        };
+        let draw = |item| {
+            let page = Page { width: 100.0, height: 100.0, items: vec![item], ..Page::default() };
+            render(&page, &FontDb::default(), &docx.media)
+        };
+
+        let whole = draw(picture(Some("word/media/image1.png"), [0.0; 4]));
+        let data = format!("href=\"data:image/png;base64,{}\"", base64(b"\x89PNG and so on"));
+        assert!(whole.contains(r#"<image x="10" y="20" width="30" height="40" preserveAspectRatio="none""#), "{whole}");
+        assert!(whole.contains(&data), "{whole}");
+
+        // A quarter cut away at the left and half at the bottom: the whole image is 40 by 80, moved left by 10.
+        let cropped = draw(picture(Some("word/media/image1.png"), [0.25, 0.0, 0.0, 0.5]));
+        assert!(
+            cropped
+                .contains(r#"<svg x="10" y="20" width="30" height="40"><image x="-10" y="0" width="40" height="80""#),
+            "{cropped}"
+        );
+
+        let missing = draw(picture(None, [0.0; 4]));
+        assert!(!missing.contains("<image") && missing.contains(r#"<path d="M10 20H40V60H10Z"#), "{missing}");
+    }
 }

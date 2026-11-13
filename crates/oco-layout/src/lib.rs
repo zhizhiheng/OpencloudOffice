@@ -77,12 +77,24 @@ pub enum Item {
         color: Rgb,
         filled: bool,
     },
+    /// A picture, or the box of an object that cannot be shown yet.
+    Image {
+        x: f32,
+        /// Top.
+        y: f32,
+        width: f32,
+        height: f32,
+        /// The image among the document's media ([`oco_docx::Docx::media`]).
+        part: Option<String>,
+        /// The share of the image cut away at the left, top, right and bottom.
+        crop: [f32; 4],
+    },
 }
 
 impl Item {
     fn translate(&mut self, dx: f32, dy: f32) {
         match self {
-            Item::Glyph { x, y, .. } | Item::Rect { x, y, .. } => {
+            Item::Glyph { x, y, .. } | Item::Rect { x, y, .. } | Item::Image { x, y, .. } => {
                 *x += dx;
                 *y += dy;
             }
@@ -157,6 +169,8 @@ pub enum Content {
     Char(char),
     Tab,
     Break(BreakKind),
+    /// A picture or another object that stands in the line.
+    Object,
     /// Word's record that a page began at this point when it last laid the
     /// document out. It takes up no place of its own.
     PageBreakHint,
@@ -184,8 +198,12 @@ pub fn content(docx: &Docx, paragraph: &oco_docx::Paragraph, mut visit: impl FnM
                 RunContent::Tab => visit(Content::Tab),
                 RunContent::Break(kind) => visit(Content::Break(*kind)),
                 RunContent::PageBreakHint => visit(Content::PageBreakHint),
-                // Not laid out yet.
-                RunContent::Drawing(_) => {}
+                // An anchored object takes no place in the text.
+                RunContent::Drawing(drawing) => {
+                    if drawing.anchor.is_none() {
+                        visit(Content::Object);
+                    }
+                }
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
                     shown.chars().for_each(|ch| visit(Content::Char(ch)));
                 }

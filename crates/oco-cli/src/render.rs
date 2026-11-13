@@ -76,7 +76,7 @@ pub fn run(arguments: &Arguments) -> ExitCode {
         "missing_fonts": layout.missing_fonts,
         "beyond_body_text": crate::score::beyond_body_text(&docx),
     });
-    if let Err(error) = write(&arguments.out, &pages, &fonts, &summary) {
+    if let Err(error) = write(&arguments.out, &pages, &fonts, &docx, &summary) {
         eprintln!("oco: {}: {error}", arguments.out.display());
         return ExitCode::FAILURE;
     }
@@ -85,11 +85,17 @@ pub fn run(arguments: &Arguments) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn write(out: &Path, pages: &[oco_layout::Page], fonts: &FontDb, summary: &serde_json::Value) -> std::io::Result<()> {
+fn write(
+    out: &Path,
+    pages: &[oco_layout::Page],
+    fonts: &FontDb,
+    docx: &Docx,
+    summary: &serde_json::Value,
+) -> std::io::Result<()> {
     fs::create_dir_all(out)?;
     fs::write(out.join("layout.json"), summary.to_string())?;
     for (index, page) in pages.iter().enumerate() {
-        fs::write(out.join(format!("page-{}.svg", index + 1)), svg::render(page, fonts))?;
+        fs::write(out.join(format!("page-{}.svg", index + 1)), svg::render(page, fonts, &docx.media))?;
     }
     // Line positions in the shape tools/zh/reference.py writes for LibreOffice.
     let summary: Vec<_> = pages

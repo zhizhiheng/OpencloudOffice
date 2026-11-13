@@ -67,9 +67,19 @@ impl Arguments {
 pub fn beyond_body_text(docx: &Docx) -> bool {
     let unsupported =
         |needles: &[&str]| docx.coverage.unsupported.keys().any(|key| needles.iter().any(|n| key.contains(n)));
-    let table = |block: &Block| matches!(block, Block::Table(_));
-    docx.document.body.iter().any(table)
-        || docx.stories.values().flatten().any(table)
+    // A table or a drawing anywhere: in the body, or in a header or footer.
+    fn beyond(blocks: &[Block]) -> bool {
+        blocks.iter().any(|block| match block {
+            Block::Table(_) => true,
+            Block::Paragraph(paragraph) => paragraph
+                .runs
+                .iter()
+                .flat_map(|run| &run.content)
+                .any(|piece| matches!(piece, oco_docx::RunContent::Drawing(_))),
+        })
+    }
+    beyond(&docx.document.body)
+        || docx.stories.values().any(|story| beyond(story))
         || unsupported(&[
             "w:drawing",
             "w:pict",
@@ -174,7 +184,7 @@ fn record(docx: &Docx) -> Record {
                     after_break = false;
                     record.characters += 1;
                 }
-                Content::Tab | Content::Break(BreakKind::Line) => after_break = false,
+                Content::Tab | Content::Object | Content::Break(BreakKind::Line) => after_break = false,
             }
             record.text.push(match piece {
                 Content::Char(ch) => ch,
