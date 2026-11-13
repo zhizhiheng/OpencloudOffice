@@ -8,3 +8,6 @@
 /testdata/*/wps/*.pdf
 __pycache__/
 /.claude/worktrees/
+/web/oco.wasm
+/web/fonts/
+/web/samples/

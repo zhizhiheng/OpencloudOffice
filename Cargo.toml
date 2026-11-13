@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oco-docx", "crates/oco-layout", "crates/oco-cli"]
+members = ["crates/oco-docx", "crates/oco-layout", "crates/oco-cli", "crates/oco-wasm"]
 
 [workspace.package]
 version = "0.0.1"
@@ -14,3 +14,12 @@ oco-layout = { path = "crates/oco-layout" }
 owned_ttf_parser = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# For the WebAssembly module: small, and a panic is a trap.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

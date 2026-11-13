@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpencloudOffice 查看器</title>
+<style>
+  :root {
+    --bar: #ffffff;
+    --desk: #e9ebee;
+    --ink: #1f2328;
+    --soft: #5c6670;
+    --line: #d4d8dd;
+    --accent: #1f6feb;
+    --warn: #9a5b00;
+    --warn-bg: #fff6e0;
+    --error: #b42318;
+    --error-bg: #fdecea;
+    font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--desk); }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    padding: 8px 14px; background: var(--bar); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0 8px 0 0; white-space: nowrap; }
+  header .group { display: flex; align-items: center; gap: 6px; }
+  header .spring { flex: 1; }
+  button, select, input[type="url"] {
+    font: inherit; color: inherit; height: 30px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  }
+  button { cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: #aab2bb; background: #f6f8fa; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1a5fd0; border-color: #1a5fd0; }
+  button.square { width: 30px; padding: 0; font-size: 16px; }
+  button[aria-pressed="true"] { background: #e8f0fe; border-color: var(--accent); }
+  input[type="url"] { width: 170px; }
+  select { max-width: 150px; }
+  #zoom-value { min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; }
+  #page-indicator { color: var(--soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  #progress { height: 3px; background: transparent; }
+  #progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #desk { flex: 1; overflow: auto; padding: 20px; position: relative; }
+  #pages { display: flex; flex-direction: column; align-items: center; gap: 16px; min-width: min-content; }
+  .page { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .04); flex: none; }
+  .page svg { display: block; width: 100%; height: 100%; }
+
+  #welcome {
+    max-width: 520px; margin: 12vh auto 0; padding: 32px; text-align: center; color: var(--soft);
+    border: 2px dashed #bcc3cb; border-radius: 12px; background: rgba(255, 255, 255, .5);
+  }
+  #welcome strong { display: block; font-size: 17px; color: var(--ink); margin-bottom: 6px; }
+  body.dragging #desk { outline: 3px solid var(--accent); outline-offset: -6px; }
+
+  #status { padding: 0 14px; color: var(--soft); min-height: 0; }
+  #status:not(:empty) { padding: 6px 14px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  #status.error { color: var(--error); background: var(--error-bg); }
+
+  aside {
+    width: 300px; flex: none; overflow: auto; padding: 16px; background: var(--bar);
+    border-left: 1px solid var(--line);
+  }
+  aside[hidden] { display: none; }
+  aside h2 { font-size: 13px; font-weight: 600; margin: 18px 0 6px; color: var(--soft); }
+  aside h2:first-child { margin-top: 0; }
+  aside dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
+  aside dt { color: var(--soft); }
+  aside dd { margin: 0; word-break: break-all; }
+  aside ul { margin: 0; padding-left: 18px; }
+  aside .note { padding: 8px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
+  aside .fine { padding: 8px 10px; border-radius: 6px; background: #e7f6ec; color: #17633a; }
+  aside p { margin: 6px 0; }
+
+  @media (max-width: 760px) {
+    aside { position: absolute; right: 0; top: 0; bottom: 0; box-shadow: -4px 0 12px rgba(0, 0, 0, .12); z-index: 2; }
+    main { position: relative; }
+    input[type="url"] { width: 140px; }
+    #desk { padding: 12px 8px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>OpencloudOffice 查看器</h1>
+  <div class="group">
+    <button class="primary" id="open">打开文件</button>
+    <select id="samples" hidden aria-label="示例文档"><option value="">示例文档…</option></select>
+  </div>
+  <form class="group" id="url-form">
+    <input type="url" id="url" placeholder="文档网址（如对象存储的链接）" aria-label="文档网址">
+    <button>打开网址</button>
+  </form>
+  <div class="spring"></div>
+  <span id="page-indicator"></span>
+  <div class="group">
+    <button class="square" id="zoom-out" title="缩小" aria-label="缩小">−</button>
+    <span id="zoom-value">100%</span>
+    <button class="square" id="zoom-in" title="放大" aria-label="放大">+</button>
+    <button id="zoom-fit" title="让页面宽度占满窗口">适合宽度</button>
+  </div>
+  <div class="group">
+    <button id="add-font" title="添加本机的字体文件，文档里用到它的地方会按它重新排版">添加字体</button>
+    <button id="info-toggle" aria-pressed="false">文档信息</button>
+  </div>
+</header>
+<div id="progress"><div></div></div>
+<div id="status" role="status"></div>
+<main>
+  <div id="desk">
+    <div id="welcome">
+      <strong>把 .docx 文件拖到这里</strong>
+      或者点击“打开文件”。文件只在这个浏览器里读取和排版，不会上传到任何地方。
+    </div>
+    <div id="pages"></div>
+  </div>
+  <aside id="info" hidden></aside>
+</main>
+<input type="file" id="file" accept=".docx,.docm,.dotx,.dotm" hidden>
+<input type="file" id="font-file" accept=".ttf,.otf,.ttc" multiple hidden>
+<script type="module" src="viewer.js"></script>
+</body>
+</html>

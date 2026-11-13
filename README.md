@@ -4,7 +4,9 @@
 
 内核用 Rust 编写，编译成 WebAssembly 供浏览器使用，也可编译成原生库供 App 和服务端使用，各端排版结果一致。
 
-**当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文、表格、页眉页脚和页码排成页面并输出 SVG，行高与 Word 实测一致）。表格按内容定列宽、合并单元格、跨页拆行都已实现；图片、脚注尚未排版，也还不能编辑。
+**当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文、表格、页眉页脚、页码和行内图片排成页面并输出 SVG，行高与 Word 实测一致）。内核已经能在浏览器里跑：`web/` 下有一个查看器，打开本地或网址上的 docx，逐页显示。浮动图片、脚注尚未排版，也还不能编辑。
+
+**原生实现。** zip 解压、XML 解析都是自己写的，读取内核不依赖任何第三方库；浏览器接口是手写的，不用 wasm-bindgen 之类的生成工具。换掉通用 zip 库之后，4 份带重名条目的探针文档读得和 Word 一样了（通用库取后一个条目，Word 取目录里的前一个）。
 
 还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 90.2% 的行断行相同、69.2% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.3% 和 95.7%。见 [docs/fidelity.md](docs/fidelity.md)。
 
@@ -48,12 +50,26 @@ cargo run --release -p oco-cli -- render testdata/zh/07-regulation.docx --out ou
 
 每页写成一个 SVG，字形以轮廓形式嵌入，用浏览器直接打开即可。
 
+在浏览器里看（需要 `rustup target add wasm32-unknown-unknown`）：
+
+```sh
+tools/web/build.sh                     # 编译 web/oco.wasm，并把字体和示例文档链接到 web/ 下
+python3 -m http.server -d web 8000     # 然后打开 http://localhost:8000
+```
+
+查看器可以打开本地文件（也可以拖进来）、网址上的文件（`?file=<网址>`），可以添加本机的字体文件；侧栏列出这份文档里还不能按 Word 的样子显示的内容。文件只在浏览器里读取和排版，不上传。`web/oco.js` 是给 JavaScript 用的接口，约 150 行，用法见文件开头。
+
+浏览器里排出的页面与命令行逐字节相同：`node tools/web/check.mjs` 对 259 份文档、658 页做过比较，没有一处不同。完整内核的 WASM 是 527 KB，gzip 后 226 KB。
+
 ## 目录
 
 | 路径 | 内容 |
 |---|---|
-| `crates/oco-docx` | docx 读取：容器、样式、主题字体、编号、页面设置、格式继承计算 |
+| `crates/oco-docx` | docx 读取：zip 和 XML 的读取、容器、样式、主题字体、编号、页面设置、图片、格式继承计算 |
 | `crates/oco-layout` | 排版：字体度量与替换、断行、行高、编号、分页，输出 SVG |
+| `crates/oco-wasm` | 内核的 WebAssembly 接口：一组 C 接口函数，不引入任何外部符号 |
+| `web` | 浏览器查看器，以及给 JavaScript 用的接口 `oco.js` |
+| `tools/web` | 构建查看器；检查 WASM 版与原生版输出一致 |
 | `crates/oco-cli` | 命令行工具 `oco`：`inspect` 查看格式，`render` 排版输出，`corpus` 批量测试，`score` 对照 Word 的分页记录打分 |
 | `testdata/zh` | 11 份中文版式测试文档，由 `tools/zh/gen_corpus.py` 生成 |
 | `testdata/zh-open` | 同样的 11 份，字体名换成开源字体，用于与 WPS 逐行对照；`wps/` 下是 WPS 的排版结果 |

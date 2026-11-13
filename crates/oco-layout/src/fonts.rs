@@ -263,16 +263,25 @@ impl FontDb {
                 continue;
             }
             let Ok(data) = fs::read(&path) else { continue };
-            let count = owned_ttf_parser::fonts_in_collection(&data).unwrap_or(1);
-            for index in 0..count {
-                if let Ok(face) = OwnedFace::from_vec(data.clone(), index) {
-                    self.add(Font::new(face));
-                }
-            }
+            self.add(data);
         }
     }
 
-    fn add(&mut self, font: Font) {
+    /// Adds the faces of a font file held in memory (a collection has
+    /// several) and returns how many there were: none if it is not a font.
+    pub fn add(&mut self, data: Vec<u8>) -> usize {
+        let count = owned_ttf_parser::fonts_in_collection(&data).unwrap_or(1);
+        let mut added = 0;
+        for index in 0..count {
+            if let Ok(face) = OwnedFace::from_vec(data.clone(), index) {
+                self.register(Font::new(face));
+                added += 1;
+            }
+        }
+        added
+    }
+
+    fn register(&mut self, font: Font) {
         let id = FontId(self.fonts.len());
         for family in &font.families {
             self.by_family.entry(family.clone()).or_default().push(id);

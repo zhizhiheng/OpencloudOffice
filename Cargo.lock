@@ -41,6 +41,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oco-wasm"
+version = "0.0.1"
+dependencies = [
+ "oco-docx",
+ "oco-layout",
+]
+
+[[package]]
 name = "owned_ttf_parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
