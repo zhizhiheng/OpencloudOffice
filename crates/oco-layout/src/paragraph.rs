@@ -291,7 +291,7 @@ impl Builder<'_> {
                 RunContent::Break(BreakKind::Line) => push(self, '\n', Kind::LineBreak, None),
                 RunContent::Break(_) => push(self, '\n', Kind::PageBreak, None),
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
-                RunContent::PageBreakHint => {}
+                RunContent::PageBreakHint | RunContent::Drawing(_) => {}
                 // What Word last showed; a header or footer has the real
                 // number put in before it is laid out.
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {

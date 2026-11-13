@@ -2,8 +2,9 @@
 //! states exactly the markup it depends on, plus two real-world fixtures.
 
 use oco_docx::{
-    Block, BreakKind, Color, Docx, Error, FontRef, Highlight, OtherFormat, ParaProps, RevisionKind, RunContent,
-    RunProps, Statistics, Underline, VertAlign, VerticalMerge,
+    Alignment, Block, BreakKind, Color, Docx, Drawing, Error, FontRef, Highlight, Offset, OtherFormat, ParaProps,
+    Placement, RelativeTo, RevisionKind, RunContent, RunProps, Statistics, Underline, VertAlign, VerticalMerge, Wrap,
+    WrapSide,
 };
 
 const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
@@ -653,6 +654,80 @@ fn rejects_files_that_are_not_documents() {
     assert!(matches!(Docx::from_bytes(&no_document), Err(Error::NoMainDocument)));
     let broken = zip(&[("word/document.xml", "<w:document".to_owned())]);
     assert!(matches!(Docx::from_bytes(&broken), Err(Error::Xml { part, .. }) if part == "word/document.xml"));
+}
+
+#[test]
+fn reads_pictures_with_their_size_placement_and_file() {
+    let wp = r#"xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing""#;
+    let a = r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main""#;
+    let pic = r#"xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture""#;
+    let r = format!(r#"xmlns:r="{DOC_RELS}""#);
+    let graphic = |id: &str| {
+        format!(
+            r#"<a:graphic {a}><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic {pic}>
+               <pic:blipFill><a:blip {r} r:embed="{id}"/><a:srcRect l="10000" b="2500"/></pic:blipFill></pic:pic></a:graphicData></a:graphic>"#
+        )
+    };
+    let body = format!(
+        r#"<w:p><w:r><w:t>a</w:t><w:drawing><wp:inline {wp}><wp:extent cx="1371600" cy="548640"/>
+             <wp:docPr id="1" name="p1" descr="a chart"/>{inline}</wp:inline></w:drawing></w:r></w:p>
+           <w:p><w:r><w:drawing><wp:anchor {wp} distT="0" distB="12700" distL="114300" distR="114300" behindDoc="1"
+               layoutInCell="1" allowOverlap="0" relativeHeight="251658240">
+             <wp:positionH relativeFrom="page"><wp:posOffset>914400</wp:posOffset></wp:positionH>
+             <wp:positionV relativeFrom="paragraph"><wp:align>bottom</wp:align></wp:positionV>
+             <wp:extent cx="100" cy="200"/><wp:wrapSquare wrapText="left"/><wp:docPr id="2" name="p2"/>{anchored}
+           </wp:anchor></w:drawing></w:r></w:p>"#,
+        inline = graphic("rId7"),
+        anchored = graphic("rId8"),
+    );
+    let package = zip(&[
+        ("word/document.xml", format!("<w:document {W}><w:body>{body}</w:body></w:document>")),
+        (
+            "word/_rels/document.xml.rels",
+            format!(
+                r#"<Relationships xmlns="{PKG_RELS}">
+                   <Relationship Id="rId7" Type="{DOC_RELS}/image" Target="media/image1.png"/>
+                   <Relationship Id="rId8" Type="{DOC_RELS}/image" Target="https://example.org/far.png" TargetMode="External"/>
+                   </Relationships>"#
+            ),
+        ),
+        ("word/media/image1.png", "not really a picture".to_owned()),
+    ]);
+    let docx = Docx::from_bytes(&package).unwrap();
+    let drawings: Vec<&Drawing> = docx
+        .document
+        .paragraphs()
+        .iter()
+        .flat_map(|p| &p.runs)
+        .flat_map(|run| &run.content)
+        .filter_map(|piece| match piece {
+            RunContent::Drawing(drawing) => Some(&**drawing),
+            _ => None,
+        })
+        .collect();
+
+    let inline = drawings[0];
+    assert_eq!((inline.width, inline.height), (1371600, 548640));
+    assert_eq!(inline.anchor, None);
+    assert_eq!(inline.description.as_deref(), Some("a chart"));
+    let picture = inline.picture.as_ref().unwrap();
+    assert_eq!(picture.part.as_deref(), Some("word/media/image1.png"));
+    assert_eq!(picture.crop, [10000, 0, 0, 2500]);
+    assert_eq!(docx.media["word/media/image1.png"].bytes().unwrap(), b"not really a picture");
+
+    let anchored = drawings[1];
+    let anchor = anchored.anchor.as_ref().unwrap();
+    assert_eq!(anchor.horizontal, Placement { relative_to: RelativeTo::Page, offset: Offset::By(914400) });
+    assert_eq!(
+        anchor.vertical,
+        Placement { relative_to: RelativeTo::Paragraph, offset: Offset::Align(Alignment::End) }
+    );
+    assert_eq!((anchor.wrap, anchor.wrap_side), (Wrap::Square, WrapSide::Left));
+    assert_eq!(anchor.distance, [0, 12700, 114300, 114300]);
+    assert!(anchor.behind_text && anchor.in_cell && !anchor.allow_overlap);
+    // A linked picture has no part to show.
+    assert_eq!(anchored.picture.as_ref().unwrap().part, None);
+    assert_eq!(docx.media.len(), 1);
 }
 
 #[test]

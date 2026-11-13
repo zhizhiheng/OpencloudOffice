@@ -11,6 +11,7 @@
 
 mod coverage;
 mod document;
+mod drawing;
 mod error;
 mod inflate;
 mod numbering;
@@ -36,6 +37,7 @@ pub use coverage::Coverage;
 pub use document::{
     Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell, TableRow,
 };
+pub use drawing::{Alignment, Anchor, Drawing, Offset, Picture, Placement, RelativeTo, Wrap, WrapSide, EMU_PER_POINT};
 pub use error::{Error, OtherFormat, Result};
 pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering, Suffix};
 pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
@@ -49,6 +51,52 @@ pub use values::{Color, Emphasis, Highlight, Underline, VertAlign};
 
 use opc::Package;
 
+/// A file embedded in the document, such as a picture. It is kept as the
+/// package holds it and unpacked when asked for.
+#[derive(Debug, Clone)]
+pub struct Media(zip::Packed);
+
+impl Media {
+    /// The file's bytes.
+    pub fn bytes(&self) -> Result<Vec<u8>> {
+        Ok(self.0.unpack(opc::MAX_PART_SIZE)?)
+    }
+}
+
+/// Replaces the relationship ids that the pictures of a story were read
+/// with by the names of the parts they stand for, and collects those parts.
+fn resolve_pictures(
+    blocks: &mut [Block],
+    relationships: &[opc::Relationship],
+    package: &mut Package<impl Read + Seek>,
+    media: &mut BTreeMap<String, Media>,
+) {
+    for block in blocks {
+        match block {
+            Block::Paragraph(paragraph) => {
+                for piece in paragraph.runs.iter_mut().flat_map(|run| &mut run.content) {
+                    let RunContent::Drawing(drawing) = piece else { continue };
+                    let Some(picture) = &mut drawing.picture else { continue };
+                    let id = picture.part.take();
+                    let target = relationships.iter().find(|r| Some(&r.id) == id.as_ref() && !r.external);
+                    let Some(target) = target.map(|r| r.target.clone()) else { continue };
+                    if !media.contains_key(&target) {
+                        // A picture that cannot be read is shown as missing, not as an error.
+                        let Ok(Some(packed)) = package.read_packed(&target) else { continue };
+                        media.insert(target.clone(), Media(packed));
+                    }
+                    picture.part = Some(target);
+                }
+            }
+            Block::Table(table) => {
+                for cell in table.rows.iter_mut().flat_map(|row| &mut row.cells) {
+                    resolve_pictures(&mut cell.blocks, relationships, package, media);
+                }
+            }
+        }
+    }
+}
+
 /// A parsed `.docx` file.
 #[derive(Debug, Clone)]
 pub struct Docx {
@@ -60,6 +108,9 @@ pub struct Docx {
     /// The content of the headers and footers, by the relationship id that
     /// a section names them with ([`Section::headers`], [`Section::footers`]).
     pub stories: BTreeMap<String, Vec<Block>>,
+    /// The picture files the document shows, by the name of their package
+    /// part ([`Picture::part`]).
+    pub media: BTreeMap<String, Media>,
     /// Page, line and character counts recorded by the application that
     /// last saved the document.
     pub recorded: Statistics,
@@ -107,7 +158,7 @@ impl Docx {
         };
 
         let xml = package.read_xml(&main)?.ok_or_else(|| Error::MissingPart(main.clone()))?;
-        let document =
+        let mut document =
             Document::parse(&xml, &mut coverage).map_err(|source| Error::Xml { part: main.clone(), source })?;
 
         // Everything else is optional. A document whose styles or settings are
@@ -117,6 +168,8 @@ impl Docx {
             warnings.push(error.to_string());
             Vec::new()
         });
+        let mut media = BTreeMap::new();
+        resolve_pictures(&mut document.body, &relationships, &mut package, &mut media);
         let mut read_related = |kind: &str| -> Option<String> {
             let part = &relationships.iter().find(|r| !r.external && r.rel_type.ends_with(kind))?.target;
             match package.read_xml(part) {
@@ -187,7 +240,10 @@ impl Docx {
                 Ok((blocks, seen))
             });
             match read {
-                Ok((blocks, seen)) => {
+                Ok((mut blocks, seen)) => {
+                    // A header's pictures are named in the relationships of the header's own part.
+                    let own = package.relationships(Some(&relationship.target)).unwrap_or_default();
+                    resolve_pictures(&mut blocks, &own, &mut package, &mut media);
                     coverage.merge(seen);
                     stories.insert(relationship.id.clone(), blocks);
                 }
@@ -204,7 +260,7 @@ impl Docx {
         let recorded =
             package.read_xml(&recorded).ok().flatten().and_then(|xml| Statistics::parse(&xml).ok()).unwrap_or_default();
 
-        Ok(Docx { document, styles, theme, numbering, settings, stories, recorded, coverage, warnings })
+        Ok(Docx { document, styles, theme, numbering, settings, stories, media, recorded, coverage, warnings })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {

@@ -54,6 +54,14 @@ impl<R: Read + Seek> Package<R> {
         }
     }
 
+    /// A part still as the archive holds it, or `None` if the package has no such part.
+    pub fn read_packed(&mut self, name: &str) -> Result<Option<zip::Packed>> {
+        match self.index.get(&normalize(name)) {
+            Some(&i) => Ok(Some(self.archive.read_packed(i)?)),
+            None => Ok(None),
+        }
+    }
+
     /// Reads an XML part as text. Parts are UTF-8 or UTF-16 (Part 2 §8.1.4).
     pub fn read_xml(&mut self, name: &str) -> Result<Option<String>> {
         let Some(bytes) = self.read_part(name)? else {

@@ -184,6 +184,8 @@ pub fn content(docx: &Docx, paragraph: &oco_docx::Paragraph, mut visit: impl FnM
                 RunContent::Tab => visit(Content::Tab),
                 RunContent::Break(kind) => visit(Content::Break(*kind)),
                 RunContent::PageBreakHint => visit(Content::PageBreakHint),
+                // Not laid out yet.
+                RunContent::Drawing(_) => {}
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
                     shown.chars().for_each(|ch| visit(Content::Char(ch)));
                 }

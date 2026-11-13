@@ -11,6 +11,7 @@ use crate::xmltree::Node;
 use serde::Serialize;
 
 use crate::coverage::Coverage;
+use crate::drawing::Drawing;
 use crate::props::{ParaProps, RunProps};
 use crate::section::Section;
 use crate::table::{CellProps, RowProps, TableProps};
@@ -81,6 +82,8 @@ pub enum RunContent {
     Text(String),
     Tab,
     Break(BreakKind),
+    /// `w:drawing`: a picture or another object, in the line or anchored to it.
+    Drawing(Box<Drawing>),
     /// `w:sym`: one character drawn in `font` whatever the run's own font is.
     Symbol {
         font: Option<String>,
@@ -173,7 +176,7 @@ impl Run {
                 RunContent::Tab => "\t".to_owned(),
                 RunContent::Break(_) => "\n".to_owned(),
                 RunContent::Symbol { character, .. } => character.to_string(),
-                RunContent::PageBreakHint => String::new(),
+                RunContent::PageBreakHint | RunContent::Drawing(_) => String::new(),
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => shown.clone(),
             })
             .collect()
@@ -643,10 +646,16 @@ fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
             run.field_marks.extend(mark.map(|mark| (run.content.len(), mark)));
         }
         Some("instrText") => run.field_marks.push((run.content.len(), FieldMark::Code(text_of(child)))),
+        Some("drawing") => {
+            if let Some(drawing) = crate::drawing::read(child) {
+                run.content.push(RunContent::Drawing(Box::new(drawing)));
+            }
+            // Read, but not laid out yet: it still counts as not shown.
+            coverage.miss(Some("w:r"), child);
+        }
         // Not modelled yet. Named so that they are not mistaken for wrappers.
         Some(
-            "drawing"
-            | "pict"
+            "pict"
             | "object"
             | "delInstrText"
             | "footnoteReference"

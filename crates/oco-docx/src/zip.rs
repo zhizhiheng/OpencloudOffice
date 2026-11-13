@@ -164,12 +164,20 @@ impl<R: Read + Seek> Archive<R> {
 
     /// The decompressed bytes of an entry, refused when there are more than `limit` of them.
     pub fn read(&mut self, index: usize, limit: u64) -> Result<Vec<u8>> {
+        if self.entries[index].size > limit {
+            return Err(Error::TooLarge);
+        }
+        self.read_packed(index)?.unpack(limit)
+    }
+
+    /// An entry as it lies in the archive, to be unpacked when it is wanted.
+    pub fn read_packed(&mut self, index: usize) -> Result<Packed> {
         let entry = &self.entries[index];
         if entry.flags & 1 != 0 {
             return Err(Error::Unsupported("encrypted entry"));
         }
-        if entry.size > limit {
-            return Err(Error::TooLarge);
+        if !matches!(entry.method, 0 | 8) {
+            return Err(Error::Unsupported("compression method"));
         }
         let header = read_at(&mut self.reader, entry.header, 30)?;
         if u32_at(&header, 0) != LOCAL_HEADER {
@@ -182,18 +190,36 @@ impl<R: Read + Seek> Archive<R> {
             return Err(Error::Invalid("the file is cut short"));
         }
         let data = read_at(&mut self.reader, start, entry.compressed as usize)?;
+        Ok(Packed { data, deflated: entry.method == 8, size: entry.size, crc: entry.crc })
+    }
+}
+
+/// The content of an entry, still compressed if the archive holds it so.
+/// Keeping a picture like this costs neither the time nor the room of unpacking it.
+#[derive(Debug, Clone)]
+pub struct Packed {
+    data: Vec<u8>,
+    deflated: bool,
+    size: u64,
+    crc: u32,
+}
+
+impl Packed {
+    /// The decompressed bytes, refused when there are more than `limit` of them.
+    pub fn unpack(&self, limit: u64) -> Result<Vec<u8>> {
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
-        let data = match entry.method {
-            0 if data.len() as u64 > limit as u64 => return Err(Error::TooLarge),
-            0 => data,
-            8 => inflate(&data, entry.size as usize, limit).map_err(|error| match error {
+        let data = if self.deflated {
+            inflate(&self.data, self.size as usize, limit).map_err(|error| match error {
                 inflate::Error::TooLarge => Error::TooLarge,
                 inflate::Error::Truncated => Error::Invalid("compressed data cut short"),
                 inflate::Error::Invalid(what) => Error::Invalid(what),
-            })?,
-            _ => return Err(Error::Unsupported("compression method")),
+            })?
+        } else if self.data.len() > limit {
+            return Err(Error::TooLarge);
+        } else {
+            self.data.clone()
         };
-        if crc32(&data) != entry.crc {
+        if crc32(&data) != self.crc {
             return Err(Error::Invalid("checksum mismatch"));
         }
         Ok(data)
