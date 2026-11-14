@@ -9,11 +9,11 @@
   "document": "testdata/release/opencloudoffice-0.0.1.docx",
   "pages": 2,
   "searchQuery": "文档",
-  "searchCount": "1 / 7",
+  "searchCount": "1 / 8",
   "screenshots": [
-    "viewer-document.png",
-    "viewer-search.png",
-    "viewer-footnotes.png"
+    "preview-document.png",
+    "preview-search.png",
+    "preview-footnotes.png"
   ],
   "method": "Playwright captures of the actual viewer and WASM output; no DOM or CSS substitutions."
 }

@@ -28,5 +28,5 @@ OpencloudOffice 源代码采用 Apache-2.0。第三方字体、测试材料和�
 
 - `testdata/zh`、`testdata/zh-open`、`testdata/probes`、`testdata/details` 和 `testdata/release` 的生成器随仓库提供。
 - Word 对照材料来自 [docx4j](https://github.com/plutext/docx4j)，对应提交和来源记录在审计文档中。大语料及参考 PDF 不包含在浏览器或命令行发行包中。
-- `docs/images/viewer-*.png` 是 OpencloudOffice 的真实运行截图。`opencloudoffice-0.0.1-hero.png` 是 ImageGen 生成的产品概念图，提示词随仓库保存。
+- `docs/images/preview-*.png` 是 OpencloudOffice 的真实运行截图。`opencloudoffice-hero.jpg` 是项目作者提供的产品主视觉，按原图保存。
 - Microsoft Word 和 WPS Office 的名称仅用于说明对照来源；它们不属于本项目。

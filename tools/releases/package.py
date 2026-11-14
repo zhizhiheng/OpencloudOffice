@@ -108,31 +108,13 @@ def main():
     copy(ROOT / "testdata/details/display-details.docx", web / "samples/display-details.docx")
     sample_names = [demo.name, "display-details.docx"] + [p.name for p in sorted((ROOT / "testdata/zh").glob("*.docx"))]
     (web / "samples/index.json").write_text(json.dumps(sample_names) + "\n")
-    (web / "README.txt").write_text("OpencloudOffice 0.0.1 — 浏览器查看器\n\n在此目录启动静态服务器：\n  python3 -m http.server 8000 --bind 127.0.0.1\n然后打开 http://localhost:8000，选择示例文档或打开本地 DOCX。\n需要 HTTP 服务；直接双击 index.html 的 file:// 模式不能加载 Worker / WASM。\n字体和示例已包含，不需要安装 Rust。文件在浏览器本地处理。\n\n此版本为开发者预览，编辑、DOC 二进制解析、完整 Markdown 尚未实现。\n代码采用 Apache-2.0，字体许可见 licenses/fonts。\n", encoding="utf-8")
-    (sdk / "README.md").write_text('''# OpencloudOffice 0.0.1 WASM SDK
-
-Serve these files over HTTP. Import the ES module and supply your font files:
-
-```js
-import { Oco } from "./oco.js";
-const core = await Oco.load("./oco.wasm");
-core.addFont(await (await fetch("./fonts/your-font.ttf")).arrayBuffer());
-const file = document.querySelector('input[type="file"]').files[0];
-const doc = core.open(await file.arrayBuffer(), file.name);
-document.querySelector("#page").innerHTML = doc.pageSvg(0);
-console.log(doc.info());
-doc.close();
-```
-
-This small SDK archive does not bundle fonts. The full web archive includes
-open fonts and their licenses. See oco.js for the API; the viewer-client.js /
-viewer-worker.js pair provides the asynchronous worker interface.
-API stability is not promised for this first developer preview.
-''')
+    copy(ROOT / "docs/releases/packages/web.md", web / "README.md")
+    copy(ROOT / "docs/images/opencloudoffice-hero.jpg", web / "assets/hero.jpg")
+    copy(ROOT / "docs/releases/packages/sdk.md", sdk / "README.md")
     copy(ROOT / "target/release/oco", cli / "bin/oco")
     (cli / "bin/oco").chmod(0o755)
     copy(demo, cli / "samples" / demo.name)
-    (cli / "README.txt").write_text("OpencloudOffice 0.0.1 — Linux x86_64 CLI\nBuilt on Ubuntu 22.04 with glibc.\n\n  ./bin/oco --version\n  ./bin/oco inspect samples/opencloudoffice-0.0.1.docx\n  ./bin/oco render samples/opencloudoffice-0.0.1.docx --fonts /path/to/web-package/fonts --out rendered\n\nThe CLI package does not include fonts. Use the fonts directory in the web package\nor provide your own .ttf / .otf / .ttc files. Render writes one SVG per page.\nThe legacy .doc reader is not implemented; Markdown is currently plain paragraphs.\nSee LICENSE and licenses/crates for licensing.\n")
+    copy(ROOT / "docs/releases/packages/cli.md", cli / "README.md")
     metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--locked", "--format-version", "1"], cwd=ROOT))
     dependencies = []
     for package in metadata["packages"]:

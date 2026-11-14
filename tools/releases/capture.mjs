@@ -38,26 +38,26 @@ try {
   assert.equal(await page.locator(".page").count(), 2);
   while (parseFloat(await page.locator("#zoom-value").textContent()) > 100) await page.click("#zoom-out");
   await page.click("#info-toggle");
-  await page.screenshot({ path: resolve(out, "viewer-document.png") });
+  await page.screenshot({ path: resolve(out, "preview-document.png") });
 
   await page.click("#info-toggle");
   await page.click("#search-toggle");
   await page.locator("#search-query").fill("文档");
   await page.waitForFunction(() => document.querySelectorAll(".search-hit").length > 0);
-  await page.screenshot({ path: resolve(out, "viewer-search.png") });
+  await page.screenshot({ path: resolve(out, "preview-search.png") });
   const searchCount = await page.locator("#search-count").textContent();
   await page.click("#search-close");
 
   await page.locator("#page-number").fill("2");
   await page.locator("#page-number").press("Enter");
   await page.locator('.page[data-page="1"][data-rendered]').waitFor();
-  await page.screenshot({ path: resolve(out, "viewer-footnotes.png") });
+  await page.screenshot({ path: resolve(out, "preview-footnotes.png") });
   assert.deepEqual(errors, []);
   await writeFile(resolve(out, "screenshots.json"), JSON.stringify({
     version: "0.0.1", browser: await browser.version(), viewport: { width: 1440, height: 1200 },
     zoom: await page.locator("#zoom-value").textContent(),
     document: "testdata/release/opencloudoffice-0.0.1.docx", pages: 2, searchQuery: "文档", searchCount,
-    screenshots: ["viewer-document.png", "viewer-search.png", "viewer-footnotes.png"],
+    screenshots: ["preview-document.png", "preview-search.png", "preview-footnotes.png"],
     method: "Playwright captures of the actual viewer and WASM output; no DOM or CSS substitutions.",
   }, null, 2) + "\n");
   console.log("3 screenshots captured; 2 pages; " + searchCount + "; no browser errors");
