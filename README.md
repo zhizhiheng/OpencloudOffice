@@ -2,8 +2,6 @@
 
 ![OpencloudOffice 0.0.1](docs/images/opencloudoffice-0.0.1-hero.png)
 
-*ImageGen 生成的产品印象图。*
-
 [![Version](https://img.shields.io/badge/version-0.0.1-1f6feb)](https://github.com/zhizhiheng/OpencloudOffice/releases/tag/v0.0.1)
 [![License](https://img.shields.io/badge/license-Apache--2.0-12846f)](LICENSE)
 [![Build](https://github.com/zhizhiheng/OpencloudOffice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhizhiheng/OpencloudOffice/actions/workflows/ci.yml)
