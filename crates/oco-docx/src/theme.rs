@@ -118,6 +118,9 @@ pub struct Settings {
     /// The Word version whose layout rules the document asks for; 15 is
     /// current, and a document that does not say gets 12.
     pub compatibility_mode: i32,
+    /// How notes are numbered in the whole document, unless a section says otherwise.
+    pub footnotes: crate::section::NoteProps,
+    pub endnotes: crate::section::NoteProps,
 }
 
 impl Default for Settings {
@@ -130,6 +133,8 @@ impl Default for Settings {
             no_tab_hang_indent: false,
             even_and_odd_headers: false,
             compatibility_mode: 12,
+            footnotes: Default::default(),
+            endnotes: Default::default(),
         }
     }
 }
@@ -145,6 +150,8 @@ impl Settings {
                     settings.default_tab_stop = crate::xml::twips(crate::xml::val(node)).unwrap_or(720).max(1);
                 }
                 Some("evenAndOddHeaders") => settings.even_and_odd_headers = crate::xml::on_off(node),
+                Some("footnotePr") => settings.footnotes = crate::section::NoteProps::parse(node),
+                Some("endnotePr") => settings.endnotes = crate::section::NoteProps::parse(node),
                 Some("characterSpacingControl") => {
                     settings.compress_punctuation =
                         crate::xml::val(node).is_some_and(|v| v.starts_with("compressPunctuation"));

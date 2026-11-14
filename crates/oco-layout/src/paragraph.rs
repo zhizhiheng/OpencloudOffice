@@ -50,6 +50,12 @@ pub struct Paragraph<'a> {
     /// Resolved properties of the paragraph mark, which sizes an empty paragraph.
     pub mark: RunProps,
     pub label: Option<LabelSpec>,
+    /// For each note reference in the runs, in order: the note, as the
+    /// caller numbers notes, and what the reference shows (nothing where
+    /// the text supplies a mark of its own).
+    pub notes: Vec<(usize, Option<String>)>,
+    /// In a note, what its own mark (`w:footnoteRef`) shows.
+    pub note_mark: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -82,6 +88,8 @@ pub struct Line {
     /// The lines of text inside the text boxes that stand in this line,
     /// placed as `parts` are.
     pub inner: Vec<PlacedLine>,
+    /// The notes the line refers to, as the caller numbers them.
+    pub notes: Vec<usize>,
 }
 
 impl Line {
@@ -189,6 +197,11 @@ struct Atom {
     label: bool,
     /// The object the atom stands for, among the builder's `objects`.
     object: Option<usize>,
+    /// The note the atom refers to, as the caller numbers them.
+    note: Option<usize>,
+    /// The atom carries on the piece of content before it, as the second
+    /// figure of a note number does: it does not count as a place of its own.
+    extra: bool,
 }
 
 /// A picture or another object in the line: its box, and what to draw in it.
@@ -251,6 +264,13 @@ struct Builder<'a> {
     anchored: Vec<Anchored>,
     /// The number of the run being pushed, among the paragraph's own.
     run: usize,
+    /// The note references still to come, and what a note's own mark shows.
+    notes: std::collections::VecDeque<(usize, Option<String>)>,
+    note_mark: Option<String>,
+    /// The notes whose references show nothing themselves, each with the
+    /// number of atoms before its reference: it belongs to the line of the
+    /// mark that follows it.
+    marked: Vec<(usize, usize)>,
 }
 
 impl Builder<'_> {
@@ -359,6 +379,8 @@ impl Builder<'_> {
                 descent: choice.line_box.descent * base,
                 label,
                 object: None,
+                note: None,
+                extra: false,
             });
         };
         for piece in content {
@@ -413,6 +435,29 @@ impl Builder<'_> {
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
                     shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
                 }
+                // A reference shows the number of its note in the run's own
+                // format, which the reference style makes superscript.
+                RunContent::NoteReference { .. } => {
+                    let Some((note, shown)) = self.notes.pop_front() else { continue };
+                    let first = self.atoms.len();
+                    let Some(shown) = shown else {
+                        self.marked.push((first, note));
+                        continue;
+                    };
+                    shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
+                    for (at, atom) in self.atoms.iter_mut().enumerate().skip(first) {
+                        atom.note = Some(note);
+                        atom.extra = at > first;
+                    }
+                }
+                RunContent::NoteMark => {
+                    let first = self.atoms.len();
+                    let shown = self.note_mark.clone().unwrap_or_default();
+                    shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
+                    self.atoms.iter_mut().skip(first + 1).for_each(|atom| atom.extra = true);
+                }
+                // The line is drawn by the caller, in the line of the paragraph that holds it.
+                RunContent::NoteSeparator(_) => {}
             }
         }
     }
@@ -622,6 +667,9 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
         objects: Vec::new(),
         anchored: Vec::new(),
         run: 0,
+        notes: paragraph.notes.iter().cloned().collect(),
+        note_mark: paragraph.note_mark.clone(),
+        marked: Vec::new(),
     };
 
     if let Some(label) = &paragraph.label {
@@ -656,7 +704,8 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
 /// line past the end of `shape` has the full width.
 pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, shape: &[(f32, f32)]) -> Laid {
     let props = paragraph.props;
-    let Builder { styles, mut atoms, missing_fonts, objects, anchored, .. } = prepare(paragraph, fonts, context);
+    let Builder { styles, mut atoms, missing_fonts, objects, anchored, marked, .. } =
+        prepare(paragraph, fonts, context);
 
     // An empty paragraph is as tall as one line of its paragraph mark.
     let mark_size = paragraph.mark.size.map_or(10.0, |half| half as f32 / 2.0);
@@ -1061,7 +1110,17 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         };
 
         let mut line = Line { height, baseline, needed, page_break_after: br.page_break, ..Line::default() };
-        line.offset = atoms[..br.start].iter().filter(|a| !a.label).count();
+        line.offset = atoms[..br.start].iter().filter(|a| !a.label && !a.extra).count();
+        // A note whose reference brings a mark of its own goes with the
+        // line of what follows the reference: the mark.
+        let marked = marked
+            .iter()
+            .filter(|(at, _)| breaks.iter().position(|br| *at < br.end).unwrap_or(breaks.len() - 1) == number);
+        for note in range.iter().filter_map(|atom| atom.note).chain(marked.map(|(_, note)| *note)) {
+            if !line.notes.contains(&note) {
+                line.notes.push(note);
+            }
+        }
         let mut x = origin + offset;
         // A right-aligned or centred label is set against the line's origin.
         if number == 0 {

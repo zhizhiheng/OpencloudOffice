@@ -229,6 +229,9 @@ pub fn content(docx: &Docx, paragraph: &oco_docx::Paragraph, mut visit: impl FnM
                         visit(Content::Object);
                     }
                 }
+                // A note's number counts as one place, as a picture does.
+                RunContent::NoteReference { custom: false, .. } | RunContent::NoteMark => visit(Content::Object),
+                RunContent::NoteReference { .. } | RunContent::NoteSeparator(_) => {}
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
                     shown.chars().for_each(|ch| visit(Content::Char(ch)));
                 }
@@ -251,6 +254,7 @@ impl Default for Options {
 const TWIP: f32 = 1.0 / 20.0;
 
 /// A block ready to be placed on a page.
+#[derive(Default)]
 struct Unit {
     lines: Vec<paragraph::Line>,
     before: f32,
@@ -766,6 +770,123 @@ struct Builder<'a> {
     /// The numbering of the list items in the header and footer of the
     /// page being laid out.
     story_counters: Counters,
+    /// The notes the document refers to, in the order of their first references.
+    notes: Vec<NoteEntry>,
+    /// What the mark of the note being laid out shows (`w:footnoteRef`).
+    note_mark: Option<String>,
+    /// The numbering of list items in footnotes and in endnotes, each kind
+    /// numbered apart from the body and on from one note to the next.
+    note_counters: [Counters; 2],
+}
+
+/// A note the document refers to, as the layout numbers it.
+struct NoteEntry {
+    endnote: bool,
+    id: String,
+    /// What the references to it and its own mark show.
+    shown: String,
+}
+
+/// A note laid out.
+struct LaidNote {
+    /// Its lines, each with how far down the note it begins.
+    lines: Vec<(f32, paragraph::Line)>,
+    height: f32,
+    /// For each line, whether the note may be parted before it: between
+    /// two of its paragraphs, and inside one where the paragraph's own
+    /// rules allow (not where its lines keep together, and with two lines
+    /// at least on either side where it guards against lone lines).
+    breaks: Vec<bool>,
+    /// The space after its last paragraph, which `height` includes.
+    after: f32,
+}
+
+impl LaidNote {
+    /// How tall the lines `from..to` are, with what is between them.
+    fn part(&self, from: usize, to: usize) -> f32 {
+        let at = |index: usize| self.lines.get(index).map_or(self.height, |(offset, _)| *offset);
+        at(to) - at(from)
+    }
+
+    /// The next line after `from` that the note may be parted before: the
+    /// number of its lines if there is none.
+    fn next_break(&self, from: usize) -> usize {
+        (from + 1..self.lines.len()).find(|&line| self.breaks[line]).unwrap_or(self.lines.len())
+    }
+
+    /// The space after the note's last paragraph, if the lines `..to` are all of it.
+    fn tail(&self, to: usize) -> f32 {
+        if to == self.lines.len() {
+            self.after
+        } else {
+            0.0
+        }
+    }
+
+    /// Up to which line the note goes into `room` from the line `from` on,
+    /// as the last thing on its page: as far as it fits and may be parted.
+    /// `forced` puts its first part in whatever the room, so that a note
+    /// taller than a page still goes on.
+    fn take(&self, from: usize, room: f32, forced: bool) -> usize {
+        let mut to = from;
+        while to < self.lines.len() {
+            let next = self.next_break(to);
+            if self.part(from, next) - self.tail(next) > room + 0.01 && !(forced && to == from) {
+                break;
+            }
+            to = next;
+        }
+        to
+    }
+}
+
+/// What the notes running on from the page before leave of a page for its
+/// text, at the least. (An assumption: no document at hand shows what Word
+/// does with a note longer than a page.)
+const LEAST_TEXT: f32 = 24.0;
+
+/// A part of a note: the note and the range of its lines.
+type NotePart = (usize, usize, usize);
+
+/// The footnotes at the foot of a page: the parts of notes there, and
+/// whether the first of them runs on from the page before.
+type PageNotes = (Vec<NotePart>, bool);
+
+/// The notes the document refers to, numbered as Word numbers them: in the
+/// order of their first references, from the number the document says
+/// (1 unless it says otherwise), in the format it says (figures for
+/// footnotes and small Roman numerals for endnotes unless it says
+/// otherwise). A reference that brings a mark of its own takes no number.
+fn number_notes(docx: &Docx) -> Vec<NoteEntry> {
+    let props = |document: &oco_docx::NoteProps, last: &oco_docx::NoteProps| {
+        let mut props = document.clone();
+        props.apply(last);
+        props
+    };
+    let kinds = [
+        props(&docx.settings.footnotes, &docx.document.section.footnotes),
+        props(&docx.settings.endnotes, &docx.document.section.endnotes),
+    ];
+    let mut next = kinds.clone().map(|props| props.start.unwrap_or(1));
+    let mut notes: Vec<NoteEntry> = Vec::new();
+    for paragraph in docx.document.paragraphs() {
+        let shown =
+            paragraph.runs.iter().filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content()));
+        for piece in shown.flat_map(|run| &run.content) {
+            let RunContent::NoteReference { endnote, id, custom } = piece else { continue };
+            if notes.iter().any(|note| note.endnote == *endnote && note.id == *id) {
+                continue;
+            }
+            let kind = usize::from(*endnote);
+            let format = kinds[kind].format.as_deref().unwrap_or(if *endnote { "lowerRoman" } else { "decimal" });
+            let shown = if *custom { String::new() } else { format_number(format, next[kind]) };
+            if !custom {
+                next[kind] += 1;
+            }
+            notes.push(NoteEntry { endnote: *endnote, id: id.clone(), shown });
+        }
+    }
+    notes
 }
 
 /// What the columns of an auto-fit table ask for, each across its whole
@@ -1060,7 +1181,20 @@ impl Builder<'_> {
         let mark = self.resolver.run_in(style, &source.mark_props, &self.table_styles);
         // The caller puts the properties in; they cannot be borrowed from here.
         let placeholder = NONE.get_or_init(ParaProps::default);
-        (props, paragraph::Paragraph { props: placeholder, runs, mark, label })
+        // The notes the paragraph refers to, as this layout numbers them.
+        let notes = runs
+            .iter()
+            .flat_map(|(_, content)| content.iter())
+            .filter_map(|piece| match piece {
+                RunContent::NoteReference { endnote, id, custom } => {
+                    let index = self.notes.iter().position(|note| note.endnote == *endnote && note.id == *id)?;
+                    Some((index, (!custom).then(|| self.notes[index].shown.clone())))
+                }
+                _ => None,
+            })
+            .collect();
+        let note_mark = self.note_mark.clone();
+        (props, paragraph::Paragraph { props: placeholder, runs, mark, label, notes, note_mark })
     }
 
     /// The least and the most room these blocks need across, each laid out
@@ -1231,6 +1365,74 @@ impl Builder<'_> {
             record(&line, left, down + offset, &mut lines);
         }
         (items, lines)
+    }
+
+    /// Lays out the note with the given index at the width of `section`'s
+    /// text. A note the document does not have comes out empty.
+    fn note(&mut self, index: usize, section: &Section) -> LaidNote {
+        let units = self.note_units(index, section);
+        // Where the note may be parted, should it not fit on a page: as a
+        // paragraph of the text may be between two pages.
+        let mut breaks = Vec::new();
+        let mut tied = true;
+        for unit in &units {
+            let count = if unit.row.is_some() { 1 } else { unit.lines.len() };
+            for line in 0..count {
+                breaks.push(match line {
+                    0 => !tied,
+                    _ => !unit.keep_lines && !(unit.widow_control && (line == 1 || line + 1 == count)),
+                });
+            }
+            tied = unit.keep_next;
+        }
+        let after = units.last().map_or(0.0, |unit| unit.after);
+        let (lines, height, _) = stack(units);
+        breaks.resize(lines.len(), false);
+        LaidNote { lines, height, breaks, after }
+    }
+
+    /// The note with the given index as units to place: they belong to no
+    /// paragraph of the body, so a page that begins in them begins nowhere
+    /// in the body's content.
+    fn note_units(&mut self, index: usize, section: &Section) -> Vec<Unit> {
+        let entry = &self.notes[index];
+        let notes = if entry.endnote { &self.docx.endnotes } else { &self.docx.footnotes };
+        let Some(note) = notes.iter().find(|note| note.id == entry.id && note.kind == oco_docx::NoteKind::Normal)
+        else {
+            return Vec::new();
+        };
+        let kind = usize::from(entry.endnote);
+        let mark = self.note_mark.replace(entry.shown.clone());
+        let (paragraphs, body) = (self.paragraphs, std::mem::take(&mut self.counters));
+        self.counters = std::mem::take(&mut self.note_counters[kind]);
+        let measured = std::mem::take(&mut self.demands);
+        let mut units = Vec::new();
+        self.blocks(&note.blocks, section, section.text_width() as f32 * TWIP, &mut units);
+        self.note_counters[kind] = std::mem::replace(&mut self.counters, body);
+        (self.paragraphs, self.demands, self.note_mark) = (paragraphs, measured, mark);
+        units.iter_mut().for_each(|unit| unit.paragraph = None);
+        units
+    }
+
+    /// How tall the paragraph that holds the line between the text and the
+    /// footnotes is: that of the document's separator note, or of an empty
+    /// paragraph where it has none. (Word draws the line in the middle of
+    /// that paragraph's line: docx4j's probes `footnotes` and
+    /// `footnote-space-after`.)
+    fn separator(&mut self, section: &Section, continuation: bool) -> f32 {
+        self.separator_of(section, continuation, false)
+    }
+
+    /// As [`Builder::separator`], of footnotes or of endnotes.
+    fn separator_of(&mut self, section: &Section, continuation: bool, endnotes: bool) -> f32 {
+        let kind = if continuation { oco_docx::NoteKind::ContinuationSeparator } else { oco_docx::NoteKind::Separator };
+        let empty = [Block::Paragraph(oco_docx::Paragraph::default())];
+        let notes = if endnotes { &self.docx.endnotes } else { &self.docx.footnotes };
+        let blocks = match notes.iter().find(|note| note.kind == kind) {
+            Some(note) if !note.blocks.is_empty() => note.blocks.clone(),
+            _ => empty.to_vec(),
+        };
+        stack(self.story(&blocks, section, None)).1
     }
 
     /// Lays a paragraph out a second time, its lines kept within `shape`
@@ -2063,6 +2265,9 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         unplaced: 0,
         box_counters: Counters::default(),
         story_counters: Counters::default(),
+        notes: number_notes(docx),
+        note_mark: None,
+        note_counters: [Counters::default(), Counters::default()],
     };
     let mut units = Vec::new();
     // Each section is laid out at its own text width. A section ends with
@@ -2075,6 +2280,29 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             let section = setups[number.min(setups.len() - 1)];
             builder.blocks(&body[from..=index], section, section.text_width() as f32 * TWIP, &mut units);
             (from, number) = (index + 1, number + 1);
+        }
+    }
+
+    // Endnotes come after the text, under a short line, in the order of
+    // their first references (as Word puts them by default, at the end of
+    // the document).
+    let endnotes: Vec<usize> = (0..builder.notes.len()).filter(|&index| builder.notes[index].endnote).collect();
+    if !endnotes.is_empty() {
+        let last = setups[setups.len() - 1];
+        let height = builder.separator_of(last, false, true);
+        let rule = Item::Rule {
+            x1: 0.0,
+            y1: height / 2.0,
+            x2: 144.0,
+            y2: height / 2.0,
+            width: 0.6,
+            color: [0, 0, 0],
+            dash: [0.0, 0.0],
+        };
+        let line = paragraph::Line { height, needed: height, items: vec![rule], ..paragraph::Line::default() };
+        units.push(Unit { lines: vec![line], keep_next: true, keep_lines: true, ..Unit::default() });
+        for index in endnotes {
+            units.extend(builder.note_units(index, last));
         }
     }
 
@@ -2101,6 +2329,23 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     // The number of the page being filled, as its header would show it.
     let mut number = 0;
     let (mut y, mut top, mut bottom): (f32, f32, f32);
+    // Footnotes. The notes laid out so far; for each page, the parts of
+    // notes at its foot, each a note and the range of its lines, with
+    // whether the first of them runs on from the page before; and the part
+    // still to go on the next page. The notes stand on the bottom of the
+    // page's body, `floor`, and the room they take is taken from the text
+    // as they come: `bottom` is always as far down as the text may go.
+    let mut floor: f32;
+    let mut laid_notes: HashMap<usize, LaidNote> = HashMap::new();
+    let mut page_notes: Vec<PageNotes> = Vec::new();
+    let mut carried: Vec<(usize, usize)> = Vec::new();
+    // Word 2010 and later make the space after a paragraph fit on a page
+    // with footnotes; a document in the mode of an earlier Word is
+    // paginated without that. (`stress018.docx` of the corpus, saved by
+    // Word 2007: all 27 page starts Word recorded without the rule, 24 with
+    // it. `stress008.docx`, in the mode of Word 2010: 13 of 117 with the
+    // rule, 5 without it; weak, since it drifts from Word for other reasons.)
+    let spaced = docx.settings.compatibility_mode >= 14;
     // Opens a page of the section with the given index; `$first` says that
     // the section begins on it.
     macro_rules! turn_page {
@@ -2118,6 +2363,28 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             });
             frames.push(frame);
             y = top;
+            floor = bottom;
+            page_notes.push((Vec::new(), false));
+            // What did not fit at the foot of the page before goes on at the
+            // foot of this one, under a line across the whole text.
+            if !carried.is_empty() {
+                let rule = builder.separator(section, true);
+                let mut parts: Vec<NotePart> = Vec::new();
+                for (note, from) in std::mem::take(&mut carried) {
+                    let laid = &laid_notes[&note];
+                    // In their order: once one runs on again, so do those after it.
+                    let room = floor - top - LEAST_TEXT - rule - stacked(&parts, &laid_notes, false);
+                    let to = if carried.is_empty() { laid.take(from, room, parts.is_empty()) } else { from };
+                    if to > from {
+                        parts.push((note, from, to));
+                    }
+                    if to < laid.lines.len() {
+                        carried.push((note, to));
+                    }
+                }
+                bottom = floor - rule - stacked(&parts, &laid_notes, true);
+                *page_notes.last_mut().expect("just pushed") = (parts, true);
+            }
         }};
     }
     turn_page!(0, true);
@@ -2214,6 +2481,33 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             };
             k += 1;
         }
+        // The footnotes of the lines that must stay together begin on the
+        // same page; and where the last of those lines ends its paragraph
+        // on a page with footnotes, the paragraph's space after must fit
+        // too (see `spaced`).
+        {
+            let last = &units[k];
+            let together = match (&last.row, last.keep_lines || last.widow_control && last.lines.len() <= 3) {
+                (Some(_), _) => 0,
+                (None, true) => last.lines.len(),
+                (None, false) => 1 + usize::from(last.widow_control),
+            };
+            let lines = units[index..k].iter().flat_map(|link| &link.lines).chain(last.lines.iter().take(together));
+            let (on_page, continued) = page_notes.last().expect("a page is always open");
+            let fresh = fresh_notes(lines.flat_map(|line| &line.notes), &builder.notes, on_page, &[]);
+            let section = setups[section_index.min(setups.len() - 1)];
+            for &note in &fresh {
+                laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+            }
+            let noted = !on_page.is_empty() || !fresh.is_empty();
+            if !fresh.is_empty() {
+                let rule = builder.separator(section, *continued);
+                chain += bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes));
+            }
+            if noted && spaced && last.row.is_none() && together >= last.lines.len() {
+                chain += last.after;
+            }
+        }
         let page_height = bottom - top;
         // A page has been begun inside a table: its heading rows come first.
         let mut turned = false;
@@ -2296,7 +2590,24 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                         take
                     })
                     .collect();
-                let fits = y + height <= bottom + 0.01;
+                // The footnotes the rest of the row refers to go on its page.
+                // A row that refers to some is not broken: it goes on whole.
+                let (on_page, continued) = page_notes.last().expect("a page is always open");
+                let rest = row.cells.iter().zip(&cursors).flat_map(|(cell, cursor)| {
+                    cell.lines[(*cursor).min(cell.lines.len())..].iter().flat_map(|part| &part.line.notes)
+                });
+                let fresh = fresh_notes(rest, &builder.notes, on_page, &[]);
+                for &note in &fresh {
+                    laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                }
+                let notes_height = match fresh.is_empty() {
+                    true => 0.0,
+                    false => {
+                        let rule = builder.separator(section, *continued);
+                        bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes))
+                    }
+                };
+                let fits = y + height + notes_height <= bottom + 0.01;
                 // A row breaks only where every cell that has something left
                 // gets at least a line onto this page.
                 let own = |cell: &RowCell, cursor: usize| !cell.merged && cursor < cell.lines.len();
@@ -2314,14 +2625,14 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                         .zip(&cursors)
                         .zip(&takes)
                         .all(|((cell, cursor), take)| !own(cell, *cursor) || *take > 0);
-                if !fits && !splits && !page_is_empty {
+                if !fits && (!splits || notes_height > 0.0) && !page_is_empty {
                     turn_page!(section_index, false);
                     page_is_empty = true;
                     after_break = true;
                     turned = true;
                     continue;
                 }
-                let whole = fits || !splits;
+                let whole = fits || !splits || notes_height > 0.0;
                 let number_of_pages = pages.len();
                 let page = pages.last_mut().expect("a page is always open");
                 if started < number_of_pages {
@@ -2337,6 +2648,23 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
                     .collect();
                 let part_bottom = if whole { y + height } else { bottom };
                 row.place(&ranges, whole && first_part, left, y, part_bottom, page);
+                // The notes of what was placed, at the foot of this page.
+                let on_page = &page_notes.last().expect("a page is always open").0;
+                let within = row
+                    .cells
+                    .iter()
+                    .zip(&ranges)
+                    .flat_map(|(cell, (from, to))| cell.lines[*from..*to].iter().flat_map(|part| &part.line.notes));
+                let placed = fresh_notes(within, &builder.notes, on_page, &[]);
+                if !placed.is_empty() {
+                    for &note in &placed {
+                        laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                    }
+                    let (parts, continued) = page_notes.last_mut().expect("a page is always open");
+                    let rule = builder.separator(section, *continued);
+                    put_notes(&placed, &laid_notes, parts, &mut carried, floor - rule - part_bottom);
+                    bottom = floor - rule - stacked(parts, &laid_notes, true);
+                }
                 for (cursor, (_, end)) in cursors.iter_mut().zip(&ranges) {
                     *cursor = *end;
                 }
@@ -2441,7 +2769,6 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
 
         let count = lines.len();
         for (number, line) in lines.iter().enumerate() {
-            let fits = |y: f32, line: &paragraph::Line| y + line.needed <= bottom + 0.01;
             if floats_page != pages.len() {
                 floats.clear();
                 floats_page = pages.len();
@@ -2449,15 +2776,60 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             if !floats.is_empty() {
                 y = among(&floats, y, line.height, column).0;
             }
-            // Widow control: the last line may not go to a new page alone.
-            let strands_last = unit.widow_control
-                && count >= 4
-                && number + 2 == count
-                && fits(y, line)
-                && !fits(y + line.height, &lines[number + 1]);
-            if (!fits(y, line) || strands_last) && !page_is_empty {
-                turn_page!(section_index, false);
-                after_break = true;
+            // A line goes on the page where the footnotes it refers to
+            // begin. They take room at the foot of the page, as does the
+            // line between them and the text when they are the first
+            // there. What must fit with the line is each of its notes but
+            // the last whole, and of the last as much as may stand apart
+            // from its rest: what is left of it runs on at the foot of the
+            // next page. (Word, `stress018.docx` of the corpus: the line
+            // that refers to a note of thirteen lines ends a page that has
+            // room for five of them, and the next page begins with the line
+            // after it.) Where the document is of Word 2010 or later, the
+            // space after a paragraph has to fit as well on a page with
+            // footnotes. (Word, docx4j's probes `footnotes` and
+            // `footnote-space-after`: a paragraph of three lines that would
+            // just fit goes to the next page when its space after does not.)
+            let mut fresh;
+            loop {
+                let (on_page, continued) = page_notes.last().expect("a page is always open");
+                fresh = fresh_notes(line.notes.iter(), &builder.notes, on_page, &[]);
+                // The notes of the paragraph's last line, where this is the line before it.
+                let last = match number + 2 == count {
+                    true => fresh_notes(lines[number + 1].notes.iter(), &builder.notes, on_page, &fresh),
+                    false => Vec::new(),
+                };
+                for &note in fresh.iter().chain(&last) {
+                    laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                }
+                let rule = builder.separator(section, *continued);
+                let after = |ends: bool, noted: bool| if ends && noted && spaced { unit.after } else { 0.0 };
+                // As far down as the text may go once the notes of this line have begun on the page.
+                let under = match fresh.is_empty() {
+                    true => bottom,
+                    false => floor - rule - least_with(on_page, &fresh, &laid_notes),
+                };
+                let noted = !on_page.is_empty() || !fresh.is_empty();
+                let fits = y + line.needed + after(number + 1 == count, noted) <= under + 0.01;
+                // Widow control: the last line may not go to a new page
+                // alone. It stays here if it fits below this line with what
+                // the notes of both take; a note of this line that is
+                // parted leaves it no room.
+                let strands_last = unit.widow_control && count >= 4 && number + 2 == count && fits && {
+                    let next = &lines[number + 1];
+                    let mut whole = on_page.clone();
+                    whole.extend(fresh.iter().map(|&note| (note, 0, laid_notes[&note].lines.len())));
+                    let noted = !whole.is_empty() || !last.is_empty();
+                    let under = if noted { floor - rule - least_with(&whole, &last, &laid_notes) } else { bottom };
+                    y + line.height + next.needed + after(true, noted) > under + 0.01
+                };
+                if (!fits || strands_last) && !page_is_empty {
+                    turn_page!(section_index, false);
+                    after_break = true;
+                    page_is_empty = true;
+                    continue;
+                }
+                break;
             }
             let number_of_pages = pages.len();
             let page = pages.last_mut().expect("a page is always open");
@@ -2474,6 +2846,12 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             record(line, left, y, &mut page.lines);
             y += line.height;
             page_is_empty = false;
+            if !fresh.is_empty() {
+                let (parts, continued) = page_notes.last_mut().expect("a page is always open");
+                let rule = builder.separator(section, *continued);
+                put_notes(&fresh, &laid_notes, parts, &mut carried, floor - rule - y);
+                bottom = floor - rule - stacked(parts, &laid_notes, true);
+            }
             if line.page_break_after {
                 turn_page!(section_index, false);
                 page_is_empty = true;
@@ -2501,6 +2879,59 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
             }
         }
     }
+    // Notes that run on past the last page of text get pages of their own.
+    while !carried.is_empty() {
+        let before = carried.clone();
+        turn_page!(section_index, false);
+        if carried == before {
+            break;
+        }
+    }
+    // Where the text of the last page ended is of no further use.
+    let _ = (y, bottom, floor);
+
+    // The footnotes at the foot of each page, under the line that parts
+    // them from the text: a short one, or one across the text where a note
+    // runs on from the page before. (Word, docx4j's probes `footnotes` and
+    // `footnote-space-after`: the notes end at the bottom of the body; the
+    // line is 144 pt long and 0.6 pt wide, in the middle of the line of the
+    // paragraph that holds it.)
+    for ((page, frame), (parts, continued)) in pages.iter_mut().zip(&frames).zip(&page_notes) {
+        if parts.is_empty() {
+            continue;
+        }
+        let section = setups[frame.section];
+        let left = (section.margin_left + section.gutter) as f32 * TWIP;
+        let separator = builder.separator(section, *continued);
+        let height = separator + stacked(parts, &laid_notes, true);
+        let mut y = frame.bottom - height;
+        let length = if *continued { section.text_width() as f32 * TWIP } else { 144.0 };
+        let middle = y + separator / 2.0;
+        page.items.push(Item::Rule {
+            x1: left,
+            y1: middle,
+            x2: left + length,
+            y2: middle,
+            width: 0.6,
+            color: [0, 0, 0],
+            dash: [0.0, 0.0],
+        });
+        y += separator;
+        for &(note, from, to) in parts {
+            let laid = &laid_notes[&note];
+            let start = laid.lines.get(from).map_or(laid.height, |(offset, _)| *offset);
+            for (offset, line) in &laid.lines[from..to] {
+                for item in &line.items {
+                    let mut item = item.clone();
+                    item.translate(left, y + offset - start);
+                    page.items.push(item);
+                }
+                record(line, left, y + offset - start, &mut page.lines);
+            }
+            y += laid.part(from, to);
+        }
+    }
+
     // Headers and footers go on last, when the number of pages is known.
     let count = pages.len();
     for (page, frame) in pages.iter_mut().zip(&frames) {
@@ -2564,6 +2995,74 @@ struct Frame {
 /// each begins, its height, and the objects anchored in it with the top of
 /// the paragraph each is anchored in.
 type Stacked = (Vec<(f32, paragraph::Line)>, f32, Vec<(f32, paragraph::Anchored)>);
+
+/// The footnotes among `notes` that are new to a page: not on it yet
+/// (`parts`), not among `known`, and each once.
+fn fresh_notes<'a>(
+    notes: impl Iterator<Item = &'a usize>,
+    entries: &[NoteEntry],
+    parts: &[NotePart],
+    known: &[usize],
+) -> Vec<usize> {
+    let mut fresh: Vec<usize> = Vec::new();
+    for &note in notes {
+        let seen = parts.iter().any(|part| part.0 == note) || known.contains(&note) || fresh.contains(&note);
+        if !entries[note].endnote && !seen {
+            fresh.push(note);
+        }
+    }
+    fresh
+}
+
+/// How tall parts of notes are, one under the other. With `hangs`, the
+/// space after the last paragraph of a note that ends the page's notes
+/// does not count: it hangs below the body, as the space after the last
+/// paragraph of the text does. (Word 365, `review-for-word-word15-accepted.docx`
+/// of the corpus: under a note whose paragraph has 10 pt after it, a line
+/// goes on the page that would not if that space stood on the body's bottom.)
+fn stacked(parts: &[NotePart], laid: &HashMap<usize, LaidNote>, hangs: bool) -> f32 {
+    let total: f32 = parts.iter().map(|&(note, from, to)| laid[&note].part(from, to)).sum();
+    let tail = parts.last().map_or(0.0, |&(note, _, to)| laid[&note].tail(to));
+    total - if hangs { tail } else { 0.0 }
+}
+
+/// How tall the notes at the foot of a page are at the least once the
+/// notes `fresh` have begun under those there (`parts`). Each note begins
+/// on the page of its reference: all of `fresh` but the last are there
+/// whole, and of the last at least as much as may stand apart from its rest.
+fn least_with(parts: &[NotePart], fresh: &[usize], laid: &HashMap<usize, LaidNote>) -> f32 {
+    let mut all = parts.to_vec();
+    for (index, &note) in fresh.iter().enumerate() {
+        let whole = index + 1 < fresh.len();
+        all.push((note, 0, if whole { laid[&note].lines.len() } else { laid[&note].next_break(0) }));
+    }
+    stacked(&all, laid, true)
+}
+
+/// Puts the notes `fresh` at the foot of a page, under those there
+/// (`parts`), where the notes may take `room` in all: each whole where it
+/// fits, else as much of it as fits and the rest carried to the next page,
+/// as are the notes after it. A page that has no note on it yet takes the
+/// first part of one whatever the room.
+fn put_notes(
+    fresh: &[usize],
+    laid: &HashMap<usize, LaidNote>,
+    parts: &mut Vec<NotePart>,
+    carried: &mut Vec<(usize, usize)>,
+    room: f32,
+) {
+    for &note in fresh {
+        let lines = laid[&note].lines.len();
+        let left = room - stacked(parts, laid, false);
+        let to = if carried.is_empty() { laid[&note].take(0, left, parts.is_empty()) } else { 0 };
+        if to > 0 {
+            parts.push((note, 0, to));
+        }
+        if to < lines {
+            carried.push((note, to));
+        }
+    }
+}
 
 fn stack(units: Vec<Unit>) -> Stacked {
     let mut placed = Vec::new();

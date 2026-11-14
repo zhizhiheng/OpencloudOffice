@@ -35,7 +35,8 @@ use std::path::Path;
 
 pub use coverage::Coverage;
 pub use document::{
-    Block, BreakKind, Document, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell, TableRow,
+    Block, BreakKind, Document, Note, NoteKind, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell,
+    TableRow,
 };
 pub use drawing::{
     Alignment, Anchor, Drawing, Offset, Picture, Placement, RelativeTo, TextBox, Wrap, WrapSide, EMU_PER_POINT,
@@ -44,7 +45,7 @@ pub use error::{Error, OtherFormat, Result};
 pub use numbering::{format_number, Counters, Label, LabelAlign, Level, Numbering, Suffix};
 pub use props::{Border, FontRef, Fonts, Indent, NumRef, ParaBorders, ParaProps, RunProps, Spacing, TabKind, TabStop};
 pub use resolve::Resolver;
-pub use section::{DocGrid, GridKind, Section, SectionStart, StoryRefs};
+pub use section::{DocGrid, GridKind, NoteProps, Section, SectionStart, StoryRefs};
 pub use statistics::Statistics;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use table::{CellMargins, CellProps, Edges, RowProps, TableProps, VerticalMerge};
@@ -114,6 +115,9 @@ pub struct Docx {
     /// The content of the headers and footers, by the relationship id that
     /// a section names them with ([`Section::headers`], [`Section::footers`]).
     pub stories: BTreeMap<String, Vec<Block>>,
+    /// The footnotes and endnotes, in the order of their parts.
+    pub footnotes: Vec<Note>,
+    pub endnotes: Vec<Note>,
     /// The picture files the document shows, by the name of their package
     /// part ([`Picture::part`]).
     pub media: BTreeMap<String, Media>,
@@ -230,6 +234,37 @@ impl Docx {
             })
             .unwrap_or_default();
 
+        // Footnotes and endnotes. A part that cannot be read is left out:
+        // the references show their numbers, and the notes are not shown.
+        let mut notes = |kind: &str, warnings: &mut Vec<String>, media: &mut BTreeMap<String, Media>| -> Vec<Note> {
+            let Some(relationship) = relationships.iter().find(|r| !r.external && r.rel_type.ends_with(kind)) else {
+                return Vec::new();
+            };
+            let read = package.read_xml(&relationship.target).map_err(|error| error.to_string()).and_then(|xml| {
+                let xml = xml.ok_or_else(|| format!("the {} part is missing", &kind[1..]))?;
+                let mut seen = Coverage::default();
+                let notes = Document::parse_notes(&xml, &mut seen)
+                    .map_err(|error| format!("the {} part is malformed and was ignored: {error}", &kind[1..]))?;
+                Ok((notes, seen))
+            });
+            match read {
+                Ok((mut notes, seen)) => {
+                    let own = package.relationships(Some(&relationship.target)).unwrap_or_default();
+                    for note in &mut notes {
+                        resolve_pictures(&mut note.blocks, &own, &mut package, media);
+                    }
+                    coverage.merge(seen);
+                    notes
+                }
+                Err(warning) => {
+                    warnings.push(warning);
+                    Vec::new()
+                }
+            }
+        };
+        let footnotes = notes("/footnotes", &mut warnings, &mut media);
+        let endnotes = notes("/endnotes", &mut warnings, &mut media);
+
         // Headers and footers. One that cannot be read is left out, and the
         // pages that would have shown it go without.
         let mut stories = BTreeMap::new();
@@ -266,7 +301,20 @@ impl Docx {
         let recorded =
             package.read_xml(&recorded).ok().flatten().and_then(|xml| Statistics::parse(&xml).ok()).unwrap_or_default();
 
-        Ok(Docx { document, styles, theme, numbering, settings, stories, media, recorded, coverage, warnings })
+        Ok(Docx {
+            document,
+            styles,
+            theme,
+            numbering,
+            settings,
+            stories,
+            footnotes,
+            endnotes,
+            media,
+            recorded,
+            coverage,
+            warnings,
+        })
     }
 
     pub fn resolver(&self) -> Resolver<'_> {

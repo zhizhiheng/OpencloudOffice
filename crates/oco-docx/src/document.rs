@@ -68,6 +68,28 @@ pub struct Run {
     pub(crate) field_marks: Vec<(usize, FieldMark)>,
 }
 
+/// A footnote or an endnote (`w:footnote`, `w:endnote`).
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct Note {
+    /// What the references to the note name it by.
+    pub id: String,
+    pub kind: NoteKind,
+    pub blocks: Vec<Block>,
+}
+
+/// What a note is for. Only `Normal` notes are referred to from the text;
+/// the others hold the lines drawn between the text and the notes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum NoteKind {
+    Normal,
+    Separator,
+    ContinuationSeparator,
+    ContinuationNotice,
+}
+
 /// A part of a complex field (`w:fldChar`, `w:instrText`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FieldMark {
@@ -86,6 +108,20 @@ pub enum RunContent {
     Break(BreakKind),
     /// `w:drawing`: a picture or another object, in the line or anchored to it.
     Drawing(Box<Drawing>),
+    /// `w:footnoteReference`, `w:endnoteReference`: where a note is
+    /// referred to; it shows the note's number, unless the run that follows
+    /// supplies a mark of its own (`custom`).
+    NoteReference {
+        endnote: bool,
+        id: String,
+        custom: bool,
+    },
+    /// `w:footnoteRef`, `w:endnoteRef`: in a note, the note's own number.
+    NoteMark,
+    /// `w:separator`, `w:continuationSeparator`: the line between the text
+    /// and the notes under it; `true` for the one where a note runs on from
+    /// the page before.
+    NoteSeparator(bool),
     /// `w:sym`: one character drawn in `font` whatever the run's own font is.
     Symbol {
         font: Option<String>,
@@ -178,7 +214,11 @@ impl Run {
                 RunContent::Tab => "\t".to_owned(),
                 RunContent::Break(_) => "\n".to_owned(),
                 RunContent::Symbol { character, .. } => character.to_string(),
-                RunContent::PageBreakHint | RunContent::Drawing(_) => String::new(),
+                RunContent::PageBreakHint
+                | RunContent::Drawing(_)
+                | RunContent::NoteReference { .. }
+                | RunContent::NoteMark
+                | RunContent::NoteSeparator(_) => String::new(),
                 RunContent::PageNumber(shown) | RunContent::PageCount(shown) => shown.clone(),
             })
             .collect()
@@ -203,6 +243,24 @@ impl Document {
         let mut blocks = Vec::new();
         parse_blocks(tree.root_element(), 0, &mut blocks, coverage);
         Ok(blocks)
+    }
+
+    /// The notes of a footnotes or endnotes part (`w:footnotes`, `w:endnotes`).
+    pub(crate) fn parse_notes(xml: &str, coverage: &mut Coverage) -> Result<Vec<Note>, crate::xmltree::Error> {
+        let tree = crate::xmltree::Document::parse(xml)?;
+        let mut notes = Vec::new();
+        for node in elements(tree.root_element()).filter(|n| matches!(w_name(*n), Some("footnote" | "endnote"))) {
+            let kind = match w_attr(node, "type") {
+                Some("separator") => NoteKind::Separator,
+                Some("continuationSeparator") => NoteKind::ContinuationSeparator,
+                Some("continuationNotice") => NoteKind::ContinuationNotice,
+                _ => NoteKind::Normal,
+            };
+            let mut blocks = Vec::new();
+            parse_blocks(node, 0, &mut blocks, coverage);
+            notes.push(Note { id: w_attr(node, "id").unwrap_or_default().to_owned(), kind, blocks });
+        }
+        Ok(notes)
     }
 
     pub(crate) fn parse(xml: &str, coverage: &mut Coverage) -> Result<Self, crate::xmltree::Error> {
@@ -668,29 +726,20 @@ fn parse_run_children(node: Node, run: &mut Run, coverage: &mut Coverage) {
             }
             run.content.extend(drawing.map(|drawing| RunContent::Drawing(Box::new(drawing))));
         }
+        Some(kind @ ("footnoteReference" | "endnoteReference")) => {
+            run.content.push(RunContent::NoteReference {
+                endnote: kind == "endnoteReference",
+                id: w_attr(child, "id").unwrap_or_default().to_owned(),
+                custom: crate::xml::on_off_attr(child, "customMarkFollows").unwrap_or(false),
+            });
+        }
+        Some("footnoteRef" | "endnoteRef") => run.content.push(RunContent::NoteMark),
+        Some("separator") => run.content.push(RunContent::NoteSeparator(false)),
+        Some("continuationSeparator") => run.content.push(RunContent::NoteSeparator(true)),
         // Not modelled yet. Named so that they are not mistaken for wrappers.
         Some(
-            "pict"
-            | "object"
-            | "delInstrText"
-            | "footnoteReference"
-            | "endnoteReference"
-            | "commentReference"
-            | "footnoteRef"
-            | "endnoteRef"
-            | "annotationRef"
-            | "separator"
-            | "continuationSeparator"
-            | "ruby"
-            | "ptab"
-            | "pgNum"
-            | "dayShort"
-            | "dayLong"
-            | "monthShort"
-            | "monthLong"
-            | "yearShort"
-            | "yearLong"
-            | "contentPart",
+            "pict" | "object" | "delInstrText" | "commentReference" | "annotationRef" | "ruby" | "ptab" | "pgNum"
+            | "dayShort" | "dayLong" | "monthShort" | "monthLong" | "yearShort" | "yearLong" | "contentPart",
         ) => coverage.miss(Some("w:r"), child),
         _ => {
             let before = run.content.len();

@@ -2,9 +2,9 @@
 //! states exactly the markup it depends on, plus two real-world fixtures.
 
 use oco_docx::{
-    Alignment, Block, BreakKind, Color, Docx, Drawing, Error, FontRef, Highlight, Offset, OtherFormat, ParaProps,
-    Placement, RelativeTo, RevisionKind, RunContent, RunProps, Statistics, Underline, VertAlign, VerticalMerge, Wrap,
-    WrapSide,
+    Alignment, Block, BreakKind, Color, Docx, Drawing, Error, FontRef, Highlight, NoteKind, Offset, OtherFormat,
+    ParaProps, Placement, RelativeTo, RevisionKind, RunContent, RunProps, Statistics, Underline, VertAlign,
+    VerticalMerge, Wrap, WrapSide,
 };
 
 const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
@@ -622,6 +622,100 @@ fn reads_headers_and_footers_and_which_pages_they_are_for() {
     assert_eq!((last.margin_top, last.margin_top_fixed), (1440, false));
     assert_eq!((last.page_number_start, last.page_number_format.as_deref()), (Some(5), Some("lowerRoman")));
     assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+}
+
+#[test]
+fn reads_footnotes_and_endnotes_and_how_they_are_numbered() {
+    let relationship = |id: &str, kind: &str, target: &str| {
+        format!(r#"<Relationship Id="{id}" Type="{DOC_RELS}/{kind}" Target="{target}"/>"#)
+    };
+    let body = r#"<w:p><w:r><w:t>text</w:t></w:r><w:r><w:footnoteReference w:id="2"/></w:r>
+             <w:r><w:footnoteReference w:id="3" w:customMarkFollows="1"/><w:t>*</w:t></w:r>
+             <w:r><w:endnoteReference w:id="1"/></w:r></w:p>
+           <w:sectPr><w:footnotePr><w:pos w:val="beneathText"/><w:numFmt w:val="lowerLetter"/></w:footnotePr>
+             <w:endnotePr><w:numRestart w:val="eachSect"/></w:endnotePr></w:sectPr>"#;
+    let footnotes = r#"<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>
+           <w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
+           <w:footnote w:type="continuationNotice" w:id="1"><w:p/></w:footnote>
+           <w:footnote w:id="2"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t> a note</w:t></w:r></w:p><w:p><w:r><w:t>more</w:t></w:r></w:p></w:footnote>
+           <w:footnote w:id="3"><w:p><w:r><w:t>* starred</w:t></w:r></w:p></w:footnote>"#;
+    let endnotes =
+        r#"<w:endnote w:id="1"><w:p><w:r><w:endnoteRef/></w:r><w:r><w:t> the end</w:t></w:r></w:p></w:endnote>"#;
+    let settings = r#"<w:footnotePr><w:numFmt w:val="decimalEnclosedCircleChinese"/><w:numStart w:val="4"/>
+           <w:numRestart w:val="eachPage"/><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>"#;
+    let parts = |footnotes: &str| {
+        zip(&[
+            (
+                "word/_rels/document.xml.rels",
+                format!(
+                    r#"<Relationships xmlns="{PKG_RELS}">{}{}{}</Relationships>"#,
+                    relationship("rId1", "footnotes", "footnotes.xml"),
+                    relationship("rId2", "endnotes", "endnotes.xml"),
+                    relationship("rId3", "settings", "settings.xml"),
+                ),
+            ),
+            ("word/document.xml", format!("<w:document {W}><w:body>{body}</w:body></w:document>")),
+            ("word/footnotes.xml", format!("<w:footnotes {W}>{footnotes}</w:footnotes>")),
+            ("word/endnotes.xml", format!("<w:endnotes {W}>{endnotes}</w:endnotes>")),
+            ("word/settings.xml", format!("<w:settings {W}>{settings}</w:settings>")),
+        ])
+    };
+    let docx = Docx::from_bytes(&parts(footnotes)).unwrap();
+    // The references, in the text.
+    let content: Vec<&RunContent> = docx.document.paragraphs()[0].runs.iter().flat_map(|run| &run.content).collect();
+    let reference =
+        |endnote: bool, id: &str, custom: bool| RunContent::NoteReference { endnote, id: id.to_owned(), custom };
+    assert_eq!(
+        content,
+        [
+            &RunContent::Text("text".to_owned()),
+            &reference(false, "2", false),
+            &reference(false, "3", true),
+            &RunContent::Text("*".to_owned()),
+            &reference(true, "1", false)
+        ]
+    );
+    // The notes, with the ones that hold the lines between text and notes.
+    let kinds: Vec<(&str, NoteKind, usize)> =
+        docx.footnotes.iter().map(|note| (note.id.as_str(), note.kind, note.blocks.len())).collect();
+    assert_eq!(
+        kinds,
+        [
+            ("-1", NoteKind::Separator, 1),
+            ("0", NoteKind::ContinuationSeparator, 1),
+            ("1", NoteKind::ContinuationNotice, 1),
+            ("2", NoteKind::Normal, 2),
+            ("3", NoteKind::Normal, 1)
+        ]
+    );
+    let Block::Paragraph(first) = &docx.footnotes[3].blocks[0] else { panic!("a paragraph") };
+    assert_eq!(first.runs[0].content, [RunContent::NoteMark]);
+    assert_eq!(first.text(), "a note");
+    let Block::Paragraph(line) = &docx.footnotes[0].blocks[0] else { panic!("a paragraph") };
+    assert_eq!(line.runs[0].content, [RunContent::NoteSeparator(false)]);
+    assert_eq!((docx.endnotes.len(), docx.endnotes[0].kind), (1, NoteKind::Normal));
+    // How they are numbered: for the document, and what the section says otherwise.
+    let all = &docx.settings.footnotes;
+    assert_eq!(
+        (all.format.as_deref(), all.start, all.restart.as_deref(), all.position.as_deref()),
+        (Some("decimalEnclosedCircleChinese"), Some(4), Some("eachPage"), None)
+    );
+    let section = &docx.document.section;
+    assert_eq!(
+        (section.footnotes.format.as_deref(), section.footnotes.position.as_deref(), section.footnotes.start),
+        (Some("lowerLetter"), Some("beneathText"), None)
+    );
+    assert_eq!(section.endnotes.restart.as_deref(), Some("eachSect"));
+    let mut laid = all.clone();
+    laid.apply(&section.footnotes);
+    assert_eq!((laid.format.as_deref(), laid.start), (Some("lowerLetter"), Some(4)));
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+    assert!(docx.warnings.is_empty(), "{:?}", docx.warnings);
+
+    // A notes part that cannot be read costs a warning and the notes, not the document.
+    let broken = Docx::from_bytes(&parts("<w:footnote>")).unwrap();
+    assert!(broken.footnotes.is_empty() && broken.endnotes.len() == 1);
+    assert_eq!(broken.warnings.len(), 1, "{:?}", broken.warnings);
 }
 
 #[test]

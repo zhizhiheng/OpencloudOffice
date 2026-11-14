@@ -61,21 +61,25 @@ impl Arguments {
     }
 }
 
-/// Whether the document holds anything the engine does not lay out yet:
-/// tables, pictures, text boxes, notes, columns, frames or section changes.
-/// Such a document cannot be expected to come out as Word has it.
+/// Whether the document holds anything but plain body text: tables,
+/// pictures, text boxes, notes, columns, frames or section changes. The
+/// engine lays several of these out by now; the group of documents without
+/// any of them stays what it was, so that its figures compare from one run
+/// to the next.
 pub fn beyond_body_text(docx: &Docx) -> bool {
     let unsupported =
         |needles: &[&str]| docx.coverage.unsupported.keys().any(|key| needles.iter().any(|n| key.contains(n)));
-    // A table or a drawing anywhere: in the body, or in a header or footer.
+    // A table, a drawing or a reference to a note anywhere: in the body,
+    // or in a header or footer.
     fn beyond(blocks: &[Block]) -> bool {
+        use oco_docx::RunContent::{Drawing, NoteReference};
         blocks.iter().any(|block| match block {
             Block::Table(_) => true,
             Block::Paragraph(paragraph) => paragraph
                 .runs
                 .iter()
                 .flat_map(|run| &run.content)
-                .any(|piece| matches!(piece, oco_docx::RunContent::Drawing(_))),
+                .any(|piece| matches!(piece, Drawing(_) | NoteReference { .. })),
         })
     }
     beyond(&docx.document.body)
@@ -85,8 +89,6 @@ pub fn beyond_body_text(docx: &Docx) -> bool {
             "w:pict",
             "w:object",
             "mc:AlternateContent",
-            "footnoteReference",
-            "endnoteReference",
             "w:sectPr/w:cols",
             "w:pPr/w:framePr",
             "m:oMath",

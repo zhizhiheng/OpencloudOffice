@@ -39,6 +39,49 @@ pub struct Section {
     /// does not simply carry on, and the format page numbers are shown in.
     pub page_number_start: Option<i32>,
     pub page_number_format: Option<String>,
+    /// `w:footnotePr` and `w:endnotePr`: how notes are numbered, where the
+    /// section says.
+    pub footnotes: NoteProps,
+    pub endnotes: NoteProps,
+}
+
+/// How footnotes or endnotes are numbered (`w:footnotePr`, `w:endnotePr`),
+/// in a section or for the whole document.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct NoteProps {
+    /// The number format, as `w:numFmt` names it: `decimal`, `lowerRoman`, `decimalEnclosedCircleChinese` ...
+    pub format: Option<String>,
+    /// The number of the first note.
+    pub start: Option<i32>,
+    /// `continuous`, `eachSect` or `eachPage`.
+    pub restart: Option<String>,
+    /// For footnotes: `pageBottom` (the default) or `beneathText`.
+    pub position: Option<String>,
+}
+
+impl NoteProps {
+    pub(crate) fn parse(node: Node) -> Self {
+        let mut props = NoteProps::default();
+        for child in elements(node) {
+            match w_name(child) {
+                Some("numFmt") => props.format = val(child).map(str::to_owned),
+                Some("numStart") => props.start = int(val(child)),
+                Some("numRestart") => props.restart = val(child).map(str::to_owned),
+                Some("pos") => props.position = val(child).map(str::to_owned),
+                _ => {}
+            }
+        }
+        props
+    }
+
+    /// Lays `over` on top of these properties: what it states wins.
+    pub fn apply(&mut self, over: &NoteProps) {
+        self.format = over.format.clone().or(self.format.take());
+        self.start = over.start.or(self.start);
+        self.restart = over.restart.clone().or(self.restart.take());
+        self.position = over.position.clone().or(self.position.take());
+    }
 }
 
 /// The header or footer for each kind of page, by relationship id.
@@ -77,6 +120,8 @@ impl Default for Section {
             title_page: false,
             page_number_start: None,
             page_number_format: None,
+            footnotes: NoteProps::default(),
+            endnotes: NoteProps::default(),
         }
     }
 }
@@ -184,6 +229,8 @@ impl Section {
                     section.page_number_start = int(w_attr(child, "start"));
                     section.page_number_format = w_attr(child, "fmt").map(str::to_owned);
                 }
+                Some("footnotePr") => section.footnotes = NoteProps::parse(child),
+                Some("endnotePr") => section.endnotes = NoteProps::parse(child),
                 // Editing aids with no effect on layout.
                 Some("formProt" | "rsid" | "noEndnote" | "bidi" | "rtlGutter") => {}
                 _ => coverage.miss(Some("w:sectPr"), child),

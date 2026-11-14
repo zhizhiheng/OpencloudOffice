@@ -27,8 +27,9 @@ struct Source<'a> {
     /// Page setup; A4 with one-inch margins and no grid unless given.
     section: &'a str,
     settings: &'a str,
-    /// Headers and footers: the relationship id each is named by, whether it
-    /// is a `header` or a `footer`, and its content.
+    /// Headers, footers and notes: the relationship id each part is named
+    /// by, whether it is a `header`, a `footer`, the `footnotes` or the
+    /// `endnotes`, and its content.
     stories: &'a [(&'a str, &'a str, &'a str)],
     /// The application the document says saved it; none if empty.
     saved_by: &'a str,
@@ -86,7 +87,11 @@ fn docx(source: &Source) -> Docx {
         ));
     }
     for (id, kind, content) in source.stories {
-        let root = if *kind == "header" { "hdr" } else { "ftr" };
+        let root = match *kind {
+            "header" => "hdr",
+            "footer" => "ftr",
+            notes => notes,
+        };
         parts.push((format!("word/{id}.xml"), format!("<w:{root} {W}>{content}</w:{root}>")));
     }
     let mut writer = oco_docx::zip::Writer::new();
@@ -2200,4 +2205,325 @@ fn where_two_cells_meet_only_the_stronger_line_is_drawn() {
         !between.is_empty() && between.iter().all(|line| line.2 == [0, 0xB0, 0x50] && close(line.1, 2.88, 0.001)),
         "{between:?}"
     );
+}
+
+/// A footnotes or endnotes part: the two notes that hold the lines between
+/// the text and the notes, as Word writes them but in 10 pt Liberation
+/// Serif, and then `notes`.
+fn notes_part(kind: &str, notes: &str) -> String {
+    let font = font("Liberation Serif", 20);
+    let line = |id: u8, mark: &str| {
+        format!(
+            r#"<w:{kind} w:type="{mark}" w:id="{id}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:rPr>{font}</w:rPr></w:pPr><w:r><w:rPr>{font}</w:rPr><w:{mark}/></w:r></w:p></w:{kind}>"#
+        )
+    };
+    format!("{}{}{notes}", line(0, "separator"), line(1, "continuationSeparator"))
+}
+
+/// A note of 10 pt Liberation Serif: its own number raised, then `text`;
+/// a `|` in the text begins a new line.
+fn note(kind: &str, id: u32, para_props: &str, text: &str) -> String {
+    let font = font("Liberation Serif", 20);
+    let lines = text.replace('|', r#"</w:t><w:br/><w:t xml:space="preserve">"#);
+    format!(
+        r#"<w:{kind} w:id="{id}"><w:p><w:pPr>{para_props}</w:pPr><w:r><w:rPr>{font}<w:vertAlign w:val="superscript"/></w:rPr><w:{kind}Ref/></w:r><w:r><w:rPr>{font}</w:rPr><w:t xml:space="preserve">{lines}</w:t></w:r></w:p></w:{kind}>"#
+    )
+}
+
+/// A paragraph of 12 pt Liberation Serif that ends with a reference to a note.
+fn noted(para_props: &str, text: &str, kind: &str, id: u32) -> String {
+    let font = font("Liberation Serif", 24);
+    format!(
+        r#"<w:p><w:pPr>{para_props}</w:pPr><w:r><w:rPr>{font}</w:rPr><w:t>{text}</w:t></w:r><w:r><w:rPr>{font}<w:vertAlign w:val="superscript"/></w:rPr><w:{kind}Reference w:id="{id}"/></w:r></w:p>"#
+    )
+}
+
+/// The baseline of the line on the page that reads `text`.
+fn baseline(page: &Page, text: &str) -> f32 {
+    page.lines.iter().find(|line| line.text == text).map(|line| line.baseline).unwrap_or_else(|| {
+        panic!("no line {text:?} among {:?}", page.lines.iter().map(|line| &line.text).collect::<Vec<_>>())
+    })
+}
+
+/// The bottom of the body of an A4 page with margins of an inch.
+const FLOOR: f32 = 841.9 - 72.0;
+/// A line of 10 pt Liberation Serif, as the notes of these tests are set
+/// in, and how far down it its baseline is.
+const NOTE_LINE: f32 = 11.52;
+const NOTE_BASE: f32 = 9.34;
+
+#[test]
+fn footnotes_stand_on_the_bottom_of_the_body_under_a_short_line() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probes `footnotes` and
+    // `footnote-space-after`): the last line of the notes ends at the bottom
+    // of the body; above them is the paragraph of the separator note, and
+    // in the middle of its line a rule of 0.6 pt, 144 pt long from the left
+    // margin. Notes are numbered in the order of their references,
+    // whatever ids they have, and stand in that order.
+    let plain = paragraph(&font("Liberation Serif", 24), "", "text");
+    let body = format!("{}{plain}{}", noted("", "alpha", "footnote", 7), noted("", "beta", "footnote", 3));
+    let notes = format!("{}{}", note("footnote", 3, "", " second"), note("footnote", 7, "", " first"));
+    let part = notes_part("footnote", &notes);
+    let stories = [("n", "footnotes", part.as_str())];
+    let page = pages(&Source { body: &body, stories: &stories, ..Source::default() }, &fonts, Model::Word).remove(0);
+    // The text: 12 pt, a line of 13.8 pt with its baseline 11.2 pt down.
+    assert!(close(baseline(&page, "alpha1"), 72.0 + 11.2, 0.03), "{}", baseline(&page, "alpha1"));
+    assert!(close(baseline(&page, "beta2"), 72.0 + 2.0 * 13.8 + 11.2, 0.03));
+    let second = baseline(&page, "2 second");
+    assert!(close(second, FLOOR - NOTE_LINE + NOTE_BASE, 0.02), "{second}");
+    assert!(close(baseline(&page, "1 first"), second - NOTE_LINE, 0.01), "{}", baseline(&page, "1 first"));
+    let rules = rules(&page);
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    let (x1, y1, x2, y2, width) = rules[0];
+    assert!(close(x1, 72.0, 0.01) && close(x2, 72.0 + 144.0, 0.01) && close(width, 0.6, 0.001), "{rules:?}");
+    assert!(close(y1, FLOOR - 2.5 * NOTE_LINE, 0.02) && y1 == y2, "{rules:?}");
+    // The body is where it would be without notes: they stand in it.
+    assert!(close(page.body.1, FLOOR, 0.01), "{:?}", page.body);
+}
+
+#[test]
+fn a_line_goes_on_the_page_where_its_footnote_begins() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // An A4 page with margins of an inch has room for 50 lines of 13.8 pt
+    // and 7.9 pt more. A note of one line takes 11.52 pt and the separator
+    // as much: with them 48 lines fit, and the 49th does not.
+    let lines = |count: usize, noted_at: usize| -> String {
+        (1..=count)
+            .map(|n| match n == noted_at {
+                true => noted("", &format!("b{n}"), "footnote", 2),
+                false => paragraph(&font("Liberation Serif", 24), "", &format!("b{n}")),
+            })
+            .collect()
+    };
+    let part = notes_part("footnote", &note("footnote", 2, "", " note"));
+    let stories = [("n", "footnotes", part.as_str())];
+    let lay = |body: &str| pages(&Source { body, stories: &stories, ..Source::default() }, &fonts, Model::Word);
+    let texts = |page: &Page| page.lines.iter().map(|line| line.text.clone()).collect::<Vec<_>>();
+
+    // Referred to from the 48th line, the note is on the first page with it.
+    let fits = lay(&lines(50, 48));
+    assert_eq!(fits.len(), 2);
+    assert!(texts(&fits[0]).contains(&"b481".to_owned()) && texts(&fits[0]).contains(&"1 note".to_owned()));
+    assert_eq!(fits[1].lines[0].text, "b49");
+    // Referred to from the 49th, which would fit were it not for the note,
+    // both go to the second page.
+    let moved = lay(&lines(50, 49));
+    assert_eq!(moved.len(), 2);
+    assert_eq!(texts(&moved[0]).last().map(String::as_str), Some("b48"));
+    assert_eq!(moved[1].lines[0].text, "b491");
+    assert!(close(baseline(&moved[1], "1 note"), FLOOR - NOTE_LINE + NOTE_BASE, 0.02));
+    assert!(rules(&moved[0]).is_empty());
+    // So it is inside a paragraph: of three lines that begin at the 47th,
+    // the third, which refers to the note, goes over with it and leaves
+    // the other two.
+    let three = noted(r#"<w:widowControl w:val="0"/>"#, "x</w:t><w:br/><w:t>y</w:t><w:br/><w:t>z", "footnote", 2);
+    let inside = lay(&format!("{}{three}", lines(46, 0)));
+    assert_eq!(texts(&inside[0]).last().map(String::as_str), Some("y"));
+    assert_eq!(texts(&inside[1]), ["z1", "1 note"]);
+    // A paragraph that keeps with the next goes over with the line it
+    // waits for.
+    let heading = paragraph(&font("Liberation Serif", 24), "<w:keepNext/>", "head");
+    let kept = lay(&format!("{}{heading}{}", lines(47, 0), noted("", "tail", "footnote", 2)));
+    assert_eq!(texts(&kept[0]).last().map(String::as_str), Some("b47"));
+    assert_eq!(texts(&kept[1]), ["head", "tail1", "1 note"]);
+}
+
+#[test]
+fn a_footnote_that_does_not_fit_runs_on_at_the_foot_of_the_next_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Word parts a note rather than move the line that refers to it
+    // (`stress018.docx` of the corpus: the line that refers to a note of
+    // thirteen lines ends a page with room for five of them). Here the 40th
+    // line refers to a note of twenty lines. Under that line 145.9 pt are
+    // left: the separator and eleven lines of the note take 138.2 pt.
+    let body: String = (1..=45)
+        .map(|n| match n {
+            40 => noted("", "b40", "footnote", 2),
+            _ => paragraph(&font("Liberation Serif", 24), "", &format!("b{n}")),
+        })
+        .collect();
+    let lay = |para_props: &str, lines: usize| {
+        let text = (1..=lines).map(|n| format!(" n{n}")).collect::<Vec<_>>().join("|");
+        let part = notes_part("footnote", &note("footnote", 2, para_props, &text));
+        let stories = [("n", "footnotes", part.as_str())];
+        pages(&Source { body: &body, stories: &stories, ..Source::default() }, &fonts, Model::Word)
+    };
+    let of_note = |page: &Page| page.lines.iter().filter(|line| line.text.contains(" n")).count();
+    let free = lay(r#"<w:widowControl w:val="0"/>"#, 20);
+    assert_eq!(free.len(), 2);
+    // The first page ends with the line of the reference; the note's first
+    // eleven lines stand on the bottom of its body under the short line.
+    assert_eq!(free[0].lines.iter().filter(|line| line.text.starts_with('b')).count(), 40);
+    assert_eq!(of_note(&free[0]), 11);
+    let last = FLOOR - NOTE_LINE + NOTE_BASE;
+    assert!(close(baseline(&free[0], "1 n1"), last - 10.0 * NOTE_LINE, 0.02), "{}", baseline(&free[0], "1 n1"));
+    assert!(close(baseline(&free[0], " n11"), last, 0.02));
+    assert!(close(rules(&free[0])[0].2 - rules(&free[0])[0].0, 144.0, 0.01));
+    // The text goes on at the top of the second page; the other nine lines
+    // of the note are at its foot, under a line across the text.
+    assert_eq!(free[1].lines[0].text, "b41");
+    assert!(close(free[1].lines[0].baseline, 72.0 + 11.2, 0.03));
+    assert!(close(baseline(&free[1], " n12"), last - 8.0 * NOTE_LINE, 0.02));
+    assert!(close(baseline(&free[1], " n20"), last, 0.02));
+    let across = rules(&free[1]);
+    assert_eq!(across.len(), 1);
+    assert!(close(across[0].0, 72.0, 0.01) && close(across[0].2, 595.3 - 72.0, 0.01), "{across:?}");
+    assert!(close(across[0].1, FLOOR - 9.5 * NOTE_LINE, 0.02), "{across:?}");
+
+    // A note is parted as a paragraph is between two pages. One of twelve
+    // lines that guards against lone lines leaves two of them for the next
+    // page though eleven would fit.
+    let guarded = lay("", 12);
+    assert_eq!((of_note(&guarded[0]), of_note(&guarded[1])), (10, 2));
+    // One whose lines keep together is not parted: the line that refers to
+    // it goes to the next page with it.
+    let kept = lay("<w:keepLines/>", 20);
+    assert_eq!(kept[0].lines.last().map(|line| line.text.as_str()), Some("b39"));
+    assert_eq!(kept[1].lines[0].text, "b401");
+    assert_eq!(of_note(&kept[1]), 20);
+}
+
+#[test]
+fn on_a_page_with_footnotes_the_space_after_a_paragraph_must_fit_since_word_2010() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word 365 (docx4j's probe `footnote-space-after`): a
+    // paragraph whose lines would fit above the notes goes to the next page
+    // when its space after does not. A document in the mode of Word 2007
+    // is paginated without that (`stress018.docx` of the corpus, saved by
+    // Word 2007). Here 48 lines fit above a note of one line, and the 48th
+    // has 20 pt after it where 12.5 pt are left.
+    let body = |spaced: usize, note: bool| -> String {
+        (1..=52)
+            .map(|n| match n {
+                1 if note => noted("", "b1", "footnote", 2),
+                n if n == spaced => {
+                    paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:after="400"/>"#, &format!("b{n}"))
+                }
+                _ => paragraph(&font("Liberation Serif", 24), "", &format!("b{n}")),
+            })
+            .collect()
+    };
+    let part = notes_part("footnote", &note("footnote", 2, "", " note"));
+    let stories = [("n", "footnotes", part.as_str())];
+    let first_of_second = |body: &str, settings: &str| {
+        let source = Source { body, stories: &stories, settings, ..Source::default() };
+        pages(&source, &fonts, Model::Word)[1].lines[0].text.clone()
+    };
+    let mode =
+        |mode: u8| format!(r#"<w:compat><w:compatSetting w:name="compatibilityMode" w:val="{mode}"/></w:compat>"#);
+    assert_eq!(first_of_second(&body(48, true), &mode(15)), "b48");
+    assert_eq!(first_of_second(&body(48, true), &mode(14)), "b48");
+    assert_eq!(first_of_second(&body(48, true), &mode(12)), "b49");
+    assert_eq!(first_of_second(&body(48, true), ""), "b49");
+    // Without a note on the page the space after hangs below the body in
+    // any mode: the 50th line is the last that fits, with 7.9 pt to spare.
+    assert_eq!(first_of_second(&body(50, false), &mode(15)), "b51");
+
+    // The rule is of the paragraph's last line: of two lines that may
+    // part, the first stays. And what keeps with that paragraph goes over
+    // with it.
+    let lines = |count: usize| -> String {
+        let first = noted("", "b1", "footnote", 2);
+        let rest = (2..=count).map(|n| paragraph(&font("Liberation Serif", 24), "", &format!("b{n}")));
+        std::iter::once(first).chain(rest).collect()
+    };
+    let spacing = r#"<w:spacing w:after="400"/>"#;
+    let two = paragraph(&font("Liberation Serif", 24), &format!(r#"<w:widowControl w:val="0"/>{spacing}"#), "x|y")
+        .replace('|', "</w:t><w:br/><w:t>");
+    assert_eq!(first_of_second(&format!("{}{two}", lines(46)), &mode(15)), "y");
+    let heading = paragraph(&font("Liberation Serif", 24), "<w:keepNext/>", "head");
+    let one = paragraph(&font("Liberation Serif", 24), spacing, "tail");
+    let kept = format!("{}{heading}{one}", lines(46));
+    assert_eq!(first_of_second(&kept, &mode(15)), "head");
+    // In the mode of Word 2007 all 48 lines are on one page.
+    let source = Source { body: &kept, stories: &stories, settings: &mode(12), ..Source::default() };
+    assert_eq!(pages(&source, &fonts, Model::Word).len(), 1);
+}
+
+#[test]
+fn the_space_after_the_last_footnote_of_a_page_hangs_below_the_body() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As the space after the last paragraph of the text does (Word 365,
+    // `review-for-word-word15-accepted.docx` of the corpus). Between two
+    // notes it stands.
+    let after = r#"<w:spacing w:after="200"/>"#;
+    let body = format!("{}{}", noted("", "alpha", "footnote", 2), noted("", "beta", "footnote", 3));
+    let notes = format!("{}{}", note("footnote", 2, after, " first"), note("footnote", 3, after, " second"));
+    let part = notes_part("footnote", &notes);
+    let stories = [("n", "footnotes", part.as_str())];
+    let page = pages(&Source { body: &body, stories: &stories, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let second = baseline(&page, "2 second");
+    assert!(close(second, FLOOR - NOTE_LINE + NOTE_BASE, 0.02), "{second}");
+    assert!(close(baseline(&page, "1 first"), second - NOTE_LINE - 10.0, 0.01), "{}", baseline(&page, "1 first"));
+}
+
+#[test]
+fn notes_are_numbered_as_the_document_says_and_endnotes_end_the_document() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Footnotes in capital letters from C on; a reference that brings a
+    // mark of its own takes no number; endnotes in small Roman numerals
+    // unless the document says otherwise, after the text under a short line.
+    let font = font("Liberation Serif", 24);
+    let own = format!(
+        r#"<w:p><w:r><w:rPr>{font}</w:rPr><w:t>own</w:t></w:r><w:r><w:rPr>{font}</w:rPr><w:footnoteReference w:id="5" w:customMarkFollows="1"/><w:t>*</w:t></w:r></w:p>"#
+    );
+    let body = format!(
+        "{}{own}{}{}{}",
+        noted("", "alpha", "footnote", 2),
+        noted("", "beta", "footnote", 3),
+        noted("", "gamma", "endnote", 2),
+        noted("", "delta", "endnote", 3)
+    );
+    let custom = format!(
+        r#"<w:footnote w:id="5"><w:p><w:r><w:rPr>{}</w:rPr><w:t>* starred</w:t></w:r></w:p></w:footnote>"#,
+        font.replace("24", "20")
+    );
+    let footnotes = format!("{}{}{custom}", note("footnote", 2, "", " first"), note("footnote", 3, "", " second"));
+    let footnotes = notes_part("footnote", &footnotes);
+    let endnotes = format!("{}{}", note("endnote", 2, "", " one"), note("endnote", 3, "", " two"));
+    let endnotes = notes_part("endnote", &endnotes);
+    let stories = [("n", "footnotes", footnotes.as_str()), ("e", "endnotes", endnotes.as_str())];
+    let settings = r#"<w:footnotePr><w:numFmt w:val="upperLetter"/><w:numStart w:val="3"/></w:footnotePr>"#;
+    let source = Source { body: &body, stories: &stories, settings, ..Source::default() };
+    let page = pages(&source, &fonts, Model::Word).remove(0);
+    let texts: Vec<&str> = page.lines.iter().map(|line| line.text.as_str()).collect();
+    // The text, the endnotes under it, and the footnotes at the foot of the page.
+    assert_eq!(
+        texts,
+        ["alphaC", "own*", "betaD", "gammai", "deltaii", "i one", "ii two", "C first", "* starred", "D second"]
+    );
+    // The endnotes begin a line below the text: the paragraph of their
+    // separator, with the short line in its middle.
+    let one = baseline(&page, "i one");
+    assert!(close(one, 72.0 + 5.0 * 13.8 + NOTE_LINE + NOTE_BASE, 0.02), "{one}");
+    let rules = rules(&page);
+    assert_eq!(rules.len(), 2, "{rules:?}");
+    assert!(close(rules[0].1, 72.0 + 5.0 * 13.8 + NOTE_LINE / 2.0, 0.02), "{rules:?}");
+    assert!(close(rules[0].2 - rules[0].0, 144.0, 0.01), "{rules:?}");
+
+    // A section may say otherwise than the document.
+    let section = format!(r#"<w:footnotePr><w:numFmt w:val="decimal"/></w:footnotePr>{}"#, Source::default().section);
+    let source = Source { body: &body, stories: &stories, settings, section: &section, ..Source::default() };
+    let page = pages(&source, &fonts, Model::Word).remove(0);
+    assert_eq!(page.lines[0].text, "alpha3");
+}
+
+#[test]
+fn a_footnote_referred_to_in_a_table_stands_at_the_foot_of_the_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `tables-footnote-in-cell`).
+    let cell = |content: &str| format!(r#"<w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr>{content}</w:tc>"#);
+    let plain = paragraph(&font("Liberation Serif", 24), "", "plain");
+    let table = format!(
+        r#"<w:tbl><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr>{}{}</w:tr></w:tbl>"#,
+        cell(&noted("", "cell", "footnote", 2)),
+        cell(&plain)
+    );
+    let part = notes_part("footnote", &note("footnote", 2, "", " note"));
+    let stories = [("n", "footnotes", part.as_str())];
+    let source = Source { body: &format!("{table}{plain}"), stories: &stories, ..Source::default() };
+    let page = pages(&source, &fonts, Model::Word).remove(0);
+    assert!(page.lines.iter().any(|line| line.text == "cell1"));
+    assert!(close(baseline(&page, "1 note"), FLOOR - NOTE_LINE + NOTE_BASE, 0.02), "{}", baseline(&page, "1 note"));
 }
