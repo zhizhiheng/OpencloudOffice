@@ -370,7 +370,6 @@ fn not_shown(docx: &Docx) -> Vec<(&'static str, usize)> {
         ("pictures", &["w:drawing", "w:pict"]),
         ("text_boxes", &["mc:AlternateContent"]),
         ("embedded_objects", &["w:object"]),
-        ("notes", &["footnoteReference", "endnoteReference"]),
         ("equations", &["m:oMath"]),
         ("columns", &["w:sectPr/w:cols"]),
         ("frames", &["w:pPr/w:framePr"]),
@@ -381,6 +380,8 @@ fn not_shown(docx: &Docx) -> Vec<(&'static str, usize)> {
         docx.coverage
             .ranked()
             .iter()
+            // A name may be followed by a word of explanation in brackets.
+            .map(|(name, count)| (name.split(" (").next().unwrap_or(name), count))
             .filter(|(name, _)| needles.iter().any(|n| name.ends_with(n)))
             .map(|(_, n)| n)
             .sum()
@@ -474,6 +475,18 @@ mod tests {
         assert_eq!(oco_page_count(handle), 0);
         // The handle of a closed document is given out again.
         assert_eq!(unsafe { oco_open(bytes.as_ptr(), bytes.len()) }, 1);
+
+        // What is known not to be shown is said, whatever the reader adds to its name.
+        let columns = format!(
+            "<w:document xmlns:w=\"{w}\"><w:body><w:p/><w:sectPr><w:cols w:num=\"2\"/></w:sectPr></w:body></w:document>"
+        );
+        let mut writer = oco_docx::zip::Writer::new();
+        writer.add("word/document.xml", columns.as_bytes());
+        let columns = writer.finish();
+        let second = unsafe { oco_open(columns.as_ptr(), columns.len()) };
+        assert_eq!(oco_info(second), 1);
+        assert!(result().contains("\"notShown\":[{\"kind\":\"columns\",\"count\":1}]"), "{}", result());
+        oco_close(second);
 
         // Bytes that are no kind of document, and text that is called a Word document.
         assert_eq!(unsafe { oco_open(b"\0junk".as_ptr(), 5) }, 0);
