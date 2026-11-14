@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpencloudOffice 查看器</title>
+<title>OpencloudOffice 0.0.1 · DOCX 查看器</title>
 <style>
   :root {
     --bar: #ffffff;
@@ -30,6 +30,7 @@
     padding: 8px 14px; background: var(--bar); border-bottom: 1px solid var(--line);
   }
   header h1 { font-size: 15px; font-weight: 600; margin: 0 8px 0 0; white-space: nowrap; }
+  header h1 small { margin-left: 5px; font-size: 11px; font-weight: 400; color: var(--soft); }
   header .group { display: flex; flex: none; align-items: center; gap: 6px; }
   header .spring { flex: 1; }
   button, select, input[type="url"], input[type="search"], input[type="number"] {
@@ -107,7 +108,7 @@
 </head>
 <body>
 <header>
-  <h1>OpencloudOffice 查看器</h1>
+  <h1>OpencloudOffice <small>0.0.1</small></h1>
   <div class="group">
     <button class="primary" id="open" disabled>打开文件</button>
     <select id="samples" hidden aria-label="示例文档"><option value="">示例文档…</option></select>
@@ -150,7 +151,7 @@
 <main>
   <div id="desk">
     <div id="welcome">
-      <strong>把 Word 文档或 Markdown 文件拖到这里</strong>
+      <strong>把 DOCX 文档拖到这里</strong>
       或者点击“打开文件”。文件只在这个浏览器里读取和排版，不会上传到任何地方。
     </div>
     <div id="pages"></div>

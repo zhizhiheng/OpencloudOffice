@@ -1,28 +1,85 @@
 # OpencloudOffice
 
-自研的云端 Office 内核：在浏览器和 App 内渲染、编辑 Word、Excel、PDF 等文档，以 SDK 形式嵌入。当前阶段只做一件事：把文档预览做到极致，范围是 DOCX、DOC 和 Markdown。
+![OpencloudOffice 0.0.1](docs/images/opencloudoffice-0.0.1-hero.png)
 
-内核用 Rust 编写，编译成 WebAssembly 供浏览器使用，也可编译成原生库供 App 和服务端使用，各端排版结果一致。
+*ImageGen 生成的产品印象图。*
 
-**当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文、表格、页眉页脚、页码、图片、文本框、脚注和尾注排成页面并输出 SVG，行高与 Word 实测一致）。内核已经能在浏览器里跑：`web/` 下有一个查看器，打开本地或网址上的 docx，逐页显示。分栏尚未排版，也还不能编辑。
+[![Version](https://img.shields.io/badge/version-0.0.1-1f6feb)](https://github.com/zhizhiheng/OpencloudOffice/releases/tag/v0.0.1)
+[![License](https://img.shields.io/badge/license-Apache--2.0-12846f)](LICENSE)
+[![Build](https://github.com/zhizhiheng/OpencloudOffice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhizhiheng/OpencloudOffice/actions/workflows/ci.yml)
 
-显示细节已补上分节页数、显式页码格式、图片镜像与裁切组合、标题和编号的主题色、按词下划线及字体变体选择。可用 `testdata/details/display-details.docx` 查看综合样例；各项依据和验证范围见 [排版说明](docs/layout.md)。核心能力优先自研的约定写在 [AGENTS.md](AGENTS.md)。
+**自研文档显示内核，让 DOCX 在浏览器和原生环境中展开。**
 
-**原生实现。** zip 解压、XML 解析、字体文件解析（TrueType 和 CFF 轮廓、字符映射、度量）都是自己写的，约 3500 行；内核不依赖任何第三方库，只有开发用的命令行工具为了输出 JSON 报告用了 serde。浏览器接口是手写的，不用 wasm-bindgen 之类的生成工具。字体解析替换前与原来的库逐字形对比过：316 个字体文件、147 万个字形，轮廓、字宽、度量没有一处不同。换掉通用 zip 库之后，4 份带重名条目的探针文档读得和 Word 一样了（通用库取后一个条目，Word 取目录里的前一个）。
+OpencloudOffice 用 Rust 实现格式读取、字体解析、排版和绘制，通过 WebAssembly 在浏览器本地运行。0.0.1 是首个开源的开发者预览版本，当前集中完善 DOCX 显示，编辑与写回安排在后续阶段。
 
-还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 94.1% 的行断行相同、83.6% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.8% 和 96.3%。WPS 导出的 11 份中文样例是 80.3% 和 73.7%，页数全部一致。这些是行级指标，图片、边框、裁切和内容完整性还要另外检查。度量方法见 [docs/fidelity.md](docs/fidelity.md)。2026-11-14 做过一次显示能力审计，列出了现存差距和修复顺序（当时脚注还没有实现），见 [显示能力审计](docs/audits/display-audit-2026-11-14/README.md)。
+[下载 0.0.1](https://github.com/zhizhiheng/OpencloudOffice/releases/tag/v0.0.1) · [发布说明](docs/releases/0.0.1.md) · [路线图](docs/roadmap.md) · [参与开发](CONTRIBUTING.md)
+
+## 实机截图
+
+以下截图来自 Chromium 中运行的实际查看器。展示的 DOCX 随发行包提供，截图脚本和图片来源见 [docs/images](docs/images/README.md)。
+
+**文档预览：标题、图片、表格、页眉页脚。**
+
+![文档预览实机截图](docs/images/viewer-document.png)
+
+**全文查找与高亮。**
+
+![全文查找实机截图](docs/images/viewer-search.png)
+
+**文字格式、多级内容与页底脚注。**
+
+![文字格式与脚注实机截图](docs/images/viewer-footnotes.png)
+
+## 快速试用
+
+下载 [浏览器试用包](https://github.com/zhizhiheng/OpencloudOffice/releases/download/v0.0.1/opencloudoffice-0.0.1-web.zip)，解压后在该目录运行：
+
+```sh
+python3 -m http.server 8000 --bind 127.0.0.1
+```
+
+打开 `http://localhost:8000`，从“示例文档”中选择发布手册，或打开自己的 DOCX。包内包含 WASM、开源字体和示例，无需安装 Rust。需要 HTTP 服务；`file://` 方式不能加载后台线程与 WASM。
+
+开发者也可下载 [WASM SDK](https://github.com/zhizhiheng/OpencloudOffice/releases/download/v0.0.1/opencloudoffice-0.0.1-wasm-sdk.zip) 或 [Linux x86_64 命令行工具](https://github.com/zhizhiheng/OpencloudOffice/releases/download/v0.0.1/opencloudoffice-0.0.1-linux-x86_64.tar.gz)。发行文件带有 SHA-256 校验值、文件清单和许可证。
+
+## 这一版可以做什么
+
+- **读取并显示 DOCX**：正文、标题、编号、常规表格、页眉页脚、页码、图片和基础文本框。
+- **显示脚注和尾注**：页底脚注、跨页延续、按页或按节重新编号、文末尾注。
+- **在浏览器阅读**：后台排版、按可见页绘制、全文查找与高亮、跳页、缩放、文字选择和复制。
+- **作为内核集成**：同一份 Rust 代码编译为原生库或 WASM，输出自包含 SVG；JavaScript 接口手写。
+- **检查和对照文档**：命令行工具输出格式、页面、行坐标和覆盖情况。
+
+ZIP / DEFLATE、XML、TrueType / CFF 字体解析、文档模型、排版和绘制均在项目内实现。默认内核和 WASM 不依赖第三方 crate；开发用命令行工具使用 serde 输出报告。
+
+## 当前范围与验证
+
+| 格式或能力 | 0.0.1 状态 |
+| --- | --- |
+| DOCX 显示 | 已实现主要链路，复杂版式继续完善 |
+| 二进制 DOC | 读取入口尚未实现 |
+| Markdown | 当前仅逐行转成普通段落 |
+| Excel、PPT、PDF | 后续计划，不属于本版输入范围 |
+| 编辑、修订操作、写回 | 后续阶段 |
+
+固定语料对照：Word 的 128 份 PDF 基准中，94.1% 的行断行相同，83.6% 的行位置在 0.5 pt 以内，122 份页数一致；WPS 12 的 11 份中文样例为 80.3%、73.7%，页数全部一致。163 份文档、403 页的原生和 WASM 输出逐字节相同。
+
+这些是固定字体环境下的行级指标。图片方向、线型、裁切和内容完整性仍需单独检查，不能将分数当作所有文档的视觉还原率。发布包包含的字体版本与历史开发基准可能不同。分栏、浮动表格、图片旋转、内容裁切、正文域和奇偶页分节仍有缺口，具体见 [已知限制](docs/releases/0.0.1.md#已知限制)。
 
 | 文档 | 内容 |
-|---|---|
-| [docs/roadmap.md](docs/roadmap.md) | 目标、技术决定、原型计划和进度 |
-| [docs/strategy.md](docs/strategy.md) | 如何做得比现有方案更好 |
-| [docs/fidelity.md](docs/fidelity.md) | 还原度怎么量：标准答案的来源、当前记分表、只升不降的基线、接入 Word 输出 |
-| [2026-11-14 显示能力审计](docs/audits/display-audit-2026-11-14/README.md) | Word 基准与 WPS 12 实测、对照图、显示缺口和优化顺序 |
-| [docs/layout.md](docs/layout.md) | 排版规则：行高、字号、缩进、编号、字体效果、标点，以及各自的依据 |
-| [docs/corpus-report.md](docs/corpus-report.md) | 语料测试的方法、数据和发现的问题 |
-| [docs/word-behaviour.md](docs/word-behaviour.md) | Word 的实际行为与规范不同的地方 |
+| --- | --- |
+| [路线图](docs/roadmap.md) | 目标、技术决定和阶段计划 |
+| [还原度记录](docs/fidelity.md) | 标准答案、逐文档基线和最新结果 |
+| [显示能力审计](docs/audits/display-audit-2026-11-14/README.md) | 对照图、诊断样例和优化方向；记录的是脚注实现前的状态 |
+| [排版说明](docs/layout.md) | 各项排版规则及依据 |
+| [Word 行为](docs/word-behaviour.md) | Word 实际行为与规范的差异 |
+| [语料测试](docs/corpus-report.md) | 语料来源、方法和发现的问题 |
 
-## 试用
+## 开源与维护
+
+源代码使用 [Apache-2.0](LICENSE)。第三方字体和开发依赖保留各自许可，详见 [第三方材料说明](THIRD_PARTY_NOTICES.md)。`main` 是维护与发布主分支，现有开发分支保留，欢迎通过 Issue 和 Pull Request 参与。
+
+## 从源码构建
 
 需要 Rust 1.88 或更高版本。
 

@@ -8,13 +8,15 @@ mod score;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: oco inspect <file> [--json]
+usage: oco --version
+       oco inspect <file> [--json]
        oco corpus <dir>... [--json <report.json>] [--jobs <n>] [--layout]
        oco render <file> [--out <dir>] [--fonts <dir>]... [--model word|libreoffice]
        oco convert <file> <out.docx>
        oco score <dir or file>... [--json <report.json>] [--jobs <n>] [--explain]
 
-A <file> is a Word document (.docx, or the older .doc) or Markdown (.md).
+A <file> is a DOCX document. Markdown currently becomes plain paragraphs;
+the legacy binary .doc reader is not implemented in 0.0.1.
 
 inspect  Prints every paragraph and run with its effective formatting, that
          is, after the style hierarchy and document defaults have been
@@ -32,8 +34,8 @@ render   Lays the document out and writes one SVG per page, plus lines.json
          (line height from the replacement fonts' own metrics, for one),
          which is only useful for comparing against LibreOffice.
 
-convert  Writes a .doc or a Markdown file as a .docx: the document form
-         that every kind of file is shown from. Word opens the result.
+convert  Writes Markdown as plain paragraphs in a .docx package, or copies
+         an existing .docx. Legacy binary .doc conversion is not implemented.
 
 score    Lays out every document that Word saved and compares the result
          with what Word recorded in the file: its page count and where
@@ -45,6 +47,10 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
+        ["--version"] | ["-V"] => {
+            println!("OpencloudOffice {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
         ["inspect", path] => inspect::run(path, false),
         ["inspect", path, "--json"] | ["inspect", "--json", path] => inspect::run(path, true),
         ["corpus", rest @ ..] if !rest.is_empty() => match corpus::Options::parse(rest) {

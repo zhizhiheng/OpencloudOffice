@@ -1,0 +1,10 @@
+Use case: ads-marketing
+Asset type: OpencloudOffice 0.0.1 first open-source release hero image for a GitHub README and release page.
+Primary request: Create one magnificent, modern, premium product impression image for OpencloudOffice, a self-developed document rendering engine and Office viewer. This is a conceptual brand artwork, not an application screenshot.
+Scene/backdrop: A deep midnight-blue architectural space with expansive dark negative space and a luminous horizon, refined atmospheric depth, polished studio presentation.
+Subject: A sculptural arrangement of floating, beautifully typeset white document pages and translucent glass sheets, ascending in a subtle cloud-like arc. Fine lines of text, a small elegant table, a restrained image block and footnote rules suggest meticulous document craftsmanship. The sheets are layered with realistic thickness, brushed-silver edges, delicate cyan and cobalt light refraction and a few soft violet accents.
+Style/medium: High-end photoreal 3D product campaign render, sophisticated editorial typography, clean geometry, expensive materials, cinematic light. Lavish visual finish with disciplined composition.
+Composition/framing: Wide landscape 16:9 composition. A clear visual hierarchy: the OpencloudOffice name is prominent and perfectly legible in a calm typography area; the sculptural document artwork has room to breathe. Elegant balance between the title and the luminous document sculpture, strong silhouette at thumbnail size.
+Text (verbatim): "OpencloudOffice" and "0.0.1". Render these two strings accurately; no additional slogans or small marketing text.
+Lighting/mood: Crisp pearl-white key light, glowing blue rim lighting, soft volumetric atmosphere and subtle reflections. Confident, futuristic, welcoming.
+Constraints: No people, no device mockups, no stock Office logos, no Microsoft or WPS branding, no fake toolbar or invented app controls, no feature badges, no garbled body copy. Interior document marks may be abstract typesetting lines. Preserve a premium uncluttered look. Opaque background.
