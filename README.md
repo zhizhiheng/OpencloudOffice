@@ -6,15 +6,18 @@
 
 **当前状态：研究原型阶段。** 已完成读取内核（读取 docx 并计算每段文字的最终格式，经 4725 个公开文件测试），以及排版引擎的原型（把正文、表格、页眉页脚、页码、图片、文本框、脚注和尾注排成页面并输出 SVG，行高与 Word 实测一致）。内核已经能在浏览器里跑：`web/` 下有一个查看器，打开本地或网址上的 docx，逐页显示。分栏尚未排版，也还不能编辑。
 
+显示细节已补上分节页数、显式页码格式、图片镜像与裁切组合、标题和编号的主题色、按词下划线及字体变体选择。可用 `testdata/details/display-details.docx` 查看综合样例；各项依据和验证范围见 [排版说明](docs/layout.md)。核心能力优先自研的约定写在 [AGENTS.md](AGENTS.md)。
+
 **原生实现。** zip 解压、XML 解析、字体文件解析（TrueType 和 CFF 轮廓、字符映射、度量）都是自己写的，约 3500 行；内核不依赖任何第三方库，只有开发用的命令行工具为了输出 JSON 报告用了 serde。浏览器接口是手写的，不用 wasm-bindgen 之类的生成工具。字体解析替换前与原来的库逐字形对比过：316 个字体文件、147 万个字形，轮廓、字宽、度量没有一处不同。换掉通用 zip 库之后，4 份带重名条目的探针文档读得和 Word 一样了（通用库取后一个条目，Word 取目录里的前一个）。
 
-还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 94.1% 的行断行相同、83.5% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.8% 和 96.3%。见 [docs/fidelity.md](docs/fidelity.md)。
+还原度以 Word 为准并且可以度量：一条命令给出记分表，基线只许升不许降。对照 Word 365 导出的 128 份 PDF，目前 94.1% 的行断行相同、83.5% 的行位置在 0.5pt 以内；在引擎已覆盖的范围内（只含正文、字体齐全的 28 份）是 96.0% 和 87.6%，页数全部一致；34 份表格探针是 98.8% 和 96.3%。WPS 导出的 11 份中文样例是 80.3% 和 53.2%。这些是行级指标，图片、边框、裁切和内容完整性还要另外检查。度量方法见 [docs/fidelity.md](docs/fidelity.md)。2026-11-14 做过一次显示能力审计，列出了现存差距和修复顺序（当时脚注还没有实现），见 [显示能力审计](docs/audits/display-audit-2026-11-14/README.md)。
 
 | 文档 | 内容 |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | 目标、技术决定、原型计划和进度 |
 | [docs/strategy.md](docs/strategy.md) | 如何做得比现有方案更好 |
 | [docs/fidelity.md](docs/fidelity.md) | 还原度怎么量：标准答案的来源、当前记分表、只升不降的基线、接入 Word 输出 |
+| [2026-11-14 显示能力审计](docs/audits/display-audit-2026-11-14/README.md) | Word 基准与 WPS 12 实测、对照图、显示缺口和优化顺序 |
 | [docs/layout.md](docs/layout.md) | 排版规则：行高、字号、缩进、编号、字体效果、标点，以及各自的依据 |
 | [docs/corpus-report.md](docs/corpus-report.md) | 语料测试的方法、数据和发现的问题 |
 | [docs/word-behaviour.md](docs/word-behaviour.md) | Word 的实际行为与规范不同的地方 |
@@ -57,9 +60,15 @@ tools/web/build.sh                     # 编译 web/oco.wasm，并把字体和�
 python3 -m http.server -d web 8000     # 然后打开 http://localhost:8000
 ```
 
-查看器可以打开本地文件（也可以拖进来）、网址上的文件（`?file=<网址>`），可以添加本机的字体文件；侧栏列出这份文档里还不能按 Word 的样子显示的内容。文件只在浏览器里读取和排版，不上传。`web/oco.js` 是给 JavaScript 用的接口，约 150 行，用法见文件开头。
+查看器可以打开本地文件（也可以拖进来）、网址上的文件（`?file=<网址>`），可以添加本机的字体文件；侧栏列出这份文档里还不能按 Word 的样子显示的内容。文件只在浏览器里读取和排版，不上传。
 
-浏览器里排出的页面与命令行逐字节相同：`node tools/web/check.mjs` 对 259 份文档、658 页做过比较，没有一处不同。完整内核的 WASM 是 483 KB，gzip 后 212 KB。
+在页码框输入数字后按回车可以跳页。点击“查找”或按 Ctrl/Cmd+F 可搜索整份文档，包括尚未滚动到的页面；匹配处会高亮，回车跳到下一个，Shift+回车跳到上一个，Esc 关闭查找。结果超过 1000 处时显示前 1000 处，并标记“1000+”。文字仍可选中、复制。缩放和切换侧栏会尽量保持当前阅读位置。
+
+字体解析、文档排版、查找和 SVG 生成在 Web Worker 中执行，页面按可见范围逐页绘制。字体按原有顺序分批下载并解析；当前仍加载完整字体集，按文档按需下载尚未实现。快速切换文件时以最后选择的文件为准，打开失败会保留原文档。
+
+`web/oco.js` 是同步 JavaScript SDK；`web/viewer-client.js` 和 `web/viewer-worker.js` 为查看器提供异步接口。
+
+浏览器里排出的页面与命令行逐字节相同：`node tools/web/check.mjs` 对 259 份文档、658 页做过比较，没有一处不同；该脚本会对打开失败的文件报错。构建脚本会显示当前 WASM 的大小及 gzip 后大小，字体文件另计。
 
 ## 目录
 
@@ -92,6 +101,8 @@ cargo clippy --all-targets                               # 静态检查
 cargo build -p oco-layout --target wasm32-unknown-unknown  # 确认内核可编译成 WASM
 tools/fidelity/score.py                                  # 还原度记分表，与基线比较（需先拉取测试集和字体）
 ```
+
+查看器的浏览器集成检查：先运行 `tools/web/build.sh`，在开发环境安装 Playwright 及其 Chromium，再运行 `node tools/web/test-viewer.mjs`。也可用 `PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 指向现有安装。检查包括全文搜索、跳页、缩放位置、后台处理时的界面响应、快速切换文件、下载失败和复制；截图写入 `out/viewer-tests/`。
 
 排版测试需要字体：系统里的 Liberation、Carlito、DejaVu，以及 `tools/fonts/fetch.sh` 下载的中文字体。缺少字体时相关测试会打印提示并跳过。
 

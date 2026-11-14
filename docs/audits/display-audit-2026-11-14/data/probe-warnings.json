@@ -1,0 +1,86 @@
+{
+  "body-page-fields.docx": {
+    "pages": 2,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "exact-row-clipping.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "paragraph-border-double.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "paragraph-border-single.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "picture-rotation-0.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "picture-rotation-5400000.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "section-evenPage.docx": {
+    "pages": 2,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "section-oddPage.docx": {
+    "pages": 2,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "table-vertical-text.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "text-effect-outline.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "text-effect-plain.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "text-effect-shadow.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "textbox-overflow.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  },
+  "two-columns.docx": {
+    "pages": 1,
+    "missingFonts": [],
+    "notShown": [],
+    "warnings": []
+  }
+}

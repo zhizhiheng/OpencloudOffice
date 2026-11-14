@@ -138,6 +138,22 @@ pub enum RunContent {
     /// A `NUMPAGES` field: how many pages the document has. Holds the text
     /// Word last showed for it.
     PageCount(String),
+    /// A `SECTIONPAGES` field, distinct from the whole document's count.
+    SectionPageCount(String),
+    /// A page field with an explicit numeric format switch (`\\* ROMAN`, etc.).
+    FormattedPageNumber {
+        kind: PageFieldKind,
+        format: String,
+        shown: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum PageFieldKind {
+    Page,
+    Pages,
+    SectionPages,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,7 +235,10 @@ impl Run {
                 | RunContent::NoteReference { .. }
                 | RunContent::NoteMark
                 | RunContent::NoteSeparator(_) => String::new(),
-                RunContent::PageNumber(shown) | RunContent::PageCount(shown) => shown.clone(),
+                RunContent::PageNumber(shown)
+                | RunContent::PageCount(shown)
+                | RunContent::SectionPageCount(shown)
+                | RunContent::FormattedPageNumber { shown, .. } => shown.clone(),
             })
             .collect()
     }
@@ -504,23 +523,47 @@ fn parse_paragraph(node: Node, coverage: &mut Coverage) -> Paragraph {
 
 /// A field whose value depends on where the layout puts it.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum LiveField {
-    Page,
-    Pages,
+struct LiveField {
+    kind: PageFieldKind,
+    format: Option<&'static str>,
 }
 
 fn live_field(instruction: &str) -> Option<LiveField> {
-    match instruction.split_whitespace().next()?.to_ascii_uppercase().as_str() {
-        "PAGE" => Some(LiveField::Page),
-        "NUMPAGES" | "SECTIONPAGES" => Some(LiveField::Pages),
-        _ => None,
+    let mut tokens = instruction.split_whitespace();
+    let kind = match tokens.next()?.to_ascii_uppercase().as_str() {
+        "PAGE" => PageFieldKind::Page,
+        "NUMPAGES" => PageFieldKind::Pages,
+        "SECTIONPAGES" => PageFieldKind::SectionPages,
+        _ => return None,
+    };
+    let mut format = None;
+    while let Some(token) = tokens.next() {
+        let value = if token == r"\*" { tokens.next() } else { token.strip_prefix(r"\*") };
+        let Some(value) = value else { continue };
+        let upper = value.starts_with(char::is_uppercase);
+        let recognized = match value.to_ascii_lowercase().as_str() {
+            "arabic" => Some("decimal"),
+            "arabicdash" => Some("arabicDash"),
+            "roman" => Some(if upper { "upperRoman" } else { "lowerRoman" }),
+            "alphabetic" => Some(if upper { "upperLetter" } else { "lowerLetter" }),
+            "ordinal" => Some("ordinal"),
+            "cardtext" => Some("cardinalText"),
+            "ordtext" => Some("ordinalText"),
+            _ => None, // MERGEFORMAT and character switches are not number formats.
+        };
+        format = recognized.or(format);
     }
+    Some(LiveField { kind, format })
 }
 
 fn live_content(field: LiveField, shown: String) -> RunContent {
-    match field {
-        LiveField::Page => RunContent::PageNumber(shown),
-        LiveField::Pages => RunContent::PageCount(shown),
+    if let Some(format) = field.format {
+        return RunContent::FormattedPageNumber { kind: field.kind, format: format.to_owned(), shown };
+    }
+    match field.kind {
+        PageFieldKind::Page => RunContent::PageNumber(shown),
+        PageFieldKind::Pages => RunContent::PageCount(shown),
+        PageFieldKind::SectionPages => RunContent::SectionPageCount(shown),
     }
 }
 

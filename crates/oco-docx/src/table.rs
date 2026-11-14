@@ -180,7 +180,7 @@ impl TableProps {
                     props.borders = Some(widest_border(child));
                     props.edges = Edges::parse(child);
                 }
-                Some("shd") => props.shade = w_attr(child, "fill").and_then(Color::parse),
+                Some("shd") => props.shade = Color::read(child, "fill"),
                 Some("tblCellSpacing") => props.cell_spacing = length(child).filter(|w| *w > 0),
                 Some("tblpPr") => {
                     props.floating = true;
@@ -333,7 +333,7 @@ impl CellProps {
                 Some("vAlign") => props.vertical_align = val(child).map(str::to_owned),
                 Some("hideMark") => props.hide_mark = on_off(child),
                 Some("tcBorders") => props.borders = Edges::parse(child),
-                Some("shd") => props.shade = w_attr(child, "fill").and_then(Color::parse),
+                Some("shd") => props.shade = Color::read(child, "fill"),
                 _ => coverage.miss(Some("w:tcPr"), child),
             }
         }

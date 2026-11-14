@@ -51,6 +51,8 @@ pub struct Picture {
     /// How much of the image is cut away at the left, top, right and bottom,
     /// in thousandths of a percent of its width or height.
     pub crop: [i32; 4],
+    /// Horizontal and vertical reflection about the picture's centre.
+    pub flip: [bool; 2],
 }
 
 /// How an object that is not in the line is placed, and how text meets it.
@@ -168,8 +170,8 @@ pub(crate) fn read(drawing: Node) -> Option<Drawing> {
     let picture = child(frame, "graphic")
         .and_then(|graphic| child(graphic, "graphicData"))
         .and_then(|data| child(data, "pic"))
-        .and_then(|picture| child(picture, "blipFill"))
-        .map(|fill| {
+        .and_then(|picture| {
+            let fill = child(picture, "blipFill")?;
             let embedded = child(fill, "blip")
                 .and_then(|blip| blip.attributes().find(|a| a.name() == "embed" && a.namespace().is_some()))
                 .map(|id| id.value().to_owned())
@@ -178,7 +180,9 @@ pub(crate) fn read(drawing: Node) -> Option<Drawing> {
                 ["l", "t", "r", "b"].map(|side| rect.attribute(side).and_then(|v| v.parse().ok()).unwrap_or(0))
             });
             // The relationship id for now; `resolve` turns it into the part's name.
-            Picture { part: embedded, crop }
+            let transform = child(picture, "spPr").and_then(|props| child(props, "xfrm"));
+            let flip = ["flipH", "flipV"].map(|side| transform.is_some_and(|node| flag(node, side)));
+            Some(Picture { part: embedded, crop, flip })
         });
     Some(Drawing {
         width: emu(extent.and_then(|e| e.attribute("cx"))),

@@ -97,6 +97,7 @@ impl Underline {
 pub enum Color {
     Auto,
     Rgb(u8, u8, u8),
+    Theme(crate::colors::ThemeColor),
 }
 
 impl Color {
@@ -125,6 +126,10 @@ impl std::fmt::Display for Color {
         match self {
             Color::Auto => f.write_str("auto"),
             Color::Rgb(r, g, b) => write!(f, "{r:02X}{g:02X}{b:02X}"),
+            Color::Theme(theme) => match theme.fallback {
+                Some([r, g, b]) => write!(f, "{r:02X}{g:02X}{b:02X}"),
+                None => f.write_str("auto"),
+            },
         }
     }
 }

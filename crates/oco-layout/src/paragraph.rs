@@ -144,6 +144,7 @@ pub struct Anchored {
     pub height: f32,
     pub part: Option<String>,
     pub crop: [f32; 4],
+    pub flip: [bool; 2],
     pub anchor: oco_docx::Anchor,
     /// Which text box it is, if it is one (see [`InlineBox::source`]).
     pub source: Option<(usize, usize)>,
@@ -211,6 +212,7 @@ struct Object {
     height: f32,
     part: Option<String>,
     crop: [f32; 4],
+    flip: [bool; 2],
     source: Option<(usize, usize)>,
 }
 
@@ -395,6 +397,7 @@ impl Builder<'_> {
                     let picture = drawing.picture.as_ref();
                     let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
                     let crop = picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0));
+                    let flip = picture.map_or([false; 2], |p| p.flip);
                     let source = drawing.text_box.filter(|_| !label).map(|index| (self.run, index));
                     if let Some(anchor) = &drawing.anchor {
                         self.anchored.push(Anchored {
@@ -402,6 +405,7 @@ impl Builder<'_> {
                             height: emu(drawing.height),
                             part: picture.and_then(|p| p.part.clone()),
                             crop,
+                            flip,
                             anchor: anchor.clone(),
                             source,
                             content: Vec::new(),
@@ -419,6 +423,7 @@ impl Builder<'_> {
                         height: emu(drawing.height),
                         part: picture.and_then(|p| p.part.clone()),
                         crop,
+                        flip,
                         source,
                     });
                     // The font is chosen as for a space, which every font has.
@@ -432,7 +437,10 @@ impl Builder<'_> {
                 }
                 // What Word last showed; a header or footer has the real
                 // number put in before it is laid out.
-                RunContent::PageNumber(shown) | RunContent::PageCount(shown) => {
+                RunContent::PageNumber(shown)
+                | RunContent::PageCount(shown)
+                | RunContent::SectionPageCount(shown)
+                | RunContent::FormattedPageNumber { shown, .. } => {
                     shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
                 }
                 // A reference shows the number of its note in the run's own
@@ -1139,6 +1147,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         let mut span_start = x;
         let mut span_style: Option<usize> = None;
         let mut decorations: Vec<(usize, f32, f32)> = Vec::new();
+        let mut words: Vec<(usize, f32, f32)> = Vec::new();
         for (index, atom) in range.iter().enumerate() {
             if span_style != Some(atom.style) {
                 if let Some(style) = span_style {
@@ -1155,6 +1164,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
             if squeezed > 0.0 && text::is_opening_punctuation(atom.ch) {
                 x -= squeezed;
             }
+            let atom_start = x;
             match atom.kind {
                 Kind::Char => {
                     if let Some(object) = atom.object.map(|index| &objects[index]) {
@@ -1175,6 +1185,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                                 height: object.height,
                                 part: object.part.clone(),
                                 crop: object.crop,
+                                flip: object.flip,
                             }),
                         }
                         first_ink.get_or_insert(x);
@@ -1263,6 +1274,15 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                 }
                 Kind::LineBreak | Kind::PageBreak => {}
             }
+            if atom.kind == Kind::Char && atom.object.is_none() && !atom.ch.is_whitespace() {
+                if let Some((_, _, end)) =
+                    words.last_mut().filter(|(style, _, end)| *style == atom.style && (*end - atom_start).abs() < 0.001)
+                {
+                    *end = x;
+                } else {
+                    words.push((atom.style, atom_start, x));
+                }
+            }
         }
         if let Some(style) = span_style {
             decorations.push((style, span_start, x));
@@ -1307,14 +1327,40 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                     dash,
                 };
                 match kind {
+                    Underline::Words => {
+                        for (_, start, end) in words
+                            .iter()
+                            .filter(|(index, start, end)| *index == style_index && *end > from && *start < to)
+                        {
+                            line.items.push(Item::Rule {
+                                x1: start.max(from),
+                                y1: y,
+                                x2: end.min(to),
+                                y2: y,
+                                width: thin,
+                                color,
+                                dash: [0.0; 2],
+                            });
+                        }
+                    }
                     Underline::Double => {
                         line.items.push(rule(y - thin * 0.4, thin * 0.7, [0.0, 0.0]));
                         line.items.push(rule(y + thin * 1.4, thin * 0.7, [0.0, 0.0]));
                     }
                     Underline::Thick => line.items.push(rule(y + thin / 2.0, thin * 2.0, [0.0, 0.0])),
-                    Underline::Dotted | Underline::DottedHeavy => line.items.push(rule(y, thin, [thin, thin * 1.5])),
+                    Underline::Dotted | Underline::DottedHeavy => {
+                        let width = if kind == Underline::DottedHeavy { thin * 2.0 } else { thin };
+                        line.items.push(rule(y, width, [thin, thin * 1.5]));
+                    }
                     Underline::Dash | Underline::DashedHeavy | Underline::DashLong | Underline::DashLongHeavy => {
-                        line.items.push(rule(y, thin, [thin * 4.0, thin * 2.0]));
+                        let width = if matches!(kind, Underline::DashedHeavy | Underline::DashLongHeavy) {
+                            thin * 2.0
+                        } else {
+                            thin
+                        };
+                        let length =
+                            if matches!(kind, Underline::DashLong | Underline::DashLongHeavy) { 8.0 } else { 4.0 };
+                        line.items.push(rule(y, width, [thin * length, thin * 2.0]));
                     }
                     Underline::DotDash
                     | Underline::DashDotHeavy
@@ -1323,16 +1369,18 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                         line.items.push(rule(y, thin, [thin * 4.0, thin * 1.5]));
                     }
                     Underline::Wave | Underline::WavyHeavy | Underline::WavyDouble => {
-                        line.items.push(Item::Wave {
-                            x1: from,
-                            x2: to,
-                            y: y + thin,
-                            amplitude: thin * 1.2,
-                            width: thin * 0.8,
-                            color,
-                        });
+                        let offsets: &[f32] = if kind == Underline::WavyDouble { &[0.0, 2.4] } else { &[1.0] };
+                        for offset in offsets {
+                            line.items.push(Item::Wave {
+                                x1: from,
+                                x2: to,
+                                y: y + thin * offset,
+                                amplitude: thin * 1.2,
+                                width: thin * if kind == Underline::WavyHeavy { 1.6 } else { 0.8 },
+                                color,
+                            });
+                        }
                     }
-                    // `words` skips the spaces; drawn through for now.
                     _ => line.items.push(rule(y, thin, [0.0, 0.0])),
                 }
             }

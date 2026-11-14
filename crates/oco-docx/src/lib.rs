@@ -9,6 +9,7 @@
 //! [`Docx::coverage`] rather than preserved, so it is not yet a basis for
 //! writing documents back.
 
+mod colors;
 mod coverage;
 mod document;
 mod drawing;
@@ -33,10 +34,11 @@ use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
+pub use colors::{ThemeColor, ThemeSlot};
 pub use coverage::Coverage;
 pub use document::{
-    Block, BreakKind, Document, Note, NoteKind, Paragraph, Revision, RevisionKind, Run, RunContent, Table, TableCell,
-    TableRow,
+    Block, BreakKind, Document, Note, NoteKind, PageFieldKind, Paragraph, Revision, RevisionKind, Run, RunContent,
+    Table, TableCell, TableRow,
 };
 pub use drawing::{
     Alignment, Anchor, Drawing, Offset, Picture, Placement, RelativeTo, TextBox, Wrap, WrapSide, EMU_PER_POINT,
@@ -322,6 +324,7 @@ impl Docx {
             styles: &self.styles,
             theme: self.theme.as_ref(),
             theme_lang: &self.settings.theme_lang,
+            color_mapping: &self.settings.color_mapping,
             numbering: &self.numbering,
         }
     }

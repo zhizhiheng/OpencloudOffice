@@ -161,6 +161,8 @@ pub struct Face {
     units_per_em: u16,
     hhea: Hhea,
     os2: Option<Os2>,
+    weight: u16,
+    width: u16,
     post: Option<Post>,
     /// Where `hmtx` starts, how many glyphs it holds full metrics for and
     /// how many glyphs it covers in all.
@@ -213,10 +215,19 @@ impl Face {
             },
         };
 
+        let os2_table = table(b"OS/2");
+        let os2 = os2_table.and_then(parse_os2);
+        let weight = os2
+            .and_then(|_| u16_at(os2_table?, 4))
+            .filter(|weight| (1..=1000).contains(weight))
+            .unwrap_or(if os2.is_some_and(|o| o.bold) { 700 } else { 400 });
+        let width = os2.and_then(|_| u16_at(os2_table?, 6)).filter(|width| (1..=9).contains(width)).unwrap_or(5);
         Some(Face {
             units_per_em,
             hhea,
-            os2: table(b"OS/2").and_then(parse_os2),
+            os2,
+            weight,
+            width,
             post: table(b"post").and_then(parse_post),
             advances,
             cmap: tables.range(&data, b"cmap").map(|range| cmap::subtables(&data, range)).unwrap_or_default(),
@@ -236,6 +247,14 @@ impl Face {
 
     pub fn os2(&self) -> Option<Os2> {
         self.os2
+    }
+
+    /// OpenType weight (400 regular, 700 bold) and width (5 normal) classes.
+    pub fn weight(&self) -> u16 {
+        self.weight
+    }
+    pub fn width(&self) -> u16 {
+        self.width
     }
 
     pub fn post(&self) -> Option<Post> {

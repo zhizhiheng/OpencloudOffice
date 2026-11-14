@@ -165,7 +165,7 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                 };
                 let _ = writeln!(body, r#"<circle cx="{}" cy="{}" r="{}" {paint}/>"#, n(cx), n(cy), n(r));
             }
-            Item::Image { x, y, width, height, ref part, crop } => {
+            Item::Image { x, y, width, height, ref part, crop, flip } => {
                 let file = part.as_ref().and_then(|part| media.get(part)).and_then(|file| file.bytes().ok());
                 let Some((kind, file)) = file.as_deref().and_then(|bytes| Some((media_type(bytes)?, bytes))) else {
                     // Nothing to show: a frame with a cross marks the room the object takes.
@@ -179,6 +179,14 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                     continue;
                 };
                 let [left, top, right, bottom] = crop;
+                if flip != [false; 2] {
+                    // Reflect the viewport and its content together: cropping
+                    // happens in image coordinates, before the picture flips.
+                    let (sx, sy) = (if flip[0] { -1 } else { 1 }, if flip[1] { -1 } else { 1 });
+                    let (tx, ty) =
+                        (if flip[0] { 2.0 * x + width } else { 0.0 }, if flip[1] { 2.0 * y + height } else { 0.0 });
+                    let _ = writeln!(body, r#"<g transform="matrix({sx} 0 0 {sy} {} {})">"#, n(tx), n(ty));
+                }
                 let (across, down) = ((1.0 - left - right).max(0.001), (1.0 - top - bottom).max(0.001));
                 let source = format!(r#"preserveAspectRatio="none" href="data:{kind};base64,{}""#, base64(file));
                 if crop == [0.0; 4] {
@@ -205,6 +213,9 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                         n(whole_width),
                         n(whole_height)
                     );
+                }
+                if flip != [false; 2] {
+                    body.push_str("</g>\n");
                 }
             }
         }
@@ -342,6 +353,7 @@ mod tests {
             height: 40.0,
             part: part.map(str::to_owned),
             crop,
+            flip: [false; 2],
         };
         let draw = |item| {
             let page = Page { width: 100.0, height: 100.0, items: vec![item], ..Page::default() };
@@ -363,5 +375,15 @@ mod tests {
 
         let missing = draw(picture(None, [0.0; 4]));
         assert!(!missing.contains("<image") && missing.contains(r#"<path d="M10 20H40V60H10Z"#), "{missing}");
+        let mut reflected = picture(Some("word/media/image1.png"), [0.25, 0.0, 0.0, 0.5]);
+        if let Item::Image { flip, .. } = &mut reflected {
+            *flip = [true, true];
+        }
+        let reflected = draw(reflected);
+        assert!(reflected.contains(r#"<g transform="matrix(-1 0 0 -1 50 80)">"#), "{reflected}");
+        assert!(
+            reflected.contains(r#"<image x="-10" y="0" width="40" height="80""#),
+            "crop stays in source coordinates"
+        );
     }
 }

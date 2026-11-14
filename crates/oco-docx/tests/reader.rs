@@ -55,6 +55,138 @@ fn name(font: &str) -> Option<FontRef> {
 }
 
 #[test]
+fn page_fields_keep_section_counts_and_explicit_number_formats() {
+    use oco_docx::PageFieldKind;
+    let document = docx(
+        r#"<w:p>
+      <w:fldSimple w:instr="SECTIONPAGES"><w:r><w:t>8</w:t></w:r></w:fldSimple>
+      <w:fldSimple w:instr="PAGE \* Arabic \* MERGEFORMAT"><w:r><w:t>iv</w:t></w:r></w:fldSimple>
+      <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+      <w:r><w:instrText> NUMPAGES \* RO</w:instrText></w:r><w:r><w:instrText>MAN </w:instrText></w:r>
+      <w:r><w:fldChar w:fldCharType="separate"/><w:t>12</w:t><w:fldChar w:fldCharType="end"/></w:r>
+      <w:fldSimple w:instr="PAGE \*roman"><w:r><w:t>5</w:t></w:r></w:fldSimple>
+    </w:p>"#,
+        "",
+    );
+    let content: Vec<_> = document.document.paragraphs()[0].runs.iter().flat_map(|run| run.content.iter()).collect();
+    assert_eq!(
+        content,
+        [
+            &RunContent::SectionPageCount("8".into()),
+            &RunContent::FormattedPageNumber {
+                kind: PageFieldKind::Page,
+                format: "decimal".into(),
+                shown: "iv".into()
+            },
+            &RunContent::FormattedPageNumber {
+                kind: PageFieldKind::Pages,
+                format: "upperRoman".into(),
+                shown: "12".into()
+            },
+            &RunContent::FormattedPageNumber {
+                kind: PageFieldKind::Page,
+                format: "lowerRoman".into(),
+                shown: "5".into()
+            },
+        ]
+    );
+    assert_eq!(document.document.paragraphs()[0].text(), "8iv125", "reading keeps the saved results");
+}
+
+#[test]
+fn reads_picture_reflections_with_cropping() {
+    for (attributes, expected) in [
+        ("", [false, false]),
+        (r#"flipH="true" flipV="1""#, [true, true]),
+        (r#"flipH="0" flipV="false""#, [false, false]),
+    ] {
+        let body = format!(
+            r#"<w:p><w:r><w:drawing>
+          <wp:inline xmlns:wp="urn:wp" xmlns:a="urn:a" xmlns:pic="urn:pic"><wp:extent cx="914400" cy="457200"/>
+          <a:graphic><a:graphicData><pic:pic><pic:blipFill><a:srcRect l="25000" b="10000"/></pic:blipFill>
+          <pic:spPr><a:xfrm {attributes}/></pic:spPr></pic:pic></a:graphicData></a:graphic>
+          </wp:inline></w:drawing></w:r></w:p>"#
+        );
+        let document = docx(&body, "");
+        let RunContent::Drawing(drawing) = &document.document.paragraphs()[0].runs[0].content[0] else {
+            panic!("drawing")
+        };
+        let picture = drawing.picture.as_ref().unwrap();
+        assert_eq!(picture.flip, expected);
+        assert_eq!(picture.crop, [25000, 0, 0, 10000]);
+    }
+}
+
+#[test]
+fn resolves_theme_colours_after_style_and_numbering_inheritance() {
+    let mut document = Docx::from_bytes(&zip(&[
+        (
+            "word/_rels/document.xml.rels",
+            format!(
+                r#"<Relationships xmlns="{PKG_RELS}">
+          <Relationship Id="s" Type="{DOC_RELS}/styles" Target="styles.xml"/>
+          <Relationship Id="t" Type="{DOC_RELS}/theme" Target="theme/theme1.xml"/>
+          <Relationship Id="n" Type="{DOC_RELS}/numbering" Target="numbering.xml"/>
+          <Relationship Id="c" Type="{DOC_RELS}/settings" Target="settings.xml"/></Relationships>"#
+            ),
+        ),
+        (
+            "word/theme/theme1.xml",
+            r#"<a:theme xmlns:a="urn:a"><a:themeElements><a:clrScheme name="test">
+          <a:dk1><a:sysClr val="windowText" lastClr="111111"/></a:dk1>
+          <a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2>
+        </a:clrScheme></a:themeElements></a:theme>"#
+                .into(),
+        ),
+        ("word/settings.xml", format!(r#"<w:settings {W}><w:clrSchemeMapping t1="accent2"/></w:settings>"#)),
+        (
+            "word/styles.xml",
+            format!(
+                r#"<w:styles {W}><w:style w:type="paragraph" w:styleId="Heading1">
+          <w:rPr><w:color w:val="FF0000" w:themeColor="accent1" w:themeShade="BF"/></w:rPr></w:style></w:styles>"#
+            ),
+        ),
+        (
+            "word/numbering.xml",
+            format!(
+                r#"<w:numbering {W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0">
+          <w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/>
+          <w:rPr><w:color w:themeColor="accent2"/></w:rPr></w:lvl></w:abstractNum>
+          <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>"#
+            ),
+        ),
+        (
+            "word/document.xml",
+            format!(
+                r#"<w:document {W}><w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+          <w:r><w:t>heading</w:t></w:r><w:r><w:rPr><w:color w:val="112233"/></w:rPr><w:t>direct</w:t></w:r>
+          <w:r><w:rPr><w:color w:themeColor="text1"/><w:u w:val="single" w:themeColor="dark1"/>
+          <w:shd w:themeFill="accent1" w:themeFillTint="99"/></w:rPr><w:t>mapped</w:t></w:r>
+          </w:p></w:body></w:document>"#
+            ),
+        ),
+    ]))
+    .unwrap();
+    let runs = resolved_runs(&document);
+    assert_eq!(runs[0].color, Some(Color::Rgb(0x36, 0x5F, 0x91)));
+    assert_eq!(runs[1].color, Some(Color::Rgb(0x11, 0x22, 0x33)), "direct RGB replaces the inherited theme");
+    assert_eq!(runs[2].color, Some(Color::Rgb(0xC0, 0x50, 0x4D)));
+    assert_eq!(runs[2].underline_color, Some(Color::Rgb(0x11, 0x11, 0x11)));
+    assert_eq!(runs[2].shade, Some(Color::Rgb(0x95, 0xB3, 0xD7)));
+    let level = document.numbering.level(1, 0).unwrap();
+    assert_eq!(
+        document.resolver().label(Some("Heading1"), &RunProps::default(), level).color,
+        Some(Color::Rgb(0xC0, 0x50, 0x4D))
+    );
+    document.theme = None;
+    assert_eq!(
+        resolved_runs(&document)[0].color,
+        Some(Color::Rgb(0xFF, 0, 0)),
+        "missing theme uses the saved result without shading it again"
+    );
+}
+
+#[test]
 fn layers_defaults_style_chain_and_direct_formatting() {
     let styles = r#"
         <w:docDefaults>

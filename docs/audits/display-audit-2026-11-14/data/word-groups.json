@@ -1,0 +1,56 @@
+{
+  "other": {
+    "docs": 61,
+    "lines": 2191,
+    "same": 2023,
+    "placed": 1753,
+    "pages_equal": 60,
+    "starts": 41,
+    "starts_equal": 37
+  },
+  "font": {
+    "docs": 14,
+    "lines": 367,
+    "same": 203,
+    "placed": 35,
+    "pages_equal": 13,
+    "starts": 4,
+    "starts_equal": 0
+  },
+  "line-height": {
+    "docs": 5,
+    "lines": 370,
+    "same": 260,
+    "placed": 151,
+    "pages_equal": 5,
+    "starts": 6,
+    "starts_equal": 3
+  },
+  "page": {
+    "docs": 13,
+    "lines": 2026,
+    "same": 1994,
+    "placed": 1685,
+    "pages_equal": 8,
+    "starts": 71,
+    "starts_equal": 69
+  },
+  "section": {
+    "docs": 1,
+    "lines": 302,
+    "same": 302,
+    "placed": 222,
+    "pages_equal": 1,
+    "starts": 8,
+    "starts_equal": 7
+  },
+  "table": {
+    "docs": 34,
+    "lines": 1803,
+    "same": 1775,
+    "placed": 1731,
+    "pages_equal": 34,
+    "starts": 63,
+    "starts_equal": 62
+  }
+}

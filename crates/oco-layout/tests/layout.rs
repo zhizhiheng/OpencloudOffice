@@ -23,6 +23,7 @@ const HANZI: &str =
 struct Source<'a> {
     body: &'a str,
     styles: &'a str,
+    theme: &'a str,
     numbering: &'a str,
     /// Page setup; A4 with one-inch margins and no grid unless given.
     section: &'a str,
@@ -40,6 +41,7 @@ impl Default for Source<'_> {
         Source {
             body: "",
             styles: "",
+            theme: "",
             numbering: "",
             section: r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>"#,
             settings: r#"<w:compat><w:compatSetting w:name="compatibilityMode" w:val="15"/></w:compat>"#,
@@ -79,6 +81,11 @@ fn docx(source: &Source) -> Docx {
         ("word/numbering.xml".to_owned(), format!("<w:numbering {W}>{}</w:numbering>", source.numbering)),
         ("word/settings.xml".to_owned(), format!("<w:settings {W}>{}</w:settings>", source.settings)),
     ];
+    if !source.theme.is_empty() {
+        let relationship = part("theme", "theme.xml", 4);
+        parts[0].1 = parts[0].1.replace("</Relationships>", &format!("{relationship}</Relationships>"));
+        parts.push(("word/theme.xml".into(), source.theme.into()));
+    }
     if !source.saved_by.is_empty() {
         let properties = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
         parts.push((
@@ -2593,4 +2600,186 @@ fn footnote_numbers_start_again_on_each_page_or_in_each_section_where_the_docume
     // Running on, a section that says 5 after two notes numbers its first 7.
     let start = props(r#"<w:numStart w:val="5"/>"#);
     assert_eq!(numbered(&body(""), "", &start)[1], ["b55.7", "b58.8", "7 n55", "8 n58"]);
+}
+
+#[test]
+fn footer_fields_distinguish_section_totals_and_override_page_formats() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let field = |code| format!(r#"<w:fldSimple w:instr="{code}"><w:r><w:t>99</w:t></w:r></w:fldSimple>"#);
+    let text = |text| format!("<w:r><w:t>{text}</w:t></w:r>");
+    let footer = format!(
+        "<w:p>{}{}{}{}{}{}{}{}{}{}</w:p>",
+        text("p="),
+        field(r"PAGE \* Arabic"),
+        text(";s="),
+        field("SECTIONPAGES"),
+        text(";n="),
+        field("NUMPAGES"),
+        text(";r="),
+        field(r"PAGE \* ROMAN \* MERGEFORMAT"),
+        text(";a="),
+        field(r"PAGE \* ALPHABETIC")
+    );
+    let body = format!(
+        r#"<w:p><w:pPr><w:sectPr><w:footerReference r:id="f"/>{A4_WITH_STORIES}</w:sectPr></w:pPr>
+        <w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>three</w:t></w:r></w:p>"#
+    );
+    let section = format!(r#"{A4_WITH_STORIES}<w:pgNumType w:start="4" w:fmt="lowerRoman"/>"#);
+    let source = Source { body: &body, section: &section, stories: &[("f", "footer", &footer)], ..Source::default() };
+    let pages = pages(&source, &fonts, Model::Word);
+    let footers: Vec<_> = pages.iter().map(|p| p.lines.last().unwrap().text.as_str()).collect();
+    assert_eq!(footers, ["p=1;s=1;n=3;r=I;a=A", "p=4;s=2;n=3;r=IV;a=D", "p=5;s=2;n=3;r=V;a=E"]);
+}
+
+#[test]
+fn continuous_sections_count_shared_pages_and_header_text_boxes_resolve_fields() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let content = r#"<w:p><w:r><w:t>section=</w:t></w:r><w:fldSimple w:instr="SECTIONPAGES"><w:r><w:t>99</w:t></w:r></w:fldSimple></w:p>"#;
+    let header = format!("<w:p><w:r>{}</w:r></w:p>", inline_text_box(150, 30, content));
+    let body = format!(
+        r#"<w:p><w:pPr><w:sectPr><w:headerReference r:id="h"/>{A4_WITH_STORIES}</w:sectPr></w:pPr>
+        <w:r><w:t>one</w:t></w:r></w:p><w:p><w:r><w:t>two</w:t></w:r></w:p>
+        <w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>three</w:t></w:r></w:p>"#
+    );
+    let section = format!(r#"{A4_WITH_STORIES}<w:type w:val="continuous"/>"#);
+    let source = Source { body: &body, section: &section, stories: &[("h", "header", &header)], ..Source::default() };
+    let pages = pages(&source, &fonts, Model::Word);
+    assert_eq!(pages.len(), 2);
+    assert!(pages[0].lines.iter().any(|l| l.text == "section=1"));
+    assert!(
+        pages[1].lines.iter().any(|l| l.text == "section=2"),
+        "shared first page belongs to the continuing section"
+    );
+}
+
+#[test]
+fn spelled_out_page_fields_use_lowercase_by_default() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let footer = r#"<w:p><w:fldSimple w:instr="NUMPAGES \* CardText"><w:r><w:t>99</w:t></w:r></w:fldSimple>
+        <w:r><w:t>/</w:t></w:r><w:fldSimple w:instr="PAGE \* OrdText"><w:r><w:t>99</w:t></w:r></w:fldSimple></w:p>"#;
+    let section = format!(r#"{A4_WITH_STORIES}<w:footerReference r:id="f"/>"#);
+    let body = paragraph("", "", "body");
+    let source = Source { body: &body, section: &section, stories: &[("f", "footer", footer)], ..Source::default() };
+    assert_eq!(pages(&source, &fonts, Model::Word)[0].lines.last().unwrap().text, "one/first");
+}
+
+#[test]
+fn words_underline_leaves_spaces_and_tabs_clear_without_splitting_shading() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let body = format!(
+        r#"<w:p><w:r><w:rPr>{}<w:u w:val="words" w:color="123456"/><w:shd w:fill="EEEEEE"/></w:rPr>
+        <w:t xml:space="preserve">alpha beta gamma　delta</w:t><w:tab/><w:t>omega</w:t></w:r></w:p>"#,
+        font("Liberation Serif", 24)
+    );
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert_eq!(page.lines.len(), 1);
+    let rules: Vec<_> = page
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Rule { x1, x2, color: [0x12, 0x34, 0x56], .. } => Some((*x1, *x2)),
+            _ => None,
+        })
+        .collect();
+    let line = &page.lines[0];
+    let chars: Vec<char> = line.text.chars().collect();
+    let mut expected = Vec::new();
+    let mut at = 0;
+    while at < chars.len() {
+        if chars[at].is_whitespace() {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        while at < chars.len() && !chars[at].is_whitespace() {
+            at += 1;
+        }
+        expected.push((line.xs[start], line.xs.get(at).copied().unwrap_or(line.x1)));
+    }
+    assert_eq!(rules.len(), 5);
+    assert_eq!(rules, expected);
+    assert_eq!(
+        page.items.iter().filter(|item| matches!(item, Item::Rect { color: [0xEE, 0xEE, 0xEE], .. })).count(),
+        1
+    );
+}
+
+#[test]
+fn heavy_and_double_underlines_have_distinct_strokes() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let draw = |kind| {
+        let props = format!(r#"{}<w:u w:val="{kind}"/>"#, font("Liberation Serif", 24));
+        pages(&Source { body: &paragraph(&props, "", "underlined"), ..Source::default() }, &fonts, Model::Word)
+            .remove(0)
+    };
+    let widths = |page: Page| {
+        page.items
+            .into_iter()
+            .filter_map(|item| match item {
+                Item::Rule { width, .. } | Item::Wave { width, .. } => Some(width),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(widths(draw("dottedHeavy"))[0], widths(draw("dotted"))[0] * 2.0);
+    assert_eq!(widths(draw("wavyHeavy"))[0], widths(draw("wave"))[0] * 2.0);
+    assert_eq!(widths(draw("wavyDouble")).len(), 2);
+}
+
+#[test]
+fn theme_colours_reach_headings_list_labels_and_cell_fills() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let theme = r#"<a:theme xmlns:a="urn:a"><a:themeElements><a:clrScheme name="test">
+        <a:accent1><a:srgbClr val="336699"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2>
+        </a:clrScheme></a:themeElements></a:theme>"#;
+    let styles = r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>
+        <w:rPr><w:color w:themeColor="accent1"/></w:rPr></w:style>"#;
+    let numbering = ONE_LIST.replace("<w:lvlJc", r#"<w:rPr><w:color w:themeColor="accent2"/></w:rPr><w:lvlJc"#);
+    let heading = paragraph(
+        &font("Liberation Serif", 24),
+        r#"<w:pStyle w:val="Heading1"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>"#,
+        "Title",
+    );
+    let cell = styled_cell(
+        r#"<w:shd w:themeFill="accent1"/><w:tcBorders><w:left w:val="single" w:sz="12" w:themeColor="accent2"/></w:tcBorders>"#,
+        "cell",
+    );
+    let body = heading + &styled_table("", "", &[[cell, styled_cell("", "other"), styled_cell("", "last")]]);
+    let page =
+        pages(&Source { body: &body, theme, styles, numbering: &numbering, ..Source::default() }, &fonts, Model::Word)
+            .remove(0);
+    let line = page.lines.iter().find(|line| line.text.contains("Title")).unwrap();
+    let colors: Vec<_> = page
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Glyph { y, color, .. } if close(*y, line.baseline, 0.01) => Some(*color),
+            _ => None,
+        })
+        .collect();
+    assert!(colors.starts_with(&[[0xC0, 0x50, 0x4D]; 2]), "label uses its own theme colour: {colors:?}");
+    assert!(colors.ends_with(&[[0x33, 0x66, 0x99]; 5]), "heading uses its style's colour: {colors:?}");
+    assert!(page.items.iter().any(|item| matches!(item, Item::Rect { color: [0x33, 0x66, 0x99], .. })));
+    assert!(page.items.iter().any(|item| matches!(item, Item::Rule { color: [0xC0, 0x50, 0x4D], .. })));
+}
+
+#[test]
+fn font_selection_prefers_regular_width_and_weight_over_file_order() {
+    let directory = Path::new("/usr/share/fonts/truetype/dejavu");
+    let names = ["DejaVuSans-ExtraLight.ttf", "DejaVuSansCondensed.ttf", "DejaVuSans.ttf", "DejaVuSans-Bold.ttf"];
+    if names.iter().any(|name| !directory.join(name).is_file()) {
+        eprintln!("skipped: DejaVu test faces unavailable");
+        return;
+    }
+    let mut db = FontDb::default();
+    for name in names {
+        assert_eq!(db.add(std::fs::read(directory.join(name)).unwrap()), 1);
+    }
+    assert_eq!(db.choose(Some("DejaVu Sans"), false, false, 'A', Model::Word).unwrap().font, oco_layout::FontId(2));
+    assert_eq!(db.choose(Some("DejaVu Sans"), true, false, 'A', Model::Word).unwrap().font, oco_layout::FontId(3));
+    assert_eq!(
+        db.choose(Some("DejaVu Sans Condensed"), false, false, 'A', Model::Word).unwrap().font,
+        oco_layout::FontId(1)
+    );
 }

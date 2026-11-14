@@ -4848,7 +4848,7 @@
    "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-dates/date-forms-r1.docx": "text differs",
    "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase1/field-probe-r1.docx": "text differs",
    "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase2/expr-probe-r1.docx": "text differs",
-   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/listnum-probe-r2.docx": "formatting differs",
+   "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/listnum-probe-r2.docx": "agrees",
    "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/numwords-probe-r1.docx": "text differs",
    "docx4j/docx4j-core-tests/src/test/resources/fields/cr067-phase3/phase3-probe-r1.docx": "text differs",
    "docx4j/docx4j-core-tests/src/test/resources/fields/docprop-case/docprop-case.docx": "text differs",
@@ -5385,7 +5385,7 @@
   }
  },
  "reading": {
-  "agree": 311,
+  "agree": 312,
   "pairs": 370
  }
 }

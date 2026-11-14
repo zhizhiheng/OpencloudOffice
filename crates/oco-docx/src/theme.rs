@@ -1,4 +1,5 @@
-//! Theme fonts (`word/theme/theme1.xml`) and the settings needed to pick them.
+//! Theme fonts and colours (`word/theme/theme1.xml`), with the settings
+//! needed to resolve their language and colour slots.
 //!
 //! Word's default template does not name fonts directly: run properties say
 //! e.g. `w:eastAsiaTheme="minorEastAsia"`, and the theme maps that slot to a
@@ -11,6 +12,8 @@ use std::collections::HashMap;
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
+use crate::colors::ThemeSlot;
+use crate::values::Color;
 use crate::xml::{elements, w_attr, w_name};
 
 #[derive(Debug, Clone, Default)]
@@ -30,6 +33,7 @@ pub struct ThemeFonts {
     major: FontSet,
     /// Body fonts.
     minor: FontSet,
+    colors: HashMap<ThemeSlot, [u8; 3]>,
 }
 
 /// `w:themeFontLang` from the settings part.
@@ -45,6 +49,21 @@ impl ThemeFonts {
     pub(crate) fn parse(xml: &str) -> Result<Self, crate::xmltree::Error> {
         let doc = crate::xmltree::Document::parse(xml)?;
         let mut theme = ThemeFonts::default();
+        if let Some(scheme) = doc.descendants().find(|n| n.is_element() && n.tag_name().name() == "clrScheme") {
+            for entry in elements(scheme) {
+                let Some(slot) = ThemeSlot::parse(entry.tag_name().name()) else { continue };
+                let value = elements(entry)
+                    .find_map(|color| match color.tag_name().name() {
+                        "srgbClr" => color.attribute("val"),
+                        "sysClr" => color.attribute("lastClr"),
+                        _ => None,
+                    })
+                    .and_then(Color::parse);
+                if let Some(Color::Rgb(r, g, b)) = value {
+                    theme.colors.insert(slot, [r, g, b]);
+                }
+            }
+        }
         // DrawingML also has Transitional and Strict namespaces; inside a theme
         // part the local names are unambiguous, so match on those.
         let scheme = doc.descendants().find(|n| n.is_element() && n.tag_name().name() == "fontScheme");
@@ -70,6 +89,10 @@ impl ThemeFonts {
             }
         }
         Ok(theme)
+    }
+
+    pub(crate) fn color(&self, slot: ThemeSlot) -> Option<[u8; 3]> {
+        self.colors.get(&slot.default_colour()).copied()
     }
 
     /// Typeface for a theme slot such as `majorHAnsi` or `minorEastAsia`.
@@ -103,6 +126,7 @@ impl ThemeFontLang {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Settings {
     pub theme_lang: ThemeFontLang,
+    pub color_mapping: HashMap<ThemeSlot, ThemeSlot>,
     /// Spacing of the default tab stops, in twips.
     pub default_tab_stop: i32,
     /// Squeeze adjacent full-width punctuation (`compressPunctuation`), the
@@ -126,6 +150,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            color_mapping: HashMap::new(),
             theme_lang: ThemeFontLang::default(),
             default_tab_stop: 720,
             compress_punctuation: false,
@@ -146,6 +171,26 @@ impl Settings {
         for node in elements(doc.root_element()) {
             match w_name(node) {
                 Some("themeFontLang") => settings.theme_lang = ThemeFontLang::parse(node),
+                Some("clrSchemeMapping") => {
+                    for name in [
+                        "bg1",
+                        "bg2",
+                        "t1",
+                        "t2",
+                        "accent1",
+                        "accent2",
+                        "accent3",
+                        "accent4",
+                        "accent5",
+                        "accent6",
+                        "hyperlink",
+                        "followedHyperlink",
+                    ] {
+                        if let Some(target) = w_attr(node, name).and_then(ThemeSlot::parse) {
+                            settings.color_mapping.insert(ThemeSlot::parse(name).unwrap(), target);
+                        }
+                    }
+                }
                 Some("defaultTabStop") => {
                     settings.default_tab_stop = crate::xml::twips(crate::xml::val(node)).unwrap_or(720).max(1);
                 }

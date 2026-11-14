@@ -1,0 +1,211 @@
+{
+ "application": "WPS Office for Linux 12.1.2.29183",
+ "export": "SaveAs2 with wdFormatPDF",
+ "documents": {
+  "01-font-sizes.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSans",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "02-character-effects.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "LiberationSerif-BoldItalic",
+    "LiberationSerif-Italic",
+    "NotoSansCJKjp-Regular",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular",
+    "WenQuanYiZenHei"
+   ]
+  },
+  "03-indents-and-spacing.docx": {
+   "pages": 4,
+   "fonts": [
+    "LiberationSerif",
+    "NotoSansCJKjp-Regular",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "04-report-headings.docx": {
+   "pages": 4,
+   "fonts": [
+    "LiberationSans-Bold",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "05-official-notice.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "06-contract.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "07-regulation.docx": {
+   "pages": 2,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "08-thesis.docx": {
+   "pages": 3,
+   "fonts": [
+    "LiberationSans",
+    "LiberationSans-Bold",
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "SourceHanSansCN-Bold",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "09-number-formats.docx": {
+   "pages": 9,
+   "fonts": [
+    "LiberationSans",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular",
+    "WenQuanYiZenHei"
+   ]
+  },
+  "10-punctuation.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "11-header-footer.docx": {
+   "pages": 10,
+   "fonts": [
+    "LXGWWenKai-Regular",
+    "LiberationSerif",
+    "SourceHanSansCN-Regular",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "body-page-fields.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "display-details.docx": {
+   "pages": 3,
+   "fonts": [
+    "LiberationSerif",
+    "LiberationSerif-Bold",
+    "SourceHanSerifCN-Bold",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "exact-row-clipping.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "paragraph-border-double.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "paragraph-border-single.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "picture-rotation-0.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "picture-rotation-5400000.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "section-evenPage.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "section-oddPage.docx": {
+   "pages": 3,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "table-vertical-text.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "text-effect-outline.docx": {
+   "pages": 1,
+   "fonts": []
+  },
+  "text-effect-plain.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "text-effect-shadow.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "textbox-overflow.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "two-columns.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  }
+ }
+}
