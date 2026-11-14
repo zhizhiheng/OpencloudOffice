@@ -328,6 +328,11 @@ pub fn format_number(format: &str, n: i32) -> String {
         "decimalFullWidth" | "decimalFullWidth2" => {
             decimal().chars().map(|d| char::from_u32(0xFF10 + (d as u32 - '0' as u32)).unwrap_or(d)).collect()
         }
+        // The marks of the Chicago Manual of Style, doubled from the fifth note on.
+        "chicago" => match n_usize {
+            0 => decimal(),
+            _ => String::from(['*', '†', '‡', '§'][(n_usize - 1) % 4]).repeat((n_usize - 1) / 4 + 1),
+        },
         "none" => String::new(),
         _ => decimal(),
     }
@@ -584,6 +589,13 @@ mod tests {
         assert_eq!(all("ideographDigital", &[1, 10, 105]), ["一", "一〇", "一〇五"]);
         assert_eq!(all("ideographTraditional", &[1, 10, 11]), ["甲", "癸", "11"]);
         assert_eq!(all("ideographZodiac", &[1, 12, 13]), ["子", "亥", "13"]);
+    }
+
+    #[test]
+    fn formats_the_marks_of_footnotes() {
+        // Word's "chicago": four marks, doubled from the fifth note, tripled from the ninth.
+        assert_eq!(all("chicago", &[1, 2, 3, 4, 5, 8, 9, 0]), ["*", "†", "‡", "§", "**", "§§", "***", "0"]);
+        assert_eq!(all("decimalEnclosedCircleChinese", &[1, 20, 21]), ["①", "⑳", "21"]);
     }
 
     #[test]

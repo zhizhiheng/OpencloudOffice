@@ -2527,3 +2527,70 @@ fn a_footnote_referred_to_in_a_table_stands_at_the_foot_of_the_page() {
     assert!(page.lines.iter().any(|line| line.text == "cell1"));
     assert!(close(baseline(&page, "1 note"), FLOOR - NOTE_LINE + NOTE_BASE, 0.02), "{}", baseline(&page, "1 note"));
 }
+
+#[test]
+fn footnote_numbers_start_again_on_each_page_or_in_each_section_where_the_document_says() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in WPS on probes made for this (four documents of 128
+    // lines each, every line where WPS has it): numbers that start again on
+    // each page do so from the number the document says to start from; so
+    // do those that start again in each section, in the section's own
+    // format; and where numbers run on, the number a later section says to
+    // start from is added to the count of the notes before, less one.
+    let size = Source::default().section;
+    let body = |first_section: &str| -> String {
+        (1..=60)
+            .map(|n| match n {
+                2 | 5 | 55 | 58 => noted("", &format!("b{n}."), "footnote", n),
+                30 => format!("<w:p><w:pPr><w:sectPr>{first_section}{size}</w:sectPr></w:pPr></w:p>"),
+                _ => paragraph(&font("Liberation Serif", 24), "", &format!("b{n}")),
+            })
+            .collect()
+    };
+    let notes: String = [2, 5, 55, 58].iter().map(|&n| note("footnote", n, "", &format!(" n{n}"))).collect();
+    let part = notes_part("footnote", &notes);
+    let stories = [("n", "footnotes", part.as_str())];
+    // The lines that refer to notes, and the notes, page by page.
+    let numbered = |body: &str, settings: &str, last_section: &str| -> Vec<Vec<String>> {
+        let section = format!("{last_section}{size}");
+        let source = Source { body, stories: &stories, settings, section: &section, ..Source::default() };
+        pages(&source, &fonts, Model::Word)
+            .iter()
+            .map(|page| {
+                let noted = page.lines.iter().filter(|line| line.text.contains('.') || line.text.contains(" n"));
+                noted.map(|line| line.text.clone()).collect()
+            })
+            .collect()
+    };
+    let props = |inner: &str| format!("<w:footnotePr>{inner}</w:footnotePr>");
+
+    // One section of two pages; the 30th paragraph is plain here.
+    let one = body("").replace(&format!("<w:sectPr>{size}</w:sectPr>"), "");
+    let each_page = props(r#"<w:numRestart w:val="eachPage"/>"#);
+    assert_eq!(
+        numbered(&one, &each_page, ""),
+        [["b2.1", "b5.2", "1 n2", "2 n5"], ["b55.1", "b58.2", "1 n55", "2 n58"]]
+    );
+    let from_three = props(r#"<w:numFmt w:val="lowerLetter"/><w:numStart w:val="3"/><w:numRestart w:val="eachPage"/>"#);
+    assert_eq!(
+        numbered(&one, &from_three, ""),
+        [["b2.c", "b5.d", "c n2", "d n5"], ["b55.c", "b58.d", "c n55", "d n58"]]
+    );
+    // Without it they run on.
+    assert_eq!(numbered(&one, "", "")[1], ["b55.3", "b58.4", "3 n55", "4 n58"]);
+
+    // Two sections, the second on a new page.
+    let each_section = props(r#"<w:numRestart w:val="eachSect"/>"#);
+    let second = props(r#"<w:numFmt w:val="upperRoman"/><w:numStart w:val="5"/>"#);
+    assert_eq!(
+        numbered(&body(""), &each_section, &second),
+        [["b2.1", "b5.2", "1 n2", "2 n5"], ["b55.V", "b58.VI", "V n55", "VI n58"]]
+    );
+    // What a section says holds for that section only.
+    let first = props(r#"<w:numFmt w:val="upperRoman"/>"#);
+    assert_eq!(numbered(&body(&first), "", "")[0], ["b2.I", "b5.II", "I n2", "II n5"]);
+    assert_eq!(numbered(&body(&first), "", "")[1], ["b55.3", "b58.4", "3 n55", "4 n58"]);
+    // Running on, a section that says 5 after two notes numbers its first 7.
+    let start = props(r#"<w:numStart w:val="5"/>"#);
+    assert_eq!(numbered(&body(""), "", &start)[1], ["b55.7", "b58.8", "7 n55", "8 n58"]);
+}

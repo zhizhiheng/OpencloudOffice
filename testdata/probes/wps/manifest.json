@@ -1,0 +1,48 @@
+{
+ "application": "WPS Office for Linux 11.1.0.11723",
+ "export": "SaveAs2 with wdFormatPDF",
+ "documents": {
+  "notes-continuous.docx": {
+   "pages": 3,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "notes-each-page.docx": {
+   "pages": 3,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "notes-each-section.docx": {
+   "pages": 4,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "notes-section-start.docx": {
+   "pages": 4,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "paragraph-borders.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "shading-and-tables.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  },
+  "table-lines.docx": {
+   "pages": 1,
+   "fonts": [
+    "LiberationSerif"
+   ]
+  }
+ }
+}

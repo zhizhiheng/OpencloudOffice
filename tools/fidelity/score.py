@@ -43,12 +43,18 @@ sys.path.insert(0, str(ROOT / "tools"))
 from common.layout_lines import lines_file, reference_files  # noqa: E402
 from word import compare as pdfs  # noqa: E402
 
-# Document sets that may have a reference application's PDFs beside them,
-# in a subfolder named after the application.
-REFERENCE_SETS = ["corpus-word/docx4j", "testdata/zh", "testdata/zh-open"]
+# What documents are compared with line by line. Each reference is a name the
+# baseline knows it by, the subfolder its PDFs are in beside the documents
+# (named after the application that made them), the document sets, the name
+# shown, and what to say when there are no PDFs.
+DOCUMENT_SETS = ["corpus-word/docx4j", "testdata/zh", "testdata/zh-open"]
 REFERENCES = [
-    ("word", "Word", "还没有 Word 导出的 PDF。见 docs/fidelity.md 第五节。"),
-    ("wps", "WPS", "还没有 WPS 导出的 PDF。用 tools/wps/export.py 生成（见 docs/fidelity.md 第五节）。"),
+    ("word", "word", DOCUMENT_SETS, "Word", "还没有 Word 导出的 PDF。见 docs/fidelity.md 第五节。"),
+    ("wps", "wps", DOCUMENT_SETS, "WPS", "还没有 WPS 导出的 PDF。用 tools/wps/export.py 生成（见 docs/fidelity.md 第五节）。"),
+    # Small documents made to try single rules (tools/probes/make.py). Kept
+    # apart from the Chinese documents above, whose figures say how Chinese
+    # layout stands.
+    ("wps-probes", "wps", ["testdata/probes"], "WPS（单条规则的探针）", "还没有导出。用 tools/wps/export.py testdata/probes 生成。"),
 ]
 LINE_GROUPS = [
     ("all", "全部文档"),
@@ -86,16 +92,16 @@ def environment(corpus: Path, font_dirs):
                 fonts[file.name] = hashlib.sha256(file.read_bytes()).hexdigest()[:16]
     # The reference PDFs: how many, and a digest of their contents.
     references = {}
-    for name in REFERENCE_SETS:
-        for kind, _, _ in REFERENCES:
+    for _, folder, sets, _, _ in REFERENCES:
+        for name in sets:
             # The files the comparison reads: a PDF, or the lines file that stands in for it.
             # Where both are there the lines file is what counts: it is the one committed,
             # and exporting a document again gives a PDF of other bytes that reads the same.
-            files = sorted(reference_files(ROOT / name / kind).values())
+            files = sorted(reference_files(ROOT / name / folder).values())
             files = [lines_file(f) if f.suffix == ".pdf" and lines_file(f).exists() else f for f in files]
             if files:
                 digest = hashlib.sha256(b"".join(hashlib.sha256(f.read_bytes()).digest() for f in files))
-                references[f"{name}/{kind}"] = f"{len(files)} files {digest.hexdigest()[:16]}"
+                references[f"{name}/{folder}"] = f"{len(files)} files {digest.hexdigest()[:16]}"
     return {"corpus": commits, "fonts": fonts, "references": references}
 
 
@@ -123,10 +129,10 @@ def measure(corpus: Path):
     reading = {relative(path): outcome for path, outcome in pairs.items()}
 
     lines = {}
-    for kind, _, _ in REFERENCES:
+    for kind, folder, sets, _, _ in REFERENCES:
         results = {}
-        for name in REFERENCE_SETS:
-            found = pdfs.measure(ROOT / name, ROOT / name / kind, ROOT / "out" / f"{kind}-compare" / Path(name).name)
+        for name in sets:
+            found = pdfs.measure(ROOT / name, ROOT / name / folder, ROOT / "out" / f"{folder}-compare" / Path(name).name)
             results.update({f"{name}/{document}": result for document, result in found.items()})
         lines[kind] = results
     return {
@@ -184,7 +190,7 @@ def scoreboard(current, baseline):
         f"  （另有分页符等强制出来的页首 {forced['forced_page_starts']} 处，"
         f"还原 {forced['forced_page_starts_equal']} 处，不计入上表）"
     )
-    for kind, application, missing in REFERENCES:
+    for kind, _, _, application, missing in REFERENCES:
         lines += ["", f"逐行：对照 {application} 导出的 PDF"]
         groups, before = current["lines"][kind], (old.get("lines", {}).get(kind) or {})
         if not groups["all"]["documents"]:
@@ -237,7 +243,7 @@ def compare(current, baseline):
                 )
         for improved, text in changes:
             (better if improved else worse).append(f"排版 {path}: {text}")
-    for kind, application, _ in REFERENCES:
+    for kind, _, _, application, _ in REFERENCES:
         known = baseline["documents"].get("lines", {}).get(kind) or {}
         for path, before in known.items():
             now = current["documents"]["lines"][kind].get(path)

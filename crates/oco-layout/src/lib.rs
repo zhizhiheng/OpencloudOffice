@@ -780,11 +780,15 @@ struct Builder<'a> {
 }
 
 /// A note the document refers to, as the layout numbers it.
+#[derive(Clone)]
 struct NoteEntry {
     endnote: bool,
     id: String,
     /// What the references to it and its own mark show.
     shown: String,
+    /// For a footnote that is numbered afresh on each page: the format of
+    /// its number, and the number of the first note of a page.
+    each_page: Option<(String, i32)>,
 }
 
 /// A note laid out.
@@ -856,37 +860,84 @@ type PageNotes = (Vec<NotePart>, bool);
 /// order of their first references, from the number the document says
 /// (1 unless it says otherwise), in the format it says (figures for
 /// footnotes and small Roman numerals for endnotes unless it says
-/// otherwise). A reference that brings a mark of its own takes no number.
+/// otherwise). A section may say otherwise than the document for the notes
+/// referred to in it, and may have their numbers start again
+/// (`w:numRestart` `eachSect`). A reference that brings a mark of its own
+/// takes no number.
+///
+/// The number a section says to start from is added to the count of the
+/// notes before, less one: where numbers run on from the section before,
+/// a section that says 5 after four notes numbers its first 9. (Measured
+/// in WPS on a probe made for this; Word is not known to differ.)
+///
+/// Footnotes that are numbered afresh on each page (`eachPage`) are
+/// numbered on here as the others are: [`renumber`] gives them their
+/// numbers once it is known which page each is on.
 fn number_notes(docx: &Docx) -> Vec<NoteEntry> {
-    let props = |document: &oco_docx::NoteProps, last: &oco_docx::NoteProps| {
+    let merged = |document: &oco_docx::NoteProps, section: &oco_docx::NoteProps| {
         let mut props = document.clone();
-        props.apply(last);
+        props.apply(section);
         props
     };
-    let kinds = [
-        props(&docx.settings.footnotes, &docx.document.section.footnotes),
-        props(&docx.settings.endnotes, &docx.document.section.endnotes),
-    ];
-    let mut next = kinds.clone().map(|props| props.start.unwrap_or(1));
+    let paragraphs = docx.document.paragraphs();
     let mut notes: Vec<NoteEntry> = Vec::new();
-    for paragraph in docx.document.paragraphs() {
-        let shown =
-            paragraph.runs.iter().filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content()));
-        for piece in shown.flat_map(|run| &run.content) {
-            let RunContent::NoteReference { endnote, id, custom } = piece else { continue };
-            if notes.iter().any(|note| note.endnote == *endnote && note.id == *id) {
-                continue;
+    // How many notes of either kind have been numbered, since the numbers
+    // last started again.
+    let mut before = [0, 0];
+    let mut from = 0;
+    while from < paragraphs.len() {
+        // A section ends with the paragraph that carries its properties.
+        let ends = paragraphs[from..].iter().position(|paragraph| paragraph.section_break.is_some());
+        let to = ends.map_or(paragraphs.len(), |at| from + at + 1);
+        let section = paragraphs[to - 1].section_break.as_ref().unwrap_or(&docx.document.section);
+        let kinds =
+            [merged(&docx.settings.footnotes, &section.footnotes), merged(&docx.settings.endnotes, &section.endnotes)];
+        for (kind, props) in kinds.iter().enumerate() {
+            if props.restart.as_deref() == Some("eachSect") {
+                before[kind] = 0;
             }
-            let kind = usize::from(*endnote);
-            let format = kinds[kind].format.as_deref().unwrap_or(if *endnote { "lowerRoman" } else { "decimal" });
-            let shown = if *custom { String::new() } else { format_number(format, next[kind]) };
-            if !custom {
-                next[kind] += 1;
-            }
-            notes.push(NoteEntry { endnote: *endnote, id: id.clone(), shown });
         }
+        for paragraph in &paragraphs[from..to] {
+            let shown =
+                paragraph.runs.iter().filter(|run| !run.revision.as_ref().is_some_and(|r| r.kind.removes_content()));
+            for piece in shown.flat_map(|run| &run.content) {
+                let RunContent::NoteReference { endnote, id, custom } = piece else { continue };
+                if notes.iter().any(|note| note.endnote == *endnote && note.id == *id) {
+                    continue;
+                }
+                let kind = usize::from(*endnote);
+                let props = &kinds[kind];
+                let format = props.format.as_deref().unwrap_or(if *endnote { "lowerRoman" } else { "decimal" });
+                let number = before[kind] + props.start.unwrap_or(1);
+                let shown = if *custom { String::new() } else { format_number(format, number) };
+                if !custom {
+                    before[kind] += 1;
+                }
+                let each_page = !endnote && !custom && props.restart.as_deref() == Some("eachPage");
+                let each_page = each_page.then(|| (format.to_owned(), props.start.unwrap_or(1)));
+                notes.push(NoteEntry { endnote: *endnote, id: id.clone(), shown, each_page });
+            }
+        }
+        from = to;
     }
     notes
+}
+
+/// Numbers the footnotes that start afresh on each page by the pages a
+/// layout put them on (`began`: for each note, the page it begins on).
+/// Says whether a number changed.
+fn renumber(notes: &mut [NoteEntry], began: &[Option<usize>]) -> bool {
+    let mut changed = false;
+    let mut on_page: HashMap<usize, i32> = HashMap::new();
+    for (note, page) in notes.iter_mut().zip(began) {
+        let (Some((format, start)), Some(page)) = (&note.each_page, page) else { continue };
+        let before = on_page.entry(*page).or_insert(0);
+        let shown = format_number(format, start + *before);
+        *before += 1;
+        changed |= shown != note.shown;
+        note.shown = shown;
+    }
+    changed
 }
 
 /// What the columns of an auto-fit table ask for, each across its whole
@@ -2244,6 +2295,24 @@ fn column_count(table: &oco_docx::Table) -> usize {
 }
 
 pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
+    let mut notes = number_notes(docx);
+    let (mut laid, mut began) = layout_pass(docx, fonts, options, notes.clone());
+    // Footnotes numbered afresh on each page take their numbers from the
+    // pages they come to stand on, and the widths of the numbers may in
+    // turn move a line to another page: lay out again until the two agree,
+    // which they nearly always do the first time.
+    for _ in 0..3 {
+        if !renumber(&mut notes, &began) {
+            break;
+        }
+        (laid, began) = layout_pass(docx, fonts, options, notes.clone());
+    }
+    laid
+}
+
+/// Lays the document out with its notes numbered as given. Returns the
+/// pages and, for each note, the page its footnote begins on.
+fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEntry>) -> (Layout, Vec<Option<usize>>) {
     // Section properties sit on the last paragraph of each section, so the
     // page setup of a paragraph is that of the next section break at or
     // after it. Collect them in order first.
@@ -2265,7 +2334,7 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         unplaced: 0,
         box_counters: Counters::default(),
         story_counters: Counters::default(),
-        notes: number_notes(docx),
+        notes,
         note_mark: None,
         note_counters: [Counters::default(), Counters::default()],
     };
@@ -2967,7 +3036,15 @@ pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
         page.lines.append(&mut lines);
         page.lines.sort_by(|a, b| a.baseline.total_cmp(&b.baseline));
     }
-    Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced }
+    let mut began = vec![None; builder.notes.len()];
+    for (page, (parts, _)) in page_notes.iter().enumerate() {
+        for &(note, from, _) in parts {
+            if from == 0 {
+                began[note] = Some(page);
+            }
+        }
+    }
+    (Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced }, began)
 }
 
 /// What a page has around its body.

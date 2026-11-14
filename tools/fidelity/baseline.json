@@ -4714,6 +4714,113 @@
      "plain": false,
      "same": 158
     }
+   },
+   "wps-probes": {
+    "testdata/probes/notes-continuous.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 128,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 2,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 128,
+     "plain": false,
+     "same": 128
+    },
+    "testdata/probes/notes-each-page.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 128,
+     "missing_fonts": [],
+     "page_starts": 2,
+     "page_starts_equal": 2,
+     "pages": [
+      3,
+      3
+     ],
+     "placed": 128,
+     "plain": false,
+     "same": 128
+    },
+    "testdata/probes/notes-each-section.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 128,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 3,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 128,
+     "plain": false,
+     "same": 128
+    },
+    "testdata/probes/notes-section-start.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 128,
+     "missing_fonts": [],
+     "page_starts": 3,
+     "page_starts_equal": 3,
+     "pages": [
+      4,
+      4
+     ],
+     "placed": 128,
+     "plain": false,
+     "same": 128
+    },
+    "testdata/probes/paragraph-borders.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 34,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 34,
+     "plain": true,
+     "same": 34
+    },
+    "testdata/probes/shading-and-tables.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 29,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 27,
+     "plain": false,
+     "same": 29
+    },
+    "testdata/probes/table-lines.docx": {
+     "dx": 0.0,
+     "dy": 0.1,
+     "lines": 29,
+     "missing_fonts": [],
+     "page_starts": 0,
+     "page_starts_equal": 0,
+     "pages": [
+      1,
+      1
+     ],
+     "placed": 27,
+     "plain": false,
+     "same": 29
+    }
    }
   },
   "reading": {
@@ -5138,6 +5245,7 @@
   },
   "references": {
    "corpus-word/docx4j/word": "128 files df0797f098e81b5c",
+   "testdata/probes/wps": "7 files 980a8b540ce90df5",
    "testdata/zh-open/wps": "11 files 209fd93979366db0"
   }
  },
@@ -5244,6 +5352,35 @@
     "pages_equal": 9,
     "placed": 248,
     "same": 441
+   }
+  },
+  "wps-probes": {
+   "all": {
+    "documents": 7,
+    "lines": 604,
+    "page_starts": 10,
+    "page_starts_equal": 10,
+    "pages_equal": 7,
+    "placed": 600,
+    "same": 604
+   },
+   "covered": {
+    "documents": 1,
+    "lines": 34,
+    "page_starts": 0,
+    "page_starts_equal": 0,
+    "pages_equal": 1,
+    "placed": 34,
+    "same": 34
+   },
+   "plain": {
+    "documents": 1,
+    "lines": 34,
+    "page_starts": 0,
+    "page_starts_equal": 0,
+    "pages_equal": 1,
+    "placed": 34,
+    "same": 34
    }
   }
  },
