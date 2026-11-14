@@ -177,6 +177,9 @@ struct Style {
     rise: f32,
     /// The run's nominal size, which positions underlines and strike-throughs.
     size: f32,
+    /// The run's text is not marked as of a language other than an East
+    /// Asian one: a gap opens between its ideographs and Western text.
+    east_asian: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -307,6 +310,10 @@ impl Builder<'_> {
             emphasis: props.emphasis.filter(|e| *e != Emphasis::None).map(|e| (e, e == Emphasis::UnderDot || chinese)),
             rise: rise + props.position.map_or(0.0, |half| half as f32 / 2.0),
             size: base,
+            east_asian: props.east_asian_lang.as_deref().is_none_or(|lang| {
+                let lang = lang.to_ascii_lowercase();
+                ["zh", "ja", "ko"].iter().any(|prefix| lang.starts_with(prefix))
+            }),
         };
         self.styles.push(style);
         let style = self.styles.len() - 1;
@@ -499,7 +506,18 @@ impl Builder<'_> {
                         && !text::is_opening_punctuation(ch)
                         && ch != '\u{3000}'
                 };
-                if (ideograph(a.ch) && western(b.ch)) || (western(a.ch) && ideograph(b.ch)) {
+                // The gap is of East Asian text: none opens beside an
+                // ideograph in a run marked as of another language.
+                // (Measured in Word's PDF of docx4j's probe
+                // `fonts-space-cjk`, whose East Asian language is en-US:
+                // "日本2013年" has no gap at either end of the digits. A
+                // Chinese document that Word paginated, `pageBorders.docx`
+                // of the corpus, breaks its lines as it does only with
+                // the gaps. That the language decides is an inference
+                // from the two.)
+                let (of_a, of_b) = (ideograph(a.ch), ideograph(b.ch));
+                let marked = |atom: &Atom| self.styles[atom.style].east_asian;
+                if (of_a && western(b.ch) && marked(&a)) || (western(a.ch) && of_b && marked(&b)) {
                     self.atoms[i].advance += 0.25 * a.size.min(b.size);
                 }
             }

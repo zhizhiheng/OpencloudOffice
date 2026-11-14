@@ -341,6 +341,25 @@ fn reads_tracked_changes() {
 }
 
 #[test]
+fn reads_the_east_asian_language_of_text_through_defaults_and_styles() {
+    let styles = r#"<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault></w:docDefaults>
+        <w:style w:type="character" w:styleId="Chinese"><w:rPr><w:lang w:eastAsia="zh-CN"/></w:rPr></w:style>"#;
+    let body = r#"<w:p>
+          <w:r><w:t>default</w:t></w:r>
+          <w:r><w:rPr><w:rStyle w:val="Chinese"/></w:rPr><w:t>style</w:t></w:r>
+          <w:r><w:rPr><w:lang w:val="fr-FR"/></w:rPr><w:t>other language, same East Asian one</w:t></w:r>
+          <w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>direct</w:t></w:r>
+        </w:p>"#;
+    let docx = docx(body, styles);
+    let languages: Vec<Option<String>> = resolved_runs(&docx).into_iter().map(|run| run.east_asian_lang).collect();
+    assert_eq!(languages, [Some("en-US"), Some("zh-CN"), Some("en-US"), Some("ja-JP")].map(|l| l.map(str::to_owned)));
+    assert!(docx.coverage.unsupported.is_empty(), "{:?}", docx.coverage.unsupported);
+    // Where nothing says, nothing is assumed.
+    let plain = self::docx("<w:p><w:r><w:t>x</w:t></w:r></w:p>", "");
+    assert_eq!(resolved_runs(&plain)[0].east_asian_lang, None);
+}
+
+#[test]
 fn reads_run_content_and_whitespace() {
     let body = r#"
         <w:p><w:r>

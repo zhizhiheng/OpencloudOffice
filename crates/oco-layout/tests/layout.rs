@@ -612,6 +612,47 @@ fn the_last_line_of_a_page_need_only_fit_as_far_as_its_text() {
 }
 
 #[test]
+fn a_gap_opens_between_chinese_and_western_text_unless_the_text_is_marked_as_not_east_asian() {
+    let Some(fonts) = fonts(&[("Source Han Serif CN", '中'), ("Liberation Serif", 'a')]) else { return };
+    // A quarter of an em between an ideograph and a letter or digit beside
+    // it, as measured in WPS (3.0 pt at 12 pt, at either end of "2013" and
+    // of "abc"). Word's PDF of docx4j's probe `fonts-space-cjk` has no gap
+    // in "日本2013年": the East Asian language of that document is en-US.
+    // An explicit space is only itself, in the Western font (the same
+    // probe: 2.71 pt of Carlito between "abc" and "日本" either way).
+    let line = |language: &str, text: &str| {
+        let language = match language {
+            "" => String::new(),
+            language => format!(r#"<w:lang w:val="en-US" w:eastAsia="{language}"/>"#),
+        };
+        let fonts_and_size = r#"<w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif" w:eastAsia="Source Han Serif CN"/><w:sz w:val="24"/>"#;
+        let body = paragraph(&format!("{fonts_and_size}{language}"), "", text);
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        page.lines[0].x1 - page.lines[0].x0
+    };
+    // 12 pt: an ideograph is 12 pt wide, a digit 6 pt.
+    for language in ["", "zh-CN", "ja-JP", "ko-KR", "ZH-tw"] {
+        assert!(
+            close(line(language, "日本2013年"), 36.0 + 24.0 + 2.0 * 3.0, 0.02),
+            "{language}: {}",
+            line(language, "日本2013年")
+        );
+    }
+    assert!(close(line("en-US", "日本2013年"), 36.0 + 24.0, 0.02), "{}", line("en-US", "日本2013年"));
+    assert!(close(line("x-none", "日本abc年") - line("x-none", "日本年"), line("zh-CN", "abc"), 0.02));
+    // With spaces between them there is nothing but the spaces, 3 pt each.
+    assert!(close(line("zh-CN", "日本 2013 年"), 36.0 + 24.0 + 2.0 * 3.0, 0.02), "{}", line("zh-CN", "日本 2013 年"));
+    // A paragraph may turn the gap off.
+    let off = paragraph(
+        r#"<w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif" w:eastAsia="Source Han Serif CN"/><w:sz w:val="24"/>"#,
+        r#"<w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/>"#,
+        "日本2013年",
+    );
+    let page = pages(&Source { body: &off, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert!(close(page.lines[0].x1 - page.lines[0].x0, 60.0, 0.02));
+}
+
+#[test]
 fn a_line_squeezes_its_punctuation_to_take_one_more_character() {
     let Some(fonts) = fonts(&[("Source Han Serif CN", '中')]) else { return };
     // As measured in WPS Office (testdata/zh-open): a line of full-width

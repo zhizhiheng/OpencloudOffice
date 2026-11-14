@@ -113,6 +113,10 @@ pub struct RunProps {
     pub kern: Option<u32>,
     /// The run is complex-script or right-to-left text and uses the `cs` font.
     pub complex: Option<bool>,
+    /// The language of the run's East Asian text (`w:lang w:eastAsia`), as
+    /// written: `zh-CN`, `ja-JP`, or `en-US` where the document is not
+    /// East Asian.
+    pub east_asian_lang: Option<String>,
     pub fonts: Fonts,
 }
 
@@ -162,7 +166,7 @@ impl RunProps {
         overlay!(self, over;
             style_id, bold, italic, caps, small_caps, strike, vanish, outline, shadow, emboss, imprint,
             bold_cs, italic_cs, double_strike, underline, underline_color, size, size_cs, color, highlight,
-            shade, border, vert_align, emphasis, char_spacing, scale, position, kern, complex);
+            shade, border, vert_align, emphasis, char_spacing, scale, position, kern, complex, east_asian_lang);
         self.fonts.apply(&over.fonts);
     }
 
@@ -208,8 +212,13 @@ impl RunProps {
                 Some("kern") => p.kern = half_points(val(child)),
                 Some("shd") => p.shade = shade(child).or(p.shade),
                 Some("bdr") => p.border = Some(Border::parse(child)),
-                // Proofing language and editing aids: no effect on how text looks.
-                Some("lang" | "noProof" | "webHidden" | "specVanish" | "effect" | "oMath") => {}
+                // The language matters to layout only where it says whether
+                // the text is East Asian (see `east_asian_lang`).
+                Some("lang") => {
+                    p.east_asian_lang = w_attr(child, "eastAsia").map(str::to_owned).or(p.east_asian_lang.take());
+                }
+                // Editing aids: no effect on how text looks.
+                Some("noProof" | "webHidden" | "specVanish" | "effect" | "oMath") => {}
                 Some("color") => p.color = Color::read(child, "val").or(p.color),
                 Some("highlight") => p.highlight = val(child).and_then(Highlight::from_exact).or(p.highlight),
                 Some("vertAlign") => p.vert_align = val(child).and_then(VertAlign::from_exact).or(p.vert_align),

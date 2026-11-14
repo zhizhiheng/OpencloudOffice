@@ -2719,7 +2719,7 @@
     },
     "corpus-word/docx4j/fonts-space-cjk.docx": {
      "dx": 0.02,
-     "dy": 0.08,
+     "dy": 0.07,
      "lines": 6,
      "missing_fonts": [
       "MS Gothic"
@@ -2730,9 +2730,9 @@
       1,
       1
      ],
-     "placed": 4,
+     "placed": 6,
      "plain": true,
-     "same": 4
+     "same": 6
     },
     "corpus-word/docx4j/fonts-symbol-and-emoji.docx": {
      "dx": 0.02,
@@ -5333,8 +5333,8 @@
     "page_starts": 193,
     "page_starts_equal": 184,
     "pages_equal": 122,
-    "placed": 5896,
-    "same": 6640
+    "placed": 5898,
+    "same": 6642
    },
    "covered": {
     "documents": 28,
@@ -5351,8 +5351,8 @@
     "page_starts": 61,
     "page_starts_equal": 54,
     "pages_equal": 55,
-    "placed": 1818,
-    "same": 2301
+    "placed": 1820,
+    "same": 2303
    }
   },
   "wps": {
