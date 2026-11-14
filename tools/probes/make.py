@@ -5,9 +5,9 @@ and measured (tools/wps/export.py testdata/probes, then tools/fidelity/score.py)
 
     python3 tools/probes/make.py [testdata/probes]
 
-The documents are written the same byte for byte each time. Everything is set
-in Liberation Serif, which the reference machine has, so that no font is
-replaced. What each document tries is said where it is made, and in
+The documents are written the same byte for byte each time. They are set in
+Liberation Serif, and the Chinese ones in Source Han Serif CN (./fonts), which
+the reference machine has, so that no font is replaced. What each document tries is said where it is made, and in
 testdata/probes/README.md.
 """
 
@@ -38,20 +38,25 @@ def spacing(before=0, after=0):
     return f'<w:spacing w:before="{before}" w:after="{after}" w:line="240" w:lineRule="auto"/>'
 
 
-def write(path, body, last_section="", footnotes=None, settings=""):
-    """A package with the given body; with a footnotes part and settings where given."""
+def write(path, body, last_section="", footnotes=None, settings="", styles=None, page=PAGE):
+    """A package with the given body; with a footnotes part and settings, or
+    with styles, where given. `page` is the paper and margins of the last section."""
     parts = {
         "word/document.xml": f'<w:document xmlns:w="{W}" xmlns:r="{R}"><w:body>{body}'
-        f"<w:sectPr>{last_section}{PAGE}</w:sectPr></w:body></w:document>"
+        f"<w:sectPr>{last_section}{page}</w:sectPr></w:body></w:document>"
     }
     kinds = {"word/document.xml": "document.main"}
     relationships = []
+    if styles is not None:
+        parts["word/styles.xml"] = f'<w:styles xmlns:w="{W}">{styles}</w:styles>'
+        kinds["word/styles.xml"] = "styles"
+        relationships.append(("rId3", "styles", "styles.xml"))
     if footnotes is not None:
         parts["word/footnotes.xml"] = f'<w:footnotes xmlns:w="{W}">{footnotes}</w:footnotes>'
         mode = '<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>'
         parts["word/settings.xml"] = f'<w:settings xmlns:w="{W}">{settings}<w:compat>{mode}</w:compat></w:settings>'
         kinds.update({"word/footnotes.xml": "footnotes", "word/settings.xml": "settings"})
-        relationships = [("rId1", "footnotes", "footnotes.xml"), ("rId2", "settings", "settings.xml")]
+        relationships += [("rId1", "footnotes", "footnotes.xml"), ("rId2", "settings", "settings.xml")]
     wordprocessing = "application/vnd.openxmlformats-officedocument.wordprocessingml"
     overrides = "".join(
         f'<Override PartName="/{name}" ContentType="{wordprocessing}.{kind}+xml"/>' for name, kind in kinds.items()
@@ -261,6 +266,31 @@ def footnotes(directory):
     write(directory / "notes-section-start.docx", body(58, of_section("")), of_section('<w:numStart w:val="5"/>'), notes, of_document(""))
 
 
+def grid_foot(directory):
+    """How much room the last line of a page needs on a document grid. Thirty
+    lines of 10.5 pt Chinese on a grid of 15.6 pt; each takes two rows and
+    its text stands in the middle of them. The bottom margin leaves 25.0 pt
+    for the 22nd line in one document and 25.5 pt in the other: WPS puts
+    the line on the first page in the second only."""
+    styles = (
+        '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif"'
+        ' w:eastAsia="Source Han Serif CN" w:cs="Liberation Serif"/><w:sz w:val="21"/><w:szCs w:val="21"/>'
+        '<w:lang w:val="en-US" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults>'
+        '<w:style w:type="paragraph" w:styleId="a" w:default="1"><w:name w:val="Normal"/>'
+        '<w:pPr><w:widowControl w:val="0"/><w:jc w:val="both"/></w:pPr></w:style>'
+    )
+    hint = '<w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr>'
+    body = "".join(f"<w:p><w:r>{hint}<w:t>第{number:02d}行正文</w:t></w:r></w:p>" for number in range(1, 31))
+    # The 22nd line begins 14544 twips down the page.
+    for name, room in (("grid-foot-25-0", 500), ("grid-foot-25-5", 510)):
+        page = (
+            '<w:pgSz w:w="11906" w:h="16838"/>'
+            f'<w:pgMar w:top="1440" w:right="1800" w:bottom="{16838 - 14544 - room}" w:left="1800"'
+            ' w:header="851" w:footer="992" w:gutter="0"/><w:docGrid w:type="lines" w:linePitch="312"/>'
+        )
+        write(directory / f"{name}.docx", body, styles=styles, page=page)
+
+
 def main():
     directory = Path(sys.argv[1] if len(sys.argv) > 1 else "testdata/probes")
     directory.mkdir(parents=True, exist_ok=True)
@@ -268,6 +298,7 @@ def main():
     shading_and_tables(directory / "shading-and-tables.docx", cell_margins=False)
     shading_and_tables(directory / "table-lines.docx", cell_margins=True)
     footnotes(directory)
+    grid_foot(directory)
     print("\n".join(sorted(path.name for path in directory.glob("*.docx"))))
 
 

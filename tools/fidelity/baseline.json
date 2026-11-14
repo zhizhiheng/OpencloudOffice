@@ -4585,12 +4585,12 @@
      "lines": 70,
      "missing_fonts": [],
      "page_starts": 3,
-     "page_starts_equal": 1,
+     "page_starts_equal": 2,
      "pages": [
       4,
       4
      ],
-     "placed": 34,
+     "placed": 42,
      "plain": true,
      "same": 44
     },
@@ -4626,7 +4626,7 @@
     },
     "testdata/zh-open/06-contract.docx": {
      "dx": 0.0,
-     "dy": 31.12,
+     "dy": 62.32,
      "lines": 37,
      "missing_fonts": [],
      "page_starts": 1,
@@ -4671,16 +4671,16 @@
     },
     "testdata/zh-open/09-number-formats.docx": {
      "dx": 0.0,
-     "dy": 62.47,
+     "dy": 0.07,
      "lines": 188,
      "missing_fonts": [],
      "page_starts": 8,
-     "page_starts_equal": 0,
+     "page_starts_equal": 8,
      "pages": [
       9,
-      10
+      9
      ],
-     "placed": 20,
+     "placed": 165,
      "plain": true,
      "same": 165
     },
@@ -4716,6 +4716,36 @@
     }
    },
    "wps-probes": {
+    "testdata/probes/grid-foot-25-0.docx": {
+     "dx": 0.0,
+     "dy": 0.07,
+     "lines": 30,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 30,
+     "plain": true,
+     "same": 30
+    },
+    "testdata/probes/grid-foot-25-5.docx": {
+     "dx": 0.0,
+     "dy": 0.07,
+     "lines": 30,
+     "missing_fonts": [],
+     "page_starts": 1,
+     "page_starts_equal": 1,
+     "pages": [
+      2,
+      2
+     ],
+     "placed": 30,
+     "plain": true,
+     "same": 30
+    },
     "testdata/probes/notes-continuous.docx": {
      "dx": 0.0,
      "dy": 0.1,
@@ -5245,7 +5275,7 @@
   },
   "references": {
    "corpus-word/docx4j/word": "128 files df0797f098e81b5c",
-   "testdata/probes/wps": "7 files 980a8b540ce90df5",
+   "testdata/probes/wps": "9 files 5d217a5a7243b015",
    "testdata/zh-open/wps": "11 files 209fd93979366db0"
   }
  },
@@ -5255,11 +5285,11 @@
    "forced_page_starts": 407,
    "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 506,
+   "multipage_pages_equal": 507,
    "multipage_pages_within_one": 597,
    "page_starts": 2044,
-   "page_starts_equal": 553,
-   "page_starts_same_paragraph": 704
+   "page_starts_equal": 552,
+   "page_starts_same_paragraph": 703
   },
   "covered": {
    "documents": 534,
@@ -5330,57 +5360,57 @@
     "documents": 11,
     "lines": 746,
     "page_starts": 31,
-    "page_starts_equal": 19,
-    "pages_equal": 10,
-    "placed": 397,
+    "page_starts_equal": 28,
+    "pages_equal": 11,
+    "placed": 550,
     "same": 599
    },
    "covered": {
     "documents": 10,
     "lines": 540,
     "page_starts": 22,
-    "page_starts_equal": 11,
-    "pages_equal": 9,
-    "placed": 248,
+    "page_starts_equal": 20,
+    "pages_equal": 10,
+    "placed": 401,
     "same": 441
    },
    "plain": {
     "documents": 10,
     "lines": 540,
     "page_starts": 22,
-    "page_starts_equal": 11,
-    "pages_equal": 9,
-    "placed": 248,
+    "page_starts_equal": 20,
+    "pages_equal": 10,
+    "placed": 401,
     "same": 441
    }
   },
   "wps-probes": {
    "all": {
-    "documents": 7,
-    "lines": 604,
-    "page_starts": 10,
-    "page_starts_equal": 10,
-    "pages_equal": 7,
-    "placed": 600,
-    "same": 604
+    "documents": 9,
+    "lines": 664,
+    "page_starts": 12,
+    "page_starts_equal": 12,
+    "pages_equal": 9,
+    "placed": 660,
+    "same": 664
    },
    "covered": {
-    "documents": 1,
-    "lines": 34,
-    "page_starts": 0,
-    "page_starts_equal": 0,
-    "pages_equal": 1,
-    "placed": 34,
-    "same": 34
+    "documents": 3,
+    "lines": 94,
+    "page_starts": 2,
+    "page_starts_equal": 2,
+    "pages_equal": 3,
+    "placed": 94,
+    "same": 94
    },
    "plain": {
-    "documents": 1,
-    "lines": 34,
-    "page_starts": 0,
-    "page_starts_equal": 0,
-    "pages_equal": 1,
-    "placed": 34,
-    "same": 34
+    "documents": 3,
+    "lines": 94,
+    "page_starts": 2,
+    "page_starts_equal": 2,
+    "pages_equal": 3,
+    "placed": 94,
+    "same": 94
    }
   }
  },

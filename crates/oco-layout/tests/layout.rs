@@ -294,6 +294,48 @@ fn on_a_grid_a_multiple_counts_grid_rows_not_the_rows_of_the_text() {
 }
 
 #[test]
+fn on_a_grid_the_last_line_of_a_page_need_only_fit_as_far_as_its_text() {
+    let Some(fonts) = fonts(&[("Source Han Serif CN", '中')]) else { return };
+    // As measured in WPS on a series of probes (testdata/probes, `grid-foot-*`):
+    // 10.5 pt text takes two rows of a 15.6 pt grid, 31.2 pt, and stands in
+    // the middle of them; its own box is 19.6 pt tall. The 22nd line goes
+    // on the first page when 25.5 pt are left for it, and not when 25.0 pt
+    // are: what has to fit is the text, 25.4 pt down the line, and the
+    // empty half row under it may hang below the body.
+    let body: String = (1..=30)
+        .map(|n| paragraph(&font("Source Han Serif CN", 21), r#"<w:widowControl w:val="0"/>"#, &format!("第{n}行")))
+        .collect();
+    let on_first_page = |room: u32| {
+        // The 22nd line begins 14544 twips down the page.
+        let section = format!(
+            r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1800" w:bottom="{}" w:left="1800"/><w:docGrid w:type="lines" w:linePitch="312"/>"#,
+            16838 - 14544 - room
+        );
+        let pages = pages(&Source { body: &body, section: &section, ..Source::default() }, &fonts, Model::Word);
+        assert!(close(pages[0].lines[1].baseline - pages[0].lines[0].baseline, 31.2, 0.01));
+        pages[0].lines.len()
+    };
+    assert_eq!(on_first_page(500), 21);
+    assert_eq!(on_first_page(510), 22);
+    assert_eq!(on_first_page(640), 22);
+    // Twice the grid's rows: the line is 31.2 pt all the same (two rows it
+    // needs anyway), and the same holds.
+    let double = body.replace("<w:pPr>", r#"<w:pPr><w:spacing w:line="480" w:lineRule="auto"/>"#);
+    let section = |room: u32| {
+        format!(
+            r#"<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1800" w:bottom="{}" w:left="1800"/><w:docGrid w:type="lines" w:linePitch="312"/>"#,
+            16838 - 14544 - room
+        )
+    };
+    let count = |room| {
+        pages(&Source { body: &double, section: &section(room), ..Source::default() }, &fonts, Model::Word)[0]
+            .lines
+            .len()
+    };
+    assert_eq!((count(500), count(510)), (21, 22));
+}
+
+#[test]
 fn text_sits_in_a_line_of_fixed_height_by_its_fonts_own_proportions() {
     let Some(fonts) = fonts(&[("Source Han Serif CN", '中'), ("Liberation Serif", 'a')]) else { return };
     // As measured in WPS Office (testdata/zh-open/07-regulation): in a line

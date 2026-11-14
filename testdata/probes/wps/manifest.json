@@ -2,6 +2,20 @@
  "application": "WPS Office for Linux 11.1.0.11723",
  "export": "SaveAs2 with wdFormatPDF",
  "documents": {
+  "grid-foot-25-0.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
+  "grid-foot-25-5.docx": {
+   "pages": 2,
+   "fonts": [
+    "LiberationSerif",
+    "SourceHanSerifCN-Regular"
+   ]
+  },
   "notes-continuous.docx": {
    "pages": 3,
    "fonts": [

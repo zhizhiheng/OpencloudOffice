@@ -2,7 +2,7 @@
 
 这里的每份文档只考几条排版规则，用来让参照软件排一遍、量出规则，再和我们的引擎逐行对照。
 
-- 文档由 `tools/probes/make.py` 生成，每次生成的字节相同；全部用 Liberation Serif，参照机器上有这个字体，不会发生字体替换。
+- 文档由 `tools/probes/make.py` 生成，每次生成的字节相同；西文用 Liberation Serif，中文用思源宋体（`fonts/` 里的开源字体），参照机器上都有，不会发生字体替换。
 - `wps/` 下是 WPS Office for Linux 排出的结果：每份文档一个 `*.lines.json`，记着每一行的文字和位置（PDF 太大，没有入库）。重新导出：`python3 tools/wps/export.py testdata/probes`。
 - `tools/fidelity/score.py` 把它们单列一栏计分，并记入只升不降的基线。
 
@@ -15,6 +15,7 @@
 | `notes-each-page.docx` | 每页重新编号 |
 | `notes-each-section.docx` | 两节，每节重新编号；第二节用大写罗马数字，从 V 起 |
 | `notes-section-start.docx` | 两节，连续编号；第二节写了起始号 5 |
+| `grid-foot-25-0.docx`、`grid-foot-25-5.docx` | 文档网格下页底最后一行需要多少地方：30 行中文，每行占两格；下边距给第 22 行留 25.0 磅和 25.5 磅，WPS 只在后一份里把它留在第一页 |
 
 规则本身和量出来的数值记在 [排版研究](../../docs/layout.md)，怎样计分记在 [还原度](../../docs/fidelity.md)。
 

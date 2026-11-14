@@ -1073,10 +1073,20 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                 let rows = (single / pitch - 0.001).ceil().max(1.0);
                 let base = rows * pitch;
                 let centred = (base - single) / 2.0 + ascent;
+                // At the foot of a page the line has to fit as far as its
+                // text reaches, as off the grid: the empty half row under
+                // the text may hang below the body. (Measured in WPS: a
+                // line of two 15.6 pt rows whose text is 19.6 pt tall goes
+                // on a page that has 25.5 pt left for it and not on one
+                // that has 25.0 pt.)
+                let reach = match context.model {
+                    Model::Word => (base + single) / 2.0,
+                    Model::LibreOffice => base,
+                };
                 match (rule, line_value) {
                     ("atLeast", Some(line)) => {
                         let height = base.max(((line * TWIP) / pitch - 0.001).ceil() * pitch);
-                        (height, height - base + centred, height)
+                        (height, height - base + centred, height - base + reach)
                     }
                     // A multiple counts grid rows, not the rows the text
                     // takes: one and a half lines is a row and a half,
@@ -1090,10 +1100,10 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                             Model::Word => base.max(pitch * line / 240.0),
                             Model::LibreOffice => base * line / 240.0,
                         };
-                        (height, centred, base)
+                        (height, centred, reach)
                     }
                     (_, Some(line)) => (base * line / 240.0, centred.min(base * line / 240.0), base * line / 240.0),
-                    _ => (base, centred, base),
+                    _ => (base, centred, reach),
                 }
             }
             ("atLeast", Some(line), None) => {
