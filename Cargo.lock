@@ -45,7 +45,10 @@ version = "0.0.1"
 dependencies = [
  "oco-doc",
  "oco-docx",
+ "oco-layout",
  "oco-markdown",
+ "oco-pptx",
+ "oco-xlsx",
 ]
 
 [[package]]
@@ -64,11 +67,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "oco-pptx"
+version = "0.0.1"
+dependencies = [
+ "oco-docx",
+ "oco-layout",
+]
+
+[[package]]
 name = "oco-wasm"
 version = "0.0.1"
 dependencies = [
  "oco-docx",
  "oco-formats",
+ "oco-layout",
+]
+
+[[package]]
+name = "oco-xlsx"
+version = "0.0.1"
+dependencies = [
+ "oco-docx",
  "oco-layout",
 ]
 

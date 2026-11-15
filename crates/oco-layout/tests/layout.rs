@@ -3132,3 +3132,41 @@ fn a_picture_is_turned_about_the_centre_of_its_box() {
     assert_eq!(turned.4, 90.0);
     assert_eq!((turned.0, turned.1, turned.2, turned.3), (upright.0, upright.1, upright.2, upright.3));
 }
+
+#[test]
+fn text_is_set_on_its_own_as_in_the_body_of_a_document() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let options = Options { model: Model::Word };
+    // The blocks of a document, set as a story 300 pt wide, break and stand
+    // as they do on a page whose text is 300 pt wide.
+    let body = paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:after="200"/>"#, LOREM)
+        + &paragraph(&font("Liberation Serif", 24), r#"<w:jc w:val="center"/>"#, "centred");
+    let section =
+        r#"<w:pgSz w:w="8000" w:h="16838"/><w:pgMar w:top="1000" w:right="1000" w:bottom="1000" w:left="1000"/>"#;
+    let document = docx(&Source { body: &body, section, ..Source::default() });
+    let page = layout(&document, &fonts, &options).pages.remove(0);
+    let story = oco_layout::story(&document, &document.document.body, 300.0, &fonts, &options);
+    assert_eq!(story.lines.len(), page.lines.len());
+    for (own, paged) in story.lines.iter().zip(&page.lines) {
+        assert_eq!(own.text, paged.text);
+        assert!(close(own.x0 + 50.0, paged.x0, 0.01) && close(own.baseline + 50.0, paged.baseline, 0.01));
+    }
+    let last = story.lines.last().unwrap();
+    assert!(close((last.x0 + last.x1) / 2.0, 150.0, 0.01), "centred in the story's width");
+    assert!(story.reach > 250.0 && story.reach <= 300.0 && story.height > last.baseline);
+    assert_eq!(story.items.iter().filter(|item| matches!(item, Item::Glyph { .. })).count(), {
+        let inked = |text: &str| text.chars().filter(|ch| !ch.is_whitespace()).count();
+        inked(LOREM) + inked("centred")
+    });
+
+    // Text of another kind of file is made of runs with all their formatting
+    // on them, and set against a document with nothing in it.
+    let mut props = oco_docx::RunProps { size: Some(40), bold: Some(true), ..Default::default() };
+    props.fonts.ascii = Some(oco_docx::FontRef::Name("Liberation Serif".into()));
+    let run = oco_docx::Run::with(props, vec![oco_docx::RunContent::Text("Title".into())]);
+    let block = oco_docx::Block::Paragraph(oco_docx::Paragraph { runs: vec![run], ..Default::default() });
+    let story = oco_layout::story(&Docx::default(), &[block], 400.0, &fonts, &options);
+    assert_eq!(story.lines.len(), 1);
+    assert_eq!((story.lines[0].text.as_str(), story.lines[0].size), ("Title", 20.0));
+    assert!(story.missing_fonts.is_empty() && story.height > 20.0);
+}

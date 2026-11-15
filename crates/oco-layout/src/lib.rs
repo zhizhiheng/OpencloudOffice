@@ -29,6 +29,97 @@ pub use fonts::{FontDb, FontId, Model};
 
 pub type Rgb = [u8; 3];
 
+/// One step of an outline. Coordinates are in points, as those of every item.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Segment {
+    Move(f32, f32),
+    Line(f32, f32),
+    /// A quadratic curve: its control point, then its end.
+    Quad(f32, f32, f32, f32),
+    /// A cubic curve: its two control points, then its end.
+    Cubic(f32, f32, f32, f32, f32, f32),
+    Close,
+}
+
+impl Segment {
+    /// The points of the segment, moved by `map`.
+    fn mapped(self, map: impl Fn(f32, f32) -> (f32, f32)) -> Segment {
+        match self {
+            Segment::Move(x, y) => {
+                let (x, y) = map(x, y);
+                Segment::Move(x, y)
+            }
+            Segment::Line(x, y) => {
+                let (x, y) = map(x, y);
+                Segment::Line(x, y)
+            }
+            Segment::Quad(x1, y1, x, y) => {
+                let ((x1, y1), (x, y)) = (map(x1, y1), map(x, y));
+                Segment::Quad(x1, y1, x, y)
+            }
+            Segment::Cubic(x1, y1, x2, y2, x, y) => {
+                let ((x1, y1), (x2, y2), (x, y)) = (map(x1, y1), map(x2, y2), map(x, y));
+                Segment::Cubic(x1, y1, x2, y2, x, y)
+            }
+            Segment::Close => Segment::Close,
+        }
+    }
+}
+
+/// A colour at a place along a gradient: 0 is where the gradient begins, 1 where it ends.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stop {
+    pub at: f32,
+    pub color: Rgb,
+    /// From 0, not seen, to 1, solid.
+    pub opacity: f32,
+}
+
+/// What an outline is filled with.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Paint {
+    Solid {
+        color: Rgb,
+        opacity: f32,
+    },
+    /// Colours that change along the line from one point to another.
+    Linear {
+        stops: Vec<Stop>,
+        from: (f32, f32),
+        to: (f32, f32),
+    },
+    /// Colours that change outwards from a centre.
+    Radial {
+        stops: Vec<Stop>,
+        centre: (f32, f32),
+        radius: f32,
+    },
+}
+
+impl Paint {
+    pub fn solid(color: Rgb) -> Paint {
+        Paint::Solid { color, opacity: 1.0 }
+    }
+}
+
+/// The line an outline is drawn with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pen {
+    pub width: f32,
+    pub color: Rgb,
+    pub opacity: f32,
+    /// The lengths of dashes and gaps in turn; empty for a solid line.
+    pub dash: Vec<f32>,
+    /// Ends and corners are rounded rather than square.
+    pub round: bool,
+}
+
+impl Pen {
+    pub fn solid(width: f32, color: Rgb) -> Pen {
+        Pen { width, color, opacity: 1.0, dash: Vec::new(), round: false }
+    }
+}
+
 /// One drawing instruction. Coordinates are in points from the page's top-left corner.
 #[derive(Debug, Clone)]
 pub enum Item {
@@ -105,6 +196,22 @@ pub enum Item {
         height: f32,
     },
     ClipEnd,
+    /// An outline, filled, drawn with a line, or both: a shape of a
+    /// drawing, the grid of a sheet.
+    Shape {
+        path: Vec<Segment>,
+        fill: Option<Paint>,
+        stroke: Option<Pen>,
+    },
+    /// What follows, as far as the [`Item::GroupEnd`] that answers it, is
+    /// drawn turned, scaled or sheared: a point (x, y) of it goes to
+    /// (a·x + c·y + e, b·x + d·y + f) for the matrix `[a, b, c, d, e, f]`,
+    /// and all of it is seen through as far as `opacity` says.
+    GroupStart {
+        matrix: [f32; 6],
+        opacity: f32,
+    },
+    GroupEnd,
 }
 
 /// How far to either side a box that cuts off only what is above or below
@@ -112,6 +219,25 @@ pub enum Item {
 const CLIP_REACH: f32 = 20_000.0;
 
 impl Item {
+    /// Moves the item by `dx` across and `dy` down.
+    pub fn moved(mut self, dx: f32, dy: f32) -> Item {
+        self.translate(dx, dy);
+        self
+    }
+
+    /// The start of a group that is turned `degrees` clockwise about (`cx`, `cy`).
+    pub fn turned(degrees: f32, cx: f32, cy: f32) -> Item {
+        // Quarter turns are exact, whatever the platform's sine makes of them.
+        let quarters = degrees / 90.0;
+        let (sin, cos) = if quarters == quarters.round() {
+            [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)][(quarters.round() as i64).rem_euclid(4) as usize]
+        } else {
+            degrees.to_radians().sin_cos()
+        };
+        let matrix = [cos, sin, -sin, cos, cx - cos * cx + sin * cy, cy - sin * cx - cos * cy];
+        Item::GroupStart { matrix, opacity: 1.0 }
+    }
+
     /// A box that shows what lies between `top` and `bottom`, however far
     /// to the left or right.
     fn clip_between(top: f32, bottom: f32) -> Item {
@@ -127,7 +253,23 @@ impl Item {
                 *x += dx;
                 *y += dy;
             }
-            Item::ClipEnd => {}
+            Item::ClipEnd | Item::GroupEnd => {}
+            Item::Shape { path, fill, .. } => {
+                path.iter_mut().for_each(|segment| *segment = segment.mapped(|x, y| (x + dx, y + dy)));
+                match fill {
+                    Some(Paint::Linear { from, to, .. }) => {
+                        *from = (from.0 + dx, from.1 + dy);
+                        *to = (to.0 + dx, to.1 + dy);
+                    }
+                    Some(Paint::Radial { centre, .. }) => *centre = (centre.0 + dx, centre.1 + dy),
+                    _ => {}
+                }
+            }
+            // The same turn about a point that has moved with everything else.
+            Item::GroupStart { matrix: [a, b, c, d, e, f], .. } => {
+                *e += dx - *a * dx - *c * dy;
+                *f += dy - *b * dx - *d * dy;
+            }
             Item::Rule { x1, y1, x2, y2, .. } => {
                 *x1 += dx;
                 *x2 += dx;
@@ -1352,6 +1494,30 @@ fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (boo
     Some(ParaBox { shade, fill, sides, open: (top.is_none(), bottom.is_none()) })
 }
 
+impl<'a> Builder<'a> {
+    fn new(docx: &'a Docx, fonts: &'a FontDb, options: &Options, notes: Vec<NoteEntry>, fields: &Fields) -> Self {
+        Builder {
+            docx,
+            fonts,
+            resolver: docx.resolver(),
+            counters: Counters::default(),
+            options: *options,
+            paragraphs: 0,
+            missing_fonts: Vec::new(),
+            table_styles: Vec::new(),
+            demands: HashMap::new(),
+            depth: 0,
+            unplaced: 0,
+            box_counters: Counters::default(),
+            story_counters: Counters::default(),
+            notes,
+            note_mark: None,
+            note_counters: [Counters::default(), Counters::default()],
+            fields: fields.clone(),
+        }
+    }
+}
+
 impl Builder<'_> {
     /// What a paragraph is laid out from: its properties, runs and label,
     /// all resolved. Counts the paragraph if it is a list item.
@@ -2498,6 +2664,42 @@ fn column_count(table: &oco_docx::Table) -> usize {
     table.rows.iter().map(covered).max().unwrap_or(0).max(table.grid.len()).max(1)
 }
 
+/// Text laid out on its own, outside any page: what [`story`] returns.
+#[derive(Debug, Clone, Default)]
+pub struct Story {
+    /// What to draw, from the story's left and top.
+    pub items: Vec<Item>,
+    /// Its lines of text, placed as the items are.
+    pub lines: Vec<PlacedLine>,
+    /// How tall it is, the space after its last paragraph included.
+    pub height: f32,
+    /// How far to the right its text reaches at the most.
+    pub reach: f32,
+    pub missing_fonts: Vec<String>,
+}
+
+/// Lays out blocks in a column `width` wide, as a story of its own: the
+/// text of a shape on a slide, of a cell of a sheet, of anything that is
+/// not a page of a document but has text set as a document's is. `docx`
+/// is what the blocks are read against, its styles, its numbering and its
+/// settings; `Docx::default()` for text that has all its formatting on it.
+/// Lines are broken, and paragraphs spaced, exactly as in a document's
+/// body; there is no grid, and nothing is anchored or noted.
+pub fn story(docx: &Docx, blocks: &[Block], width: f32, fonts: &FontDb, options: &Options) -> Story {
+    let mut builder = Builder::new(docx, fonts, options, Vec::new(), &Fields::new());
+    let section = Section::default();
+    let mut units = Vec::new();
+    builder.blocks(blocks, &section, width.max(1.0), &mut units);
+    let (placed, height, _) = stack(units);
+    let mut story = Story { height, missing_fonts: builder.missing_fonts, ..Story::default() };
+    for (offset, mut line) in placed {
+        story.items.extend(std::mem::take(&mut line.items).into_iter().map(|item| item.moved(0.0, offset)));
+        record(&line, 0.0, offset, &mut story.lines);
+    }
+    story.reach = story.lines.iter().map(|line| line.x1).fold(0.0, f32::max);
+    story
+}
+
 pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     let mut notes = number_notes(docx);
     let mut fields = Fields::new();
@@ -2549,25 +2751,7 @@ fn layout_pass(
         docx.document.paragraphs().iter().filter_map(|p| p.section_break.as_ref()).collect();
     setups.push(&docx.document.section);
 
-    let mut builder = Builder {
-        docx,
-        fonts,
-        resolver: docx.resolver(),
-        counters: Counters::default(),
-        options: *options,
-        paragraphs: 0,
-        missing_fonts: Vec::new(),
-        table_styles: Vec::new(),
-        demands: HashMap::new(),
-        depth: 0,
-        unplaced: 0,
-        box_counters: Counters::default(),
-        story_counters: Counters::default(),
-        notes,
-        note_mark: None,
-        note_counters: [Counters::default(), Counters::default()],
-        fields: fields.clone(),
-    };
+    let mut builder = Builder::new(docx, fonts, options, notes, fields);
     let mut units = Vec::new();
     // Each section is laid out at its own text width. A section ends with
     // the paragraph that carries its page setup.

@@ -61,6 +61,13 @@ use opc::Package;
 #[derive(Debug, Clone)]
 pub struct Media(zip::Packed);
 
+impl From<zip::Packed> for Media {
+    /// A file of a package, as [`opc::Package::read_packed`] hands it out.
+    fn from(packed: zip::Packed) -> Self {
+        Media(packed)
+    }
+}
+
 impl Media {
     /// The file's bytes.
     pub fn bytes(&self) -> Result<Vec<u8>> {
@@ -106,8 +113,9 @@ fn resolve_pictures(
     }
 }
 
-/// A parsed `.docx` file.
-#[derive(Debug, Clone)]
+/// A parsed `.docx` file. The default is a document with nothing in it and
+/// nothing stated: what text of another kind of file is laid out against.
+#[derive(Debug, Clone, Default)]
 pub struct Docx {
     pub document: Document,
     pub styles: StyleSheet,

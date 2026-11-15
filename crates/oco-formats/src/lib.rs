@@ -1,14 +1,23 @@
 //! One way in for every kind of document the core shows.
 //!
-//! Whatever a file is, it is shown from the document form: the
-//! WordprocessingML package that a `.docx` file already is. A binary Word
-//! document or a Markdown text is first turned into such a package, and
-//! from there on is read, laid out and drawn as any other.
+//! Text documents are shown from the document form: the WordprocessingML
+//! package that a `.docx` file already is. A binary Word document or a
+//! Markdown text is first turned into such a package, and from there on is
+//! read, laid out and drawn as any other. A spreadsheet and a presentation
+//! are not text that flows down pages, and have layouts of their own; they
+//! share with documents what lies under the layout of a page: the readers
+//! of packages and XML, the fonts, the setting of text, and the drawing.
+//! [`open_any`] opens a file of whatever kind, and [`Document::layout`]
+//! gives its pages.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
-use oco_docx::Docx;
+use oco_docx::{Docx, Media};
+use oco_layout::{FontDb, Layout, Options};
+use oco_pptx::Presentation;
+use oco_xlsx::Workbook;
 
 /// The kinds of document that can be opened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +28,58 @@ pub enum Format {
     Doc,
     /// Markdown, or plain text, which reads as Markdown.
     Markdown,
+    /// A SpreadsheetML package: `.xlsx`, `.xlsm`, `.xltx`.
+    Xlsx,
+    /// A PresentationML package: `.pptx`, `.ppsx`, `.pptm`, `.potx`.
+    Pptx,
+}
+
+/// A document of any kind that is known, opened.
+// A document is opened once and kept; boxing the larger kinds would buy nothing.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone)]
+pub enum Document {
+    /// A Word document, or what is shown as one: a binary Word document, Markdown.
+    Text(Docx),
+    Sheets(Workbook),
+    Slides(Presentation),
+}
+
+impl Document {
+    /// Lays the document out as pages.
+    pub fn layout(&self, fonts: &FontDb, options: &Options) -> Layout {
+        match self {
+            Document::Text(docx) => oco_layout::layout(docx, fonts, options),
+            Document::Sheets(workbook) => oco_xlsx::layout(workbook, fonts, options),
+            Document::Slides(presentation) => oco_pptx::layout(presentation, fonts, options),
+        }
+    }
+
+    /// The picture files the pages show, by the names the pages know them by.
+    pub fn media(&self) -> &BTreeMap<String, Media> {
+        match self {
+            Document::Text(docx) => &docx.media,
+            Document::Sheets(workbook) => &workbook.media,
+            Document::Slides(presentation) => &presentation.media,
+        }
+    }
+
+    /// Problems that did not prevent opening.
+    pub fn warnings(&self) -> &[String] {
+        match self {
+            Document::Text(docx) => &docx.warnings,
+            Document::Sheets(workbook) => &workbook.warnings,
+            Document::Slides(presentation) => &presentation.warnings,
+        }
+    }
+
+    /// The Word document this is, if it is one.
+    pub fn text(&self) -> Option<&Docx> {
+        match self {
+            Document::Text(docx) => Some(docx),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -26,6 +87,11 @@ pub enum Error {
     Io(std::io::Error),
     Docx(oco_docx::Error),
     Doc(oco_doc::Error),
+    Xlsx(oco_xlsx::Error),
+    Pptx(oco_pptx::Error),
+    /// A document of a kind that is not text flowing down pages, where
+    /// only such a document will do.
+    NotText(Format),
     /// Neither a kind of document that is known nor text.
     Unknown,
 }
@@ -36,6 +102,10 @@ impl fmt::Display for Error {
             Error::Io(error) => write!(f, "i/o error: {error}"),
             Error::Docx(error) => error.fmt(f),
             Error::Doc(error) => error.fmt(f),
+            Error::Xlsx(error) => error.fmt(f),
+            Error::Pptx(error) => error.fmt(f),
+            Error::NotText(Format::Xlsx) => f.write_str("a spreadsheet, not a text document"),
+            Error::NotText(_) => f.write_str("a presentation, not a text document"),
             Error::Unknown => f.write_str("not a kind of document that can be shown"),
         }
     }
@@ -51,10 +121,35 @@ pub fn detect(bytes: &[u8], name: Option<&str>) -> Option<Format> {
     if bytes.starts_with(&COMPOUND_FILE) {
         return Some(Format::Doc);
     }
-    if bytes.starts_with(b"PK") {
-        return Some(Format::Docx);
-    }
     let extension = name.and_then(|name| name.rsplit_once('.')).map(|(_, extension)| extension.to_ascii_lowercase());
+    let by_name = match extension.as_deref() {
+        Some("xlsx" | "xlsm" | "xltx" | "xltm") => Some(Format::Xlsx),
+        Some("pptx" | "pptm" | "ppsx" | "ppsm" | "potx" | "potm") => Some(Format::Pptx),
+        _ => None,
+    };
+    if bytes.starts_with(b"PK") {
+        // A package is what its parts say it is: a workbook's are under
+        // `xl/`, a presentation's under `ppt/`. One that cannot be listed
+        // is what its name says, and failing that a Word document, whose
+        // reader then says what is wrong with it.
+        let parts = oco_docx::zip::Archive::new(std::io::Cursor::new(bytes)).ok();
+        let holds = |folder: &str| {
+            parts.as_ref().is_some_and(|archive| archive.entries().iter().any(|entry| entry.name.starts_with(folder)))
+        };
+        return Some(if holds("word/") {
+            Format::Docx
+        } else if holds("xl/") {
+            Format::Xlsx
+        } else if holds("ppt/") {
+            Format::Pptx
+        } else {
+            by_name.unwrap_or(Format::Docx)
+        });
+    }
+    if by_name.is_some() {
+        // Named as a workbook or a presentation but not a package: the reader says what is wrong.
+        return by_name;
+    }
     match extension.as_deref() {
         Some("md" | "markdown" | "mdown" | "mkd" | "txt") => return Some(Format::Markdown),
         // Named as a Word document but not one: the reader of that kind says what is wrong.
@@ -96,10 +191,30 @@ pub fn converted(
         Format::Docx => Ok(None),
         Format::Doc => oco_doc::to_docx(bytes).map(Some).map_err(Error::Doc),
         Format::Markdown => Ok(Some(oco_markdown::to_docx(&text(bytes), image))),
+        other => Err(Error::NotText(other)),
     }
 }
 
-/// Opens a document of any kind that is known. See [`detect`] for `name`.
+/// Opens a file of any kind that is known. See [`detect`] for `name`.
+pub fn open_any(bytes: &[u8], name: Option<&str>) -> Result<Document, Error> {
+    open_any_with(bytes, name, &|_| None)
+}
+
+/// As [`open_any`], with the images a Markdown text shows supplied by `image`.
+pub fn open_any_with(
+    bytes: &[u8],
+    name: Option<&str>,
+    image: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Result<Document, Error> {
+    match detect(bytes, name).ok_or(Error::Unknown)? {
+        Format::Xlsx => Workbook::from_bytes(bytes).map(Document::Sheets).map_err(Error::Xlsx),
+        Format::Pptx => Presentation::from_bytes(bytes).map(Document::Slides).map_err(Error::Pptx),
+        _ => open_with(bytes, name, image).map(Document::Text),
+    }
+}
+
+/// Opens a text document: a Word document, or what is shown as one. See
+/// [`detect`] for `name`.
 pub fn open(bytes: &[u8], name: Option<&str>) -> Result<Docx, Error> {
     open_with(bytes, name, &|_| None)
 }
@@ -110,8 +225,17 @@ pub fn open_with(bytes: &[u8], name: Option<&str>, image: &dyn Fn(&str) -> Optio
     Docx::from_bytes(package.as_deref().unwrap_or(bytes)).map_err(Error::Docx)
 }
 
-/// Opens a file. Images of a Markdown file are looked for beside it.
+/// Opens a file that is a text document. Images of a Markdown file are looked for beside it.
 pub fn open_path(path: impl AsRef<Path>) -> Result<Docx, Error> {
+    match open_path_any(path)? {
+        Document::Text(docx) => Ok(docx),
+        Document::Sheets(_) => Err(Error::NotText(Format::Xlsx)),
+        Document::Slides(_) => Err(Error::NotText(Format::Pptx)),
+    }
+}
+
+/// Opens a file of any kind that is known. Images of a Markdown file are looked for beside it.
+pub fn open_path_any(path: impl AsRef<Path>) -> Result<Document, Error> {
     let path = path.as_ref();
     let bytes = std::fs::read(path).map_err(Error::Io)?;
     let name = path.file_name().map(|name| name.to_string_lossy().into_owned());
@@ -121,7 +245,7 @@ pub fn open_path(path: impl AsRef<Path>) -> Result<Docx, Error> {
         let inside = relative.components().all(|part| matches!(part, std::path::Component::Normal(_)));
         inside.then(|| std::fs::read(path.parent()?.join(relative)).ok()).flatten()
     };
-    open_with(&bytes, name.as_deref(), &beside)
+    open_any_with(&bytes, name.as_deref(), &beside)
 }
 
 #[cfg(test)]
@@ -140,6 +264,20 @@ mod tests {
         assert_eq!(detect(b"plain text", Some("notes.docx")), Some(Format::Docx));
         assert!(matches!(open(b"plain text", Some("notes.docx")), Err(Error::Docx(_))));
         assert_eq!(detect(b"\x00\x01\x02binary", None), None);
+        // A package is what its parts say, whatever it is called; one that
+        // cannot be listed is what its name says.
+        let package = |part: &str| {
+            let mut writer = oco_docx::zip::Writer::new();
+            writer.add(part, b"<x/>");
+            writer.finish()
+        };
+        assert_eq!(detect(&package("xl/workbook.xml"), Some("report.docx")), Some(Format::Xlsx));
+        assert_eq!(detect(&package("ppt/presentation.xml"), None), Some(Format::Pptx));
+        assert_eq!(detect(&package("word/document.xml"), Some("sheet.xlsx")), Some(Format::Docx));
+        assert_eq!(detect(b"PK\x03\x04....", Some("sheet.xlsx")), Some(Format::Xlsx));
+        assert_eq!(detect(b"plain text", Some("deck.pptx")), Some(Format::Pptx));
+        // Only a text document opens as one.
+        assert!(matches!(open(&package("xl/workbook.xml"), None), Err(Error::NotText(Format::Xlsx))));
         assert!(matches!(open(b"\x00\x01\x02binary", Some("data.bin")), Err(Error::Unknown)));
     }
 

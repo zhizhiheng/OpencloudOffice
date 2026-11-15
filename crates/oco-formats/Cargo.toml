@@ -11,4 +11,7 @@ repository.workspace = true
 [dependencies]
 oco-doc.workspace = true
 oco-docx.workspace = true
+oco-layout.workspace = true
 oco-markdown.workspace = true
+oco-pptx.workspace = true
+oco-xlsx.workspace = true

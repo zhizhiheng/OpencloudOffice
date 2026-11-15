@@ -11,7 +11,7 @@ use oco_docx::Media;
 
 use crate::fonts::FontDb;
 use crate::sfnt::OutlineBuilder;
-use crate::{Item, Page, Rgb};
+use crate::{Item, Page, Paint, Rgb, Segment};
 
 /// Collects a glyph outline as SVG path data, in font units with y up.
 struct PathData(String);
@@ -32,6 +32,72 @@ impl OutlineBuilder for PathData {
     }
     fn close(&mut self) {
         self.0.push('Z');
+    }
+}
+
+/// What is open while a page is drawn: a clip or a group.
+#[derive(Clone, Copy, PartialEq)]
+enum Open {
+    Clip,
+    Group,
+}
+
+/// An attribute that makes something see-through; nothing for what is solid.
+fn see_through(name: &str, opacity: f32) -> String {
+    if opacity >= 0.999 {
+        String::new()
+    } else {
+        format!(r#" {name}="{}""#, n(opacity.clamp(0.0, 1.0)))
+    }
+}
+
+/// The gradients a page is filled with. Each is named by what it is, so
+/// that two pages in one web page that name a gradient alike mean the same.
+#[derive(Default)]
+struct Gradients {
+    definitions: String,
+    known: Vec<String>,
+}
+
+impl Gradients {
+    fn name(&mut self, paint: &Paint) -> String {
+        let stops = |stops: &[crate::Stop]| -> String {
+            stops
+                .iter()
+                .map(|stop| {
+                    format!(
+                        r#"<stop offset="{}" stop-color="{}"{}/>"#,
+                        n(stop.at.clamp(0.0, 1.0)),
+                        hex(stop.color),
+                        see_through("stop-opacity", stop.opacity)
+                    )
+                })
+                .collect()
+        };
+        let (element, places, stops) = match paint {
+            Paint::Linear { stops: list, from, to } => (
+                "linearGradient",
+                format!(r#"x1="{}" y1="{}" x2="{}" y2="{}""#, n(from.0), n(from.1), n(to.0), n(to.1)),
+                stops(list),
+            ),
+            Paint::Radial { stops: list, centre, radius } => (
+                "radialGradient",
+                format!(r#"cx="{}" cy="{}" r="{}""#, n(centre.0), n(centre.1), n(*radius)),
+                stops(list),
+            ),
+            Paint::Solid { .. } => return String::new(),
+        };
+        let content = format!(r#"gradientUnits="userSpaceOnUse" {places}>{stops}</{element}>"#);
+        // FNV-1a over what the gradient is.
+        let hash = content
+            .bytes()
+            .fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3));
+        let name = format!("p{hash:016x}");
+        if !self.known.contains(&name) {
+            let _ = writeln!(self.definitions, r#"<{element} id="{name}" {content}"#);
+            self.known.push(name.clone());
+        }
+        name
     }
 }
 
@@ -82,8 +148,9 @@ fn base64(bytes: &[u8]) -> String {
 pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> String {
     let mut definitions: BTreeMap<(usize, u16), String> = BTreeMap::new();
     let mut body = String::new();
-    // How many clips are open.
-    let mut clips = 0;
+    // The clips and groups that are open, innermost last.
+    let mut open: Vec<Open> = Vec::new();
+    let mut gradients = Gradients::default();
     for item in &page.items {
         match *item {
             Item::Glyph { font, glyph, x, y, size, x_scale, color, fake_bold, fake_italic, hollow } => {
@@ -243,7 +310,7 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
             // name, so pages put into one web page cannot take each
             // other's; what is inside is moved back to where the page has it.
             Item::ClipStart { x, y, width, height } => {
-                clips += 1;
+                open.push(Open::Clip);
                 let _ = writeln!(
                     body,
                     r#"<svg x="{0}" y="{1}" width="{2}" height="{3}" overflow="hidden"><g transform="translate({4} {5})">"#,
@@ -256,15 +323,79 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                 );
             }
             Item::ClipEnd => {
-                if clips > 0 {
-                    clips -= 1;
+                if open.last() == Some(&Open::Clip) {
+                    open.pop();
                     body.push_str("</g></svg>\n");
+                }
+            }
+            Item::Shape { ref path, ref fill, ref stroke } => {
+                let mut d = String::new();
+                for segment in path {
+                    let _ = match *segment {
+                        Segment::Move(x, y) => write!(d, "M{} {}", n(x), n(y)),
+                        Segment::Line(x, y) => write!(d, "L{} {}", n(x), n(y)),
+                        Segment::Quad(x1, y1, x, y) => write!(d, "Q{} {} {} {}", n(x1), n(y1), n(x), n(y)),
+                        Segment::Cubic(x1, y1, x2, y2, x, y) => {
+                            write!(d, "C{} {} {} {} {} {}", n(x1), n(y1), n(x2), n(y2), n(x), n(y))
+                        }
+                        Segment::Close => write!(d, "Z"),
+                    };
+                }
+                let fill = match fill {
+                    None => r#" fill="none""#.to_owned(),
+                    Some(Paint::Solid { color, opacity }) => {
+                        format!(r#" fill="{}"{}"#, hex(*color), see_through("fill-opacity", *opacity))
+                    }
+                    Some(gradient) => format!(r##" fill="url(#{})""##, gradients.name(gradient)),
+                };
+                let stroke = stroke.as_ref().map_or(String::new(), |pen| {
+                    let dashes: Vec<String> = pen.dash.iter().map(|length| n(*length)).collect();
+                    format!(
+                        r#" stroke="{}" stroke-width="{}"{}{}{}"#,
+                        hex(pen.color),
+                        n(pen.width),
+                        see_through("stroke-opacity", pen.opacity),
+                        if dashes.is_empty() {
+                            String::new()
+                        } else {
+                            format!(r#" stroke-dasharray="{}""#, dashes.join(" "))
+                        },
+                        if pen.round { r#" stroke-linecap="round" stroke-linejoin="round""# } else { "" }
+                    )
+                });
+                let _ = writeln!(body, r#"<path d="{d}"{fill}{stroke}/>"#);
+            }
+            Item::GroupStart { matrix, opacity } => {
+                open.push(Open::Group);
+                // Six decimals: enough for any turn, and the same on every
+                // platform, whose sines may differ in their last bit.
+                let part = |value: f32| {
+                    let text = format!("{value:.6}");
+                    let text = text.trim_end_matches('0').trim_end_matches('.');
+                    if text == "-0" {
+                        "0".to_owned()
+                    } else {
+                        text.to_owned()
+                    }
+                };
+                let [a, b, c, d, e, f] = matrix.map(part);
+                let _ = writeln!(
+                    body,
+                    r#"<g transform="matrix({a} {b} {c} {d} {e} {f})"{}>"#,
+                    see_through("opacity", opacity)
+                );
+            }
+            Item::GroupEnd => {
+                if open.last() == Some(&Open::Group) {
+                    open.pop();
+                    body.push_str("</g>\n");
                 }
             }
         }
     }
-    for _ in 0..clips {
-        body.push_str("</g></svg>\n");
+    // What was not ended ends with the page.
+    for kind in open.into_iter().rev() {
+        body.push_str(if kind == Open::Clip { "</g></svg>\n" } else { "</g>\n" });
     }
 
     let mut out = String::new();
@@ -281,6 +412,7 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
     for ((font, glyph), path) in &definitions {
         let _ = writeln!(out, r#"<path id="g{font}_{glyph}" d="{path}"/>"#);
     }
+    out.push_str(&gradients.definitions);
     out.push_str("</defs>\n");
     out.push_str(&body);
     text_layer(page, &mut out);
@@ -366,6 +498,49 @@ mod tests {
         assert!(before.contains(r#"<rect x="10" y="0""#) && after.contains(r#"<rect x="10" y="25""#), "{drawn}");
         // A cut that is not ended ends with the page.
         assert!(after.contains("</g></svg>\n</svg>"), "{drawn}");
+    }
+
+    #[test]
+    fn draws_outlines_with_their_fills_lines_and_turns() {
+        use crate::{Pen, Stop};
+        let square = vec![
+            Segment::Move(10.0, 10.0),
+            Segment::Line(30.0, 10.0),
+            Segment::Cubic(30.0, 20.0, 30.0, 30.0, 20.0, 30.0),
+            Segment::Close,
+        ];
+        let stops = vec![
+            Stop { at: 0.0, color: [255, 0, 0], opacity: 1.0 },
+            Stop { at: 1.0, color: [0, 0, 255], opacity: 0.5 },
+        ];
+        let gradient = Paint::Linear { stops, from: (10.0, 10.0), to: (30.0, 10.0) };
+        let pen = Pen { dash: vec![4.0, 2.0], round: true, ..Pen::solid(1.5, [0, 128, 0]) };
+        let items = vec![
+            Item::turned(90.0, 20.0, 20.0),
+            Item::Shape {
+                path: square.clone(),
+                fill: Some(Paint::Solid { color: [1, 2, 3], opacity: 0.25 }),
+                stroke: None,
+            },
+            Item::GroupEnd,
+            Item::Shape { path: square.clone(), fill: Some(gradient.clone()), stroke: Some(pen) },
+            Item::Shape { path: square, fill: Some(gradient), stroke: None }.moved(100.0, 0.0),
+        ];
+        let page = Page { width: 200.0, height: 100.0, items, ..Page::default() };
+        let drawn = render(&page, &FontDb::default(), &BTreeMap::new());
+        let d = "M10 10L30 10C30 20 30 30 20 30Z";
+        // A quarter turn about (20, 20) takes (10, 10) to (30, 10).
+        assert!(drawn.contains(r#"<g transform="matrix(0 1 -1 0 40 0)">"#), "{drawn}");
+        assert!(drawn.contains(&format!(r##"<path d="{d}" fill="#010203" fill-opacity="0.25"/>"##)), "{drawn}");
+        // The same gradient in another place is another gradient: it is named by what it is.
+        let names: Vec<&str> =
+            drawn.match_indices(r#"<linearGradient id=""#).map(|(at, _)| &drawn[at + 20..at + 37]).collect();
+        assert_eq!(names.len(), 2);
+        assert_ne!(names[0], names[1]);
+        assert!(drawn.contains(r##"<stop offset="1" stop-color="#0000ff" stop-opacity="0.5"/>"##), "{drawn}");
+        let line = r##" stroke="#008000" stroke-width="1.5" stroke-dasharray="4 2" stroke-linecap="round" stroke-linejoin="round"/>"##;
+        assert!(drawn.contains(&format!(r##"<path d="{d}" fill="url(#{})"{line}"##, names[0])), "{drawn}");
+        assert!(drawn.contains(r#"<path d="M110 10L130 10C130 20 130 30 120 30Z""#), "{drawn}");
     }
 
     #[test]

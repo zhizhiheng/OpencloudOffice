@@ -13,10 +13,11 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 
 use oco_docx::Docx;
+use oco_formats::Document as Source;
 use oco_layout::{svg, FontDb, Layout, Options};
 
 struct Document {
-    docx: Docx,
+    source: Source,
     /// Laid out when first asked for, and again after the fonts change.
     layout: Option<Layout>,
 }
@@ -51,12 +52,11 @@ impl State {
     }
 
     /// The document behind a handle, laid out, and the fonts it is set in.
-    fn laid_out(&mut self, handle: u32) -> Option<(&Docx, &Layout, &FontDb)> {
+    fn laid_out(&mut self, handle: u32) -> Option<(&Source, &Layout, &FontDb)> {
         let fonts = &self.fonts;
         let document = self.documents.get_mut((handle as usize).checked_sub(1)?)?.as_mut()?;
-        let layout =
-            document.layout.get_or_insert_with(|| oco_layout::layout(&document.docx, fonts, &Options::default()));
-        Some((&document.docx, layout, fonts))
+        let layout = document.layout.get_or_insert_with(|| document.source.layout(fonts, &Options::default()));
+        Some((&document.source, layout, fonts))
     }
 }
 
@@ -104,7 +104,8 @@ pub unsafe extern "C" fn oco_add_font(ptr: *mut u8, len: usize) -> u32 {
 /// Opens a document from its bytes and returns a handle to it, or 0 with
 /// the reason in the result buffer. The bytes are only read during the
 /// call. What kind of document it is, a Word document (`.docx` or the older
-/// `.doc`) or Markdown, is told from the bytes; text is taken for Markdown.
+/// `.doc`), a spreadsheet (`.xlsx`), a presentation (`.pptx`) or Markdown,
+/// is told from the bytes; text is taken for Markdown.
 ///
 /// # Safety
 /// `ptr` must point at `len` readable bytes.
@@ -126,9 +127,9 @@ pub unsafe extern "C" fn oco_open_named(ptr: *const u8, len: usize, name: *const
 }
 
 fn open(bytes: &[u8], name: Option<&str>) -> u32 {
-    with(|state| match oco_formats::open(bytes, name) {
-        Ok(docx) => {
-            let document = Some(Document { docx, layout: None });
+    with(|state| match oco_formats::open_any(bytes, name) {
+        Ok(source) => {
+            let document = Some(Document { source, layout: None });
             match state.documents.iter().position(Option::is_none) {
                 Some(free) => {
                     state.documents[free] = document;
@@ -186,9 +187,9 @@ pub extern "C" fn oco_page_height(handle: u32, page: u32) -> f32 {
 #[no_mangle]
 pub extern "C" fn oco_page_svg(handle: u32, page: u32) -> u32 {
     with(|state| {
-        let drawn = state
-            .laid_out(handle)
-            .and_then(|(docx, layout, fonts)| Some(svg::render(layout.pages.get(page as usize)?, fonts, &docx.media)));
+        let drawn = state.laid_out(handle).and_then(|(source, layout, fonts)| {
+            Some(svg::render(layout.pages.get(page as usize)?, fonts, source.media()))
+        });
         let Some(drawn) = drawn else {
             return 0;
         };
@@ -210,13 +211,17 @@ pub extern "C" fn oco_page_svg(handle: u32, page: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn oco_info(handle: u32) -> u32 {
     with(|state| {
-        let Some((docx, layout, _)) = state.laid_out(handle) else {
+        let Some((source, layout, _)) = state.laid_out(handle) else {
             return 0;
         };
         let mut json = format!("{{\"pages\":{},\"missingFonts\":[", layout.pages.len());
         list(&mut json, layout.missing_fonts.iter(), |json, font| string(json, font));
         json.push_str("],\"notShown\":[");
-        let mut kinds = not_shown(docx);
+        let mut kinds = match source {
+            Source::Text(docx) => not_shown(docx),
+            Source::Sheets(workbook) => workbook.not_shown(),
+            Source::Slides(presentation) => presentation.not_shown(),
+        };
         // Pictures anchored in table cells are read but not placed yet, and
         // pictures of a kind that cannot be drawn are shown as empty frames.
         let more = layout.unplaced + layout.undrawn;
@@ -230,7 +235,7 @@ pub extern "C" fn oco_info(handle: u32) -> u32 {
             let _ = write!(json, "{{\"kind\":\"{kind}\",\"count\":{count}}}");
         });
         json.push_str("],\"warnings\":[");
-        list(&mut json, docx.warnings.iter(), |json, warning| string(json, warning));
+        list(&mut json, source.warnings().iter(), |json, warning| string(json, warning));
         json.push_str("]}");
         state.say(json);
         1

@@ -4,7 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use oco_docx::Docx;
+use std::collections::BTreeMap;
+
+use oco_docx::Media;
 use oco_layout::{svg, FontDb, Model, Options};
 
 pub struct Arguments {
@@ -50,8 +52,8 @@ pub const DEFAULT_FONT_DIRS: &[&str] = &[
 ];
 
 pub fn run(arguments: &Arguments) -> ExitCode {
-    let docx = match oco_formats::open_path(&arguments.input) {
-        Ok(docx) => docx,
+    let document = match oco_formats::open_path_any(&arguments.input) {
+        Ok(document) => document,
         Err(error) => {
             eprintln!("oco: {}: {error}", arguments.input.display());
             return ExitCode::FAILURE;
@@ -68,15 +70,15 @@ pub fn run(arguments: &Arguments) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let layout = oco_layout::layout(&docx, &fonts, &Options { model: arguments.model });
+    let layout = document.layout(&fonts, &Options { model: arguments.model });
     let pages = layout.pages;
     // What a comparison with a reference needs to know before blaming the layout.
     let summary = serde_json::json!({
         "pages": pages.len(),
         "missing_fonts": layout.missing_fonts,
-        "beyond_body_text": crate::score::beyond_body_text(&docx),
+        "beyond_body_text": document.text().is_some_and(crate::score::beyond_body_text),
     });
-    if let Err(error) = write(&arguments.out, &pages, &fonts, &docx, &summary) {
+    if let Err(error) = write(&arguments.out, &pages, &fonts, document.media(), &summary) {
         eprintln!("oco: {}: {error}", arguments.out.display());
         return ExitCode::FAILURE;
     }
@@ -89,13 +91,13 @@ fn write(
     out: &Path,
     pages: &[oco_layout::Page],
     fonts: &FontDb,
-    docx: &Docx,
+    media: &BTreeMap<String, Media>,
     summary: &serde_json::Value,
 ) -> std::io::Result<()> {
     fs::create_dir_all(out)?;
     fs::write(out.join("layout.json"), summary.to_string())?;
     for (index, page) in pages.iter().enumerate() {
-        fs::write(out.join(format!("page-{}.svg", index + 1)), svg::render(page, fonts, &docx.media))?;
+        fs::write(out.join(format!("page-{}.svg", index + 1)), svg::render(page, fonts, media))?;
     }
     // Line positions in the shape tools/zh/reference.py writes for LibreOffice.
     let summary: Vec<_> = pages

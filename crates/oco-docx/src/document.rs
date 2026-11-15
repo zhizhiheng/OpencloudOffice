@@ -221,6 +221,12 @@ pub struct TableCell {
 }
 
 impl Run {
+    /// A run made of its formatting and its content, as a reader of another
+    /// kind of file makes one to have its text set.
+    pub fn with(props: RunProps, content: Vec<RunContent>) -> Run {
+        Run { props, content, ..Run::default() }
+    }
+
     /// The run's text, with tabs and breaks as `\t` and `\n`.
     pub fn text(&self) -> String {
         self.content
