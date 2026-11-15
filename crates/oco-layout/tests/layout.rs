@@ -3219,3 +3219,171 @@ fn an_empty_paragraph_that_only_carries_a_continuous_section_break_takes_no_room
     let written = lay(&format!("<w:p><w:pPr><w:sectPr>{setup}</w:sectPr></w:pPr><w:r><w:t>x</w:t></w:r></w:p>"));
     assert_eq!(written.len(), 3);
 }
+
+/// Paragraphs of one line each, 20 pt apart: an A4 page with one-inch
+/// margins holds 34 of them in a column.
+fn numbered_lines(count: usize) -> String {
+    (0..count)
+        .map(|n| {
+            paragraph(
+                &font("Liberation Serif", 24),
+                r#"<w:spacing w:line="400" w:lineRule="exact"/>"#,
+                &format!("line {n}"),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn text_in_columns_fills_one_after_the_other_and_then_the_next_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Two columns half an inch apart share the 451.3 pt of the text: each
+    // is 207.65 pt wide, the second 243.65 pt from the first. (The columns'
+    // places are the specification's; that text fills them in turn is what
+    // Word's own records of where columns begin say of the corpus, as in
+    // `columns2.docx`, 48 of whose 51 page and column starts are met.)
+    let section = Source::default().section.to_owned() + r#"<w:cols w:num="2" w:space="720"/>"#;
+    let body = numbered_lines(80);
+    let source = Source { body: &body, section: &section, ..Source::default() };
+    let document = docx(&source);
+    let pages = layout(&document, &fonts, &Options { model: Model::Word }).pages;
+    assert_eq!(pages.len(), 2);
+    let at = |page: &Page, text: &str| {
+        let line = page.lines.iter().find(|line| line.text == text).unwrap_or_else(|| panic!("{text}"));
+        (line.x0, line.baseline)
+    };
+    let (first, last_of_first) = (at(&pages[0], "line 0"), at(&pages[0], "line 33"));
+    let (second, last_of_second) = (at(&pages[0], "line 34"), at(&pages[0], "line 67"));
+    assert!(close(first.0, 72.0, 0.01) && close(second.0, 72.0 + 207.65 + 36.0, 0.02), "{first:?} {second:?}");
+    assert!(close(second.1, first.1, 0.01) && close(last_of_second.1, last_of_first.1, 0.01));
+    assert_eq!(pages[0].lines.len(), 68);
+    assert!(close(at(&pages[1], "line 68").0, 72.0, 0.01));
+    // Where the second column begins is told, as where the second page does.
+    assert_eq!(pages[0].column_starts, [Position { paragraph: 34, offset: 0 }]);
+    assert_eq!(pages[1].start, Some(Position { paragraph: 68, offset: 0 }));
+    // Text is set as wide as a column: a long paragraph breaks within it.
+    let long = paragraph(&font("Liberation Serif", 24), "", LOREM);
+    let page = pages_of(&long, &section, &fonts).remove(0);
+    assert!(page.lines.iter().all(|line| line.x1 <= 72.0 + 207.65 + 0.5), "lines keep to the first column");
+    // A line is drawn between the columns where the section asks for one.
+    let ruled = section.replace(r#"<w:cols "#, r#"<w:cols w:sep="1" "#);
+    let page = pages_of(&numbered_lines(40), &ruled, &fonts).remove(0);
+    let rule = page.items.iter().find_map(|item| match item {
+        Item::Rule { x1, y1, x2, y2, .. } if x1 == x2 => Some((*x1, *y1, *y2)),
+        _ => None,
+    });
+    let (x, from, to) = rule.expect("a line between the columns");
+    assert!(close(x, 72.0 + 207.65 + 18.0, 0.02) && close(from, 72.0, 0.01) && close(to, 72.0 + 34.0 * 20.0, 0.01));
+}
+
+/// The pages of a body with the given page setup.
+fn pages_of(body: &str, section: &str, fonts: &FontDb) -> Vec<Page> {
+    pages(&Source { body, section, ..Source::default() }, fonts, Model::Word)
+}
+
+#[test]
+fn a_column_break_goes_to_the_next_column_or_to_the_next_page() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let run = font("Liberation Serif", 24);
+    let body = format!(
+        r#"<w:p><w:r><w:rPr>{run}</w:rPr><w:t>before</w:t><w:br w:type="column"/><w:t>after</w:t></w:r></w:p>"#
+    );
+    let columns = Source::default().section.to_owned() + r#"<w:cols w:num="2" w:space="720"/>"#;
+    let two = pages_of(&body, &columns, &fonts);
+    assert_eq!(two.len(), 1);
+    assert!(
+        close(two[0].lines[1].x0, 72.0 + 207.65 + 36.0, 0.02)
+            && close(two[0].lines[1].baseline, two[0].lines[0].baseline, 0.01)
+    );
+    // Where the text is in one column, the next column is the next page.
+    let one = pages_of(&body, Source::default().section, &fonts);
+    assert_eq!(one.iter().map(|page| page.lines[0].text.as_str()).collect::<Vec<_>>(), ["before", "after"]);
+}
+
+#[test]
+fn columns_that_end_with_their_section_in_a_page_are_equally_tall() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // Eleven lines in two columns, then a section in one column that goes
+    // on in the same page: six lines stand in the first column, five in the
+    // second, and the next section begins under the taller. (Word is known
+    // to make such columns even; how it does where they cannot be equal is
+    // assumed. `unbalanced-columns.docx` of the corpus bears the places
+    // out: all three column starts Word recorded in it are met.)
+    let setup = Source::default().section;
+    let lay = |settings: &str, last: &str| {
+        let body = format!(
+            r#"{}<w:p><w:pPr><w:sectPr>{setup}<w:cols w:num="2" w:space="720"/></w:sectPr></w:pPr></w:p>{}"#,
+            numbered_lines(11),
+            paragraph(&font("Liberation Serif", 24), "", "after")
+        );
+        let section = format!(r#"{setup}<w:type w:val="{last}"/>"#);
+        let source = Source { body: &body, section: &section, settings, ..Source::default() };
+        pages(&source, &fonts, Model::Word)
+    };
+    let compat = Source::default().settings;
+    let page = lay(compat, "continuous").remove(0);
+    let right = |page: &Page| page.lines.iter().filter(|line| line.x0 > 300.0).count();
+    let after = |page: &Page| page.lines.iter().find(|line| line.text == "after").unwrap().baseline;
+    assert_eq!(right(&page), 5);
+    let top = page.lines[0].baseline;
+    // Under six lines of 20 pt; a line of 12 pt text is 13.8 pt tall with its baseline 11.2 pt down.
+    assert!(close(after(&page) - top, 6.0 * 20.0 - (top - 72.0) + 11.2, 0.5), "{} {top}", after(&page));
+    assert!(page.lines.iter().find(|line| line.text == "after").unwrap().x0 < 73.0, "in one column again");
+    // A document may say that its columns are to be left as they fill.
+    let unbalanced = compat.replace("</w:compat>", "<w:noColumnBalance/></w:compat>");
+    let page = lay(&unbalanced, "continuous").remove(0);
+    assert_eq!(right(&page), 0);
+    assert!(close(after(&page) - top, 11.0 * 20.0 - (top - 72.0) + 11.2, 0.5));
+    // Columns that end with a page are left as they fill too.
+    let pages = lay(compat, "nextPage");
+    assert_eq!((pages.len(), right(&pages[0])), (2, 0));
+}
+
+#[test]
+fn text_is_broken_again_for_a_column_of_another_width() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As Word lays out `fdo77812.docx` of the corpus, which is in a column
+    // of 132 pt and one of 300 pt and has one page: lines in the second are
+    // as long as the second is wide.
+    let section = Source::default().section.to_owned()
+        + r#"<w:cols w:num="2" w:space="720" w:equalWidth="0"><w:col w:w="2640" w:space="720"/><w:col w:w="5000"/></w:cols>"#;
+    let body = paragraph(&font("Liberation Serif", 24), "", &LOREM.repeat(12));
+    let pages = pages_of(&body, &section, &fonts);
+    let (narrow, wide): (Vec<&oco_layout::PlacedLine>, Vec<&oco_layout::PlacedLine>) =
+        pages[0].lines.iter().partition(|line| line.x0 < 100.0);
+    assert!(!narrow.is_empty() && !wide.is_empty());
+    assert!(narrow.iter().all(|line| line.x1 <= 72.0 + 132.0 + 0.5));
+    assert!(wide.iter().all(|line| close(line.x0, 72.0 + 132.0 + 36.0, 0.01)));
+    let longest = wide.iter().map(|line| line.x1 - line.x0).fold(0.0, f32::max);
+    assert!(longest > 200.0 && longest <= 250.5, "{longest}");
+    // The text reads on from the one column into the other.
+    let text: String = narrow.iter().chain(&wide).map(|line| line.text.as_str()).collect();
+    assert!(text.starts_with(&LOREM.repeat(2)), "nothing is lost or set twice where the column changes");
+}
+
+#[test]
+fn a_footnote_stands_at_the_foot_of_its_column_as_wide_as_the_column() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // That notes stand in the column of their reference is assumed from
+    // how Word shows them; no PDF of Word's at hand has columns.
+    let reference = format!(
+        r#"<w:p><w:r><w:rPr>{}</w:rPr><w:t>noted</w:t><w:footnoteReference w:id="2"/></w:r></w:p>"#,
+        font("Liberation Serif", 24)
+    );
+    let notes = format!(
+        r#"<w:footnote w:id="2"><w:p><w:r><w:rPr>{}</w:rPr><w:footnoteRef/><w:t xml:space="preserve"> {}</w:t></w:r></w:p></w:footnote>"#,
+        font("Liberation Serif", 20),
+        LOREM
+    );
+    let stories = [("notes", "footnotes", notes.as_str())];
+    let section = Source::default().section.to_owned() + r#"<w:cols w:num="2" w:space="720"/>"#;
+    let body = numbered_lines(40) + &reference;
+    let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+    let page = pages(&source, &fonts, Model::Word).remove(0);
+    let note: Vec<&oco_layout::PlacedLine> =
+        page.lines.iter().filter(|line| line.baseline > 600.0 && !line.text.starts_with("line")).collect();
+    assert!(note.len() >= 3, "the note is broken to the column's width: {}", note.len());
+    let left = 72.0 + 207.65 + 36.0;
+    assert!(note.iter().all(|line| line.x0 >= left - 0.01 && line.x1 <= left + 207.65 + 0.5));
+    assert!(close(note.last().unwrap().baseline, 769.9 - 13.8 * 10.0 / 12.0 + 11.2 * 10.0 / 12.0, 1.0));
+}

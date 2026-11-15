@@ -82,6 +82,9 @@ pub struct Line {
     pub x1: f32,
     /// The line ends with an explicit page break.
     pub page_break_after: bool,
+    /// The line ends with a column break: what follows goes to the next
+    /// column, which is the next page where there is none.
+    pub column_break_after: bool,
     /// How many pieces of the paragraph's [`crate::content`] come before this line.
     pub offset: usize,
     /// Where each character of `text` begins, from the left margin.
@@ -174,6 +177,7 @@ enum Kind {
     Tab,
     LineBreak,
     PageBreak,
+    ColumnBreak,
 }
 
 #[derive(Debug, Clone)]
@@ -452,6 +456,7 @@ impl Builder<'_> {
                 RunContent::Text(text) => text.chars().for_each(|ch| push(self, ch, Kind::Char, None)),
                 RunContent::Tab => push(self, '\t', Kind::Tab, None),
                 RunContent::Break(BreakKind::Line) => push(self, '\n', Kind::LineBreak, None),
+                RunContent::Break(BreakKind::Column) => push(self, '\n', Kind::ColumnBreak, None),
                 RunContent::Break(_) => push(self, '\n', Kind::PageBreak, None),
                 RunContent::Symbol { font, character } => push(self, *character, Kind::Char, font.as_deref()),
                 RunContent::PageBreakHint => {}
@@ -748,7 +753,7 @@ pub fn measure(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Exte
             (word, word_ink, word_origin) = (0.0, 0.0, left);
         }
         match atom.kind {
-            Kind::LineBreak | Kind::PageBreak => {
+            Kind::LineBreak | Kind::PageBreak | Kind::ColumnBreak => {
                 max = max.max(ink);
                 (x, ink) = (left, left);
             }
@@ -814,14 +819,24 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
 }
 
 pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid {
-    layout_within(paragraph, fonts, context, &[])
+    layout_within(paragraph, fonts, context, &[], &[])
 }
 
 /// Lays the paragraph out where something stands in the way of its lines.
 /// `shape` gives, line by line from the first, the left and right bounds the
 /// line is to keep between, measured as the paragraph's own indents are; a
-/// line past the end of `shape` has the full width.
-pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, shape: &[(f32, f32)]) -> Laid {
+/// line past the end of `shape` has the full width. `widths` gives, line by
+/// line from the first, how wide the column is that the line stands in,
+/// where the paragraph begins in columns of another width than the one it
+/// goes on in; a line past the end of `widths` is in a column as wide as
+/// the context says.
+pub fn layout_within(
+    paragraph: &Paragraph,
+    fonts: &FontDb,
+    context: &Context,
+    shape: &[(f32, f32)],
+    widths: &[f32],
+) -> Laid {
     let props = paragraph.props;
     let Builder { styles, mut atoms, missing_fonts, objects, anchored, marked, .. } =
         prepare(paragraph, fonts, context);
@@ -860,7 +875,8 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
     let char_width =
         atoms.iter().find(|a| !a.label && a.kind == Kind::Char).map_or(mark_size, |a| styles[a.style].size);
     let (left, right, first) = indents(props, char_width);
-    let limit = context.width - right;
+    // Where a line of the given number ends at the most.
+    let limit_of = |number: usize| widths.get(number).copied().unwrap_or(context.width) - right;
     let hanging_at = (first < 0.0 && context.hanging_tab).then_some(left);
     let kinsoku = props.kinsoku != Some(false);
     let hang_punctuation = props.overflow_punct != Some(false);
@@ -873,6 +889,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         /// Ended by an explicit break or the end of the paragraph, so not justified.
         forced: bool,
         page_break: bool,
+        column_break: bool,
         /// The line is over-full and its spaces are to be compressed.
         shrink: bool,
         /// The line is over-full and its punctuation is to be squeezed.
@@ -885,6 +902,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         let origin = if is_first { left + first } else { left };
         let bounds = shape.get(breaks.len()).copied();
         let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let limit = limit_of(breaks.len());
         let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
         // A right-aligned label ends at the origin, so it starts before it;
         // the tab after it must be measured from where the label really ends.
@@ -903,6 +921,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         let mut last_opportunity: Option<usize> = None;
         let mut forced = false;
         let mut page_break = false;
+        let mut column_break = false;
         let mut shrink = false;
         let mut squeeze = false;
         let mut end = atoms.len();
@@ -910,8 +929,9 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
             // Copied out because a tab's width is written back below.
             let atom = Atom { ..atoms[i].clone() };
             match atom.kind {
-                Kind::LineBreak | Kind::PageBreak => {
+                Kind::LineBreak | Kind::PageBreak | Kind::ColumnBreak => {
                     page_break = atom.kind == Kind::PageBreak;
+                    column_break = atom.kind == Kind::ColumnBreak;
                     forced = true;
                     end = i + 1;
                     break;
@@ -1048,12 +1068,20 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         }
         // Never loop without progress, whatever the widths were.
         let end = end.max(start + 1);
-        breaks.push(Break { start, end, forced, page_break, shrink, squeeze });
+        breaks.push(Break { start, end, forced, page_break, column_break, shrink, squeeze });
         start = end;
         is_first = false;
     }
     if atoms.is_empty() {
-        breaks.push(Break { start: 0, end: 0, forced: true, page_break: false, shrink: false, squeeze: false });
+        breaks.push(Break {
+            start: 0,
+            end: 0,
+            forced: true,
+            page_break: false,
+            column_break: false,
+            shrink: false,
+            squeeze: false,
+        });
     }
 
     // --------------------------------------------------------------- placement
@@ -1069,6 +1097,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         let origin = if number == 0 { left + first } else { left };
         let bounds = shape.get(number).copied();
         let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let limit = limit_of(number);
         let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
         // Trailing spaces and the break itself take no part in alignment.
         // ... unless they are underlined blanks to be filled in ("编号：____"),
@@ -1238,7 +1267,14 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
             (_, None, None) => (single, ascent, single),
         };
 
-        let mut line = Line { height, baseline, needed, page_break_after: br.page_break, ..Line::default() };
+        let mut line = Line {
+            height,
+            baseline,
+            needed,
+            page_break_after: br.page_break,
+            column_break_after: br.column_break,
+            ..Line::default()
+        };
         line.offset = atoms[..br.start].iter().filter(|a| !a.label && !a.extra).map(|a| 1 + a.more).sum();
         for field in range.iter().filter_map(|atom| atom.field) {
             if !line.fields.contains(&(paragraph.key, field)) {
@@ -1402,7 +1438,7 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                     line.xs.push(x);
                     x += atom.advance;
                 }
-                Kind::LineBreak | Kind::PageBreak => {}
+                Kind::LineBreak | Kind::PageBreak | Kind::ColumnBreak => {}
             }
             if atom.kind == Kind::Char && atom.object.is_none() && !atom.ch.is_whitespace() {
                 if let Some((_, _, end)) =

@@ -224,7 +224,7 @@
    "docx4j/docx4j-samples-docx4j/sample-docs/ArialUnicodeMS.docx": {
     "pages": [
      3,
-     6
+     3
     ],
     "starts": [
      5,
@@ -314,7 +314,7 @@
    "libreoffice/chart2/qa/extras/data/docx/testchartoleobjectembeddings.docx": {
     "pages": [
      81,
-     93
+     91
     ],
     "starts": [
      1,
@@ -534,7 +534,7 @@
    "libreoffice/sw/qa/core/layout/data/floattable-multi-col.docx": {
     "pages": [
      2,
-     3
+     2
     ],
     "starts": [
      1,
@@ -774,7 +774,7 @@
    "libreoffice/sw/qa/extras/ooxmlexport/data/columnbreak.docx": {
     "pages": [
      2,
-     3
+     2
     ],
     "starts": [
      2,
@@ -848,7 +848,7 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/fdo77890.docx": {
@@ -958,13 +958,13 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/n652364.docx": {
     "pages": [
      1,
-     2
+     1
     ],
     "starts": [
      1,
@@ -1114,7 +1114,7 @@
    "libreoffice/sw/qa/extras/ooxmlexport/data/tdf121659_loseColumnBrNextToShape.docx": {
     "pages": [
      1,
-     2
+     1
     ],
     "starts": [
      1,
@@ -1284,7 +1284,7 @@
    "libreoffice/sw/qa/extras/ooxmlexport/data/tdf152636_lostPageBreak2.docx": {
     "pages": [
      2,
-     4
+     2
     ],
     "starts": [
      3,
@@ -1568,7 +1568,7 @@
     ],
     "starts": [
      6,
-     0
+     6
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/testCrashWhileSave.docx": {
@@ -1584,7 +1584,7 @@
    "libreoffice/sw/qa/extras/ooxmlexport/data/testPgMargin.docx": {
     "pages": [
      1,
-     2
+     1
     ],
     "starts": [
      1,
@@ -1608,7 +1608,7 @@
     ],
     "starts": [
      3,
-     0
+     3
     ]
    },
    "libreoffice/sw/qa/extras/ooxmlexport/data/unwanted-section-break.docx": {
@@ -1718,7 +1718,7 @@
     ],
     "starts": [
      2,
-     0
+     1
     ]
    },
    "libreoffice/sw/qa/extras/uiwriter/data/AsCharTxBxTest.docx": {
@@ -1968,17 +1968,17 @@
     ],
     "starts": [
      27,
-     0
+     7
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/columns/columns2.docx": {
     "pages": [
      18,
-     50
+     18
     ],
     "starts": [
      51,
-     2
+     48
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complexity - part 1.docx": {
@@ -2088,7 +2088,7 @@
     ],
     "starts": [
      1,
-     0
+     1
     ]
    },
    "openxml-sdk/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout with break in the end/PageColor-lightgreen.docx": {
@@ -5285,11 +5285,11 @@
    "forced_page_starts": 407,
    "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 503,
-   "multipage_pages_within_one": 597,
+   "multipage_pages_equal": 520,
+   "multipage_pages_within_one": 605,
    "page_starts": 2044,
-   "page_starts_equal": 561,
-   "page_starts_same_paragraph": 698
+   "page_starts_equal": 735,
+   "page_starts_same_paragraph": 927
   },
   "covered": {
    "documents": 534,
@@ -5307,11 +5307,11 @@
    "forced_page_starts": 113,
    "forced_page_starts_equal": 103,
    "multipage": 229,
-   "multipage_pages_equal": 191,
-   "multipage_pages_within_one": 224,
+   "multipage_pages_equal": 196,
+   "multipage_pages_within_one": 227,
    "page_starts": 467,
-   "page_starts_equal": 172,
-   "page_starts_same_paragraph": 224
+   "page_starts_equal": 238,
+   "page_starts_same_paragraph": 299
   },
   "plain": {
    "documents": 881,

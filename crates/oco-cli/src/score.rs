@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use oco_docx::{Block, BreakKind, Docx, Section, SectionStart};
-use oco_layout::{content, Content, FontDb, Options};
+use oco_layout::{content, Content, FontDb, Options, Position};
 use serde::Serialize;
 
 pub struct Arguments {
@@ -89,10 +89,12 @@ pub fn beyond_body_text(docx: &Docx) -> bool {
             "w:pict",
             "w:object",
             "mc:AlternateContent",
-            "w:sectPr/w:cols",
             "w:pPr/w:framePr",
             "m:oMath",
         ])
+        // Text in columns, and any change of section (which is where a
+        // section other than the last would say it has columns).
+        || docx.document.section.columns > 1
         || docx.document.paragraphs().iter().any(|p| p.section_break.is_some())
 }
 
@@ -208,11 +210,11 @@ fn explain(path: &Path, fonts: &FontDb) -> Option<String> {
     let docx = Docx::open(path).ok()?;
     let layout = oco_layout::layout(&docx, fonts, &Options::default());
     let record = record(&docx);
-    let ours: Vec<usize> = layout
-        .pages
-        .iter()
-        .map(|page| page.start.map_or(usize::MAX, |start| record.before[start.paragraph] + start.offset))
-        .collect();
+    // Where our pages begin, and after them where our columns do: Word
+    // records the one as it records the other.
+    let place = |start: &Position| record.before[start.paragraph] + start.offset;
+    let mut ours: Vec<usize> = layout.pages.iter().map(|page| page.start.as_ref().map_or(usize::MAX, place)).collect();
+    ours.extend(layout.pages.iter().flat_map(|page| &page.column_starts).map(place));
 
     let mut out = String::new();
     let pages = docx.recorded.pages.map_or("?".to_owned(), |pages| pages.to_string());
@@ -228,8 +230,8 @@ fn explain(path: &Path, fonts: &FontDb) -> Option<String> {
         let verdict = match nearest {
             Some((_, place)) if *place == hint.place => "same".to_owned(),
             Some((page, place)) => format!(
-                "ours: page {} begins {} characters {}",
-                page + 1,
+                "ours: {} begins {} characters {}",
+                if page < layout.pages.len() { format!("page {}", page + 1) } else { "a column".to_owned() },
                 place.abs_diff(hint.place),
                 if *place < hint.place { "earlier" } else { "later" }
             ),
@@ -258,7 +260,14 @@ fn score(path: &Path, fonts: &FontDb) -> Option<Scored> {
 
     let fresh = record.fits(docx.recorded.characters_with_spaces);
 
-    let starts: Vec<_> = layout.pages.iter().skip(1).filter_map(|page| page.start).collect();
+    // Where pages begin and where columns begin: Word records both alike.
+    let starts: Vec<_> = layout
+        .pages
+        .iter()
+        .skip(1)
+        .filter_map(|page| page.start)
+        .chain(layout.pages.iter().flat_map(|page| page.column_starts.iter().copied()))
+        .collect();
     let places: HashSet<usize> = starts.iter().map(|start| record.before[start.paragraph] + start.offset).collect();
     let paragraphs: HashSet<usize> = starts.iter().map(|start| start.paragraph).collect();
     let equal = |hint: &Hint| places.contains(&hint.place);

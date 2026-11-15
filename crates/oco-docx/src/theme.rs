@@ -137,6 +137,9 @@ pub struct Settings {
     pub underline_trailing_spaces: bool,
     /// Do not treat a hanging indent as a tab stop (`noTabHangInd`).
     pub no_tab_hang_indent: bool,
+    /// Columns that end where their section does are left as the text
+    /// filled them, not made equally tall (`w:noColumnBalance`).
+    pub no_column_balance: bool,
     /// Even pages have headers and footers of their own (`evenAndOddHeaders`).
     pub even_and_odd_headers: bool,
     /// The Word version whose layout rules the document asks for; 15 is
@@ -156,6 +159,7 @@ impl Default for Settings {
             compress_punctuation: false,
             underline_trailing_spaces: false,
             no_tab_hang_indent: false,
+            no_column_balance: false,
             even_and_odd_headers: false,
             compatibility_mode: 12,
             footnotes: Default::default(),
@@ -206,6 +210,7 @@ impl Settings {
                         match w_name(flag) {
                             Some("ulTrailSpace") => settings.underline_trailing_spaces = crate::xml::on_off(flag),
                             Some("noTabHangInd") => settings.no_tab_hang_indent = crate::xml::on_off(flag),
+                            Some("noColumnBalance") => settings.no_column_balance = crate::xml::on_off(flag),
                             Some("compatSetting") if w_attr(flag, "name") == Some("compatibilityMode") => {
                                 settings.compatibility_mode = crate::xml::int(crate::xml::val(flag)).unwrap_or(12);
                             }

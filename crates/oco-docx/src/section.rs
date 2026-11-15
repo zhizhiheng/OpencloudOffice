@@ -25,7 +25,15 @@ pub struct Section {
     pub header: i32,
     pub footer: i32,
     pub gutter: i32,
+    /// How many columns the text stands in (`w:cols`).
     pub columns: i32,
+    /// The blank between two columns that are equally wide.
+    pub column_space: i32,
+    /// The columns' own widths, each with the blank after it, where they
+    /// are not equally wide (`w:col`).
+    pub column_widths: Vec<(i32, i32)>,
+    /// A line is drawn between the columns.
+    pub column_separator: bool,
     pub grid: DocGrid,
     pub start: SectionStart,
     /// The headers and footers the section names, by relationship id; see
@@ -113,6 +121,9 @@ impl Default for Section {
             footer: 720,
             gutter: 0,
             columns: 1,
+            column_space: 720,
+            column_widths: Vec::new(),
+            column_separator: false,
             grid: DocGrid::default(),
             start: SectionStart::NextPage,
             headers: StoryRefs::default(),
@@ -207,9 +218,22 @@ impl Section {
                     };
                 }
                 Some("cols") => {
-                    section.columns = int(w_attr(child, "num")).unwrap_or(1).max(1);
-                    if section.columns > 1 {
-                        coverage.note("w:sectPr/w:cols (more than one column)");
+                    section.columns = int(w_attr(child, "num")).unwrap_or(1).clamp(1, 45);
+                    section.column_space = length("space").unwrap_or(720).max(0);
+                    section.column_separator = crate::xml::on_off_attr(child, "sep").unwrap_or(false);
+                    // Columns of widths of their own, unless the section
+                    // says its columns are equally wide all the same.
+                    let own: Vec<(i32, i32)> = elements(child)
+                        .filter(|column| w_name(*column) == Some("col"))
+                        .filter_map(|column| {
+                            let width = twips(w_attr(column, "w")).filter(|width| *width > 0)?;
+                            Some((width, twips(w_attr(column, "space")).unwrap_or(0).max(0)))
+                        })
+                        .take(45)
+                        .collect();
+                    if crate::xml::on_off_attr(child, "equalWidth") != Some(true) && !own.is_empty() {
+                        section.columns = own.len() as i32;
+                        section.column_widths = own;
                     }
                 }
                 Some(kind @ ("headerReference" | "footerReference")) => {
@@ -244,6 +268,29 @@ impl Section {
     /// Width available to text between the left and right margins.
     pub fn text_width(&self) -> i32 {
         self.page_width - self.margin_left - self.margin_right - self.gutter
+    }
+
+    /// The columns the text stands in: for each, how far its left edge is
+    /// from the left edge of the text, and how wide it is. Columns that
+    /// are equally wide share what the blanks between them leave of the
+    /// text's width; a section without columns has one, as wide as the text.
+    pub fn column_boxes(&self) -> Vec<(i32, i32)> {
+        let whole = self.text_width();
+        if !self.column_widths.is_empty() {
+            let mut left = 0;
+            return self
+                .column_widths
+                .iter()
+                .map(|&(width, space)| {
+                    let place = (left, width);
+                    left += width + space;
+                    place
+                })
+                .collect();
+        }
+        let count = self.columns.max(1);
+        let width = ((whole - (count - 1) * self.column_space) / count).max(1);
+        (0..count).map(|column| (column * (width + self.column_space), width)).collect()
     }
 
     /// Height available to text between the top and bottom margins.

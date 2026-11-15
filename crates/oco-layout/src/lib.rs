@@ -349,6 +349,10 @@ pub struct Page {
     /// The top and the bottom of the area the body text is set in: the page
     /// between its top and bottom margins. Headers and footers lie outside.
     pub body: (f32, f32),
+    /// Where in the document each column of the page after its first
+    /// begins, for the columns that begin with a paragraph of body text.
+    /// (Word records where columns began as it records where pages did.)
+    pub column_starts: Vec<Position>,
     /// Lines of text that are on the page but cut off from view: what a
     /// table row of exact height has no room for. They are not text to
     /// read, select or find. A PDF that Word makes of the page still holds
@@ -546,12 +550,14 @@ fn among(floats: &[Float], mut y: f32, height: f32, column: (f32, f32)) -> (f32,
     }
 }
 
-/// The left and top of an anchored object on its page. `column` and `body`
-/// are the left and right, and the top and bottom, of the text area;
-/// `paragraph` is the top of the paragraph the object is anchored in.
+/// The left and top of an anchored object on its page. `margins` and
+/// `column` are the left and right of the page's text and of the column the
+/// object's paragraph stands in, `body` the top and bottom of the text
+/// area; `paragraph` is the top of the paragraph the object is anchored in.
 fn anchored_at(
     object: &paragraph::Anchored,
     page: (f32, f32),
+    margins: (f32, f32),
     column: (f32, f32),
     body: (f32, f32),
     paragraph: f32,
@@ -565,8 +571,9 @@ fn anchored_at(
     let anchor = &object.anchor;
     let across = match anchor.horizontal.relative_to {
         RelativeTo::Page => (0.0, page.0),
-        RelativeTo::LeftMargin | RelativeTo::InsideMargin => (0.0, column.0),
-        RelativeTo::RightMargin | RelativeTo::OutsideMargin => (column.1, page.0),
+        RelativeTo::Margin => margins,
+        RelativeTo::LeftMargin | RelativeTo::InsideMargin => (0.0, margins.0),
+        RelativeTo::RightMargin | RelativeTo::OutsideMargin => (margins.1, page.0),
         _ => column,
     };
     let down = match anchor.vertical.relative_to {
@@ -1773,10 +1780,10 @@ impl Builder<'_> {
         (items, lines)
     }
 
-    /// Lays out the note with the given index at the width of `section`'s
-    /// text. A note the document does not have comes out empty.
-    fn note(&mut self, index: usize, section: &Section) -> LaidNote {
-        let units = self.note_units(index, section);
+    /// Lays out the note with the given index `width` wide: as wide as the
+    /// column it stands in. A note the document does not have comes out empty.
+    fn note(&mut self, index: usize, section: &Section, width: f32) -> LaidNote {
+        let units = self.note_units(index, section, width);
         // Where the note may be parted, should it not fit on a page: as a
         // paragraph of the text may be between two pages.
         let mut breaks = Vec::new();
@@ -1800,7 +1807,7 @@ impl Builder<'_> {
     /// The note with the given index as units to place: they belong to no
     /// paragraph of the body, so a page that begins in them begins nowhere
     /// in the body's content.
-    fn note_units(&mut self, index: usize, section: &Section) -> Vec<Unit> {
+    fn note_units(&mut self, index: usize, section: &Section, width: f32) -> Vec<Unit> {
         let entry = &self.notes[index];
         let notes = if entry.endnote { &self.docx.endnotes } else { &self.docx.footnotes };
         let Some(note) = notes.iter().find(|note| note.id == entry.id && note.kind == oco_docx::NoteKind::Normal)
@@ -1813,7 +1820,7 @@ impl Builder<'_> {
         self.counters = std::mem::take(&mut self.note_counters[kind]);
         let measured = std::mem::take(&mut self.demands);
         let mut units = Vec::new();
-        self.blocks(&note.blocks, section, section.text_width() as f32 * TWIP, &mut units);
+        self.blocks(&note.blocks, section, width, &mut units);
         self.note_counters[kind] = std::mem::replace(&mut self.counters, body);
         (self.paragraphs, self.demands, self.note_mark) = (paragraphs, measured, mark);
         units.iter_mut().for_each(|unit| unit.paragraph = None);
@@ -1842,7 +1849,8 @@ impl Builder<'_> {
     }
 
     /// Lays a paragraph out a second time, its lines kept within `shape`
-    /// (see [`paragraph::layout_within`]). Nothing is counted again.
+    /// and its first lines in columns `widths` wide (see
+    /// [`paragraph::layout_within`]). Nothing is counted again.
     fn again(
         &mut self,
         source: &oco_docx::Paragraph,
@@ -1850,11 +1858,12 @@ impl Builder<'_> {
         section: &Section,
         width: f32,
         shape: &[(f32, f32)],
+        widths: &[f32],
     ) -> Vec<paragraph::Line> {
         let (props, input) = self.resolve(source, Some(unit.label.clone()));
         let input = paragraph::Paragraph { props: &props, ..input };
         let ctx = context(self.docx, section, width, self.options.model);
-        let mut laid = paragraph::layout_within(&input, self.fonts, &ctx, shape);
+        let mut laid = paragraph::layout_within(&input, self.fonts, &ctx, shape, widths);
         put_boxes(&mut laid, &unit.boxes);
         boxed(&mut laid, &props, width, unit.joined);
         laid.lines
@@ -2760,8 +2769,9 @@ fn layout_pass(
     for (index, block) in body.iter().enumerate() {
         let ends = matches!(block, Block::Paragraph(paragraph) if paragraph.section_break.is_some());
         if ends || index + 1 == body.len() {
+            // Text is set as wide as the first of its section's columns.
             let section = setups[number.min(setups.len() - 1)];
-            builder.blocks(&body[from..=index], section, section.text_width() as f32 * TWIP, &mut units);
+            builder.blocks(&body[from..=index], section, columns_of(section)[0].1, &mut units);
             (from, number) = (index + 1, number + 1);
         }
     }
@@ -2785,10 +2795,111 @@ fn layout_pass(
         let line = paragraph::Line { height, needed: height, items: vec![rule], ..paragraph::Line::default() };
         units.push(Unit { lines: vec![line], keep_next: true, keep_lines: true, ..Unit::default() });
         for index in endnotes {
-            units.extend(builder.note_units(index, last));
+            units.extend(builder.note_units(index, last, columns_of(last)[0].1));
         }
     }
 
+    // The pages are made from the units as often as it takes: the list
+    // numbers that notes go on with are those the units left.
+    let counters = (builder.note_counters.clone(), builder.box_counters.clone(), builder.unplaced);
+    let put = |builder: &mut Builder, limits: &Limits| {
+        (builder.note_counters, builder.box_counters, builder.unplaced) = counters.clone();
+        paginate(docx, builder, &units, &setups, limits)
+    };
+    let mut limits = Limits::new();
+    let mut paged = put(&mut builder, &limits);
+    // Where a section ends in columns and another goes on under them in
+    // the same page, the columns are equally tall, as nearly as the text
+    // allows: the least height at which the section still ends on that
+    // page is found by trying. (An assumption, as is all of the placing
+    // of columns: Word's PDFs at hand have no columns, and Word is only
+    // known to make such columns even.)
+    let mut tries = 0;
+    // A document may say that its columns are to be left as they fill.
+    let even = !docx.settings.no_column_balance;
+    while let Some(band) = paged.bands.iter().find(|band| even && !limits.contains_key(&band.section)).cloned() {
+        let ends_there =
+            |paged: &Paged| paged.bands.iter().any(|end| (end.section, end.page) == (band.section, band.page));
+        let (mut low, mut high) = (band.sum / band.columns as f32, band.tallest);
+        let mut best = None;
+        while high - low > 0.5 && tries < 48 {
+            tries += 1;
+            let middle = (low + high) / 2.0;
+            limits.insert(band.section, (band.page, middle));
+            let trial = put(&mut builder, &limits);
+            if ends_there(&trial) {
+                (high, best) = (middle, Some(trial));
+            } else {
+                low = middle;
+            }
+        }
+        limits.insert(band.section, (band.page, high));
+        paged = match best {
+            Some(trial) => trial,
+            None => put(&mut builder, &limits),
+        };
+    }
+    let laid =
+        Layout { pages: paged.pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced, undrawn: 0 };
+    (laid, paged.began, paged.placed)
+}
+
+/// What putting a document's units on pages comes to: the pages; for each
+/// note, the page its footnote begins on; where the page fields stand; and
+/// the bands of columns that ended where their section did, with another
+/// going on under them in the same page.
+struct Paged {
+    pages: Vec<Page>,
+    began: Vec<Option<usize>>,
+    placed: Fields,
+    bands: Vec<BandEnd>,
+}
+
+/// Where the text and the notes of one column stand: on which page, from
+/// where across it, how wide, and down to where.
+struct Area {
+    page: usize,
+    left: f32,
+    width: f32,
+    floor: f32,
+}
+
+/// Columns that their section's text did not fill: the section ended in
+/// them, and the next goes on under them in the same page.
+#[derive(Debug, Clone, PartialEq)]
+struct BandEnd {
+    /// Index of the section, and of the page it ended on.
+    section: usize,
+    page: usize,
+    columns: usize,
+    /// How tall the text in the columns is together, and in the tallest.
+    sum: f32,
+    tallest: f32,
+}
+
+/// How tall the columns of a section may be on the page it ends on, by
+/// the section's index: the page's index and the height. With it the text
+/// of the section fills its last columns equally, as far as it can.
+type Limits = std::collections::BTreeMap<usize, (usize, f32)>;
+
+/// The columns of a section in points: for each, how far its left edge is
+/// from the left edge of the text, and how wide it is.
+fn columns_of(section: &Section) -> Vec<(f32, f32)> {
+    section
+        .column_boxes()
+        .into_iter()
+        .map(|(left, width)| (left as f32 * TWIP, (width as f32 * TWIP).max(1.0)))
+        .collect()
+}
+
+/// Puts the units of a document on pages, one after the other: the body's
+/// paragraphs and table rows, the footnotes at the foot of the pages their
+/// references come to stand on, and last the headers and footers.
+/// `setups` are the page setups of the document's sections, in order.
+// The macros that open a page or a column set all that the text goes on
+// from; not every place that opens one reads all of it afterwards.
+#[allow(unused_assignments)]
+fn paginate(docx: &Docx, builder: &mut Builder<'_>, units: &[Unit], setups: &[&Section], limits: &Limits) -> Paged {
     let mut pages: Vec<Page> = Vec::new();
     let mut section_index = 0;
     let mut section_starts = vec![0usize; setups.len()];
@@ -2796,7 +2907,7 @@ fn layout_pass(
     // A header or footer that a section does not name is the one of the
     // section before.
     let mut stories: Vec<(StoryRefs, StoryRefs)> = Vec::with_capacity(setups.len());
-    for section in &setups {
+    for section in setups {
         let inherit = |own: &StoryRefs, before: Option<&StoryRefs>| StoryRefs {
             default: own.default.clone().or_else(|| before.and_then(|b| b.default.clone())),
             first: own.first.clone().or_else(|| before.and_then(|b| b.first.clone())),
@@ -2813,7 +2924,7 @@ fn layout_pass(
     let mut heights: HashMap<(String, usize), f32> = HashMap::new();
     // The number of the page being filled, as its header would show it.
     let mut number = 0;
-    let (mut y, mut top, mut bottom): (f32, f32, f32);
+    let (mut y, mut top, mut bottom) = (0.0f32, 0.0f32, 0.0f32);
     // Footnotes. The notes laid out so far; for each page, the parts of
     // notes at its foot, each a note and the range of its lines, with
     // whether the first of them runs on from the page before; and the part
@@ -2824,6 +2935,54 @@ fn layout_pass(
     let mut laid_notes: HashMap<usize, LaidNote> = HashMap::new();
     let mut page_notes: Vec<PageNotes> = Vec::new();
     let mut carried: Vec<(usize, usize)> = Vec::new();
+    // Columns. The text of a section stands in one or more columns side by
+    // side, and fills them one after the other before it goes to the next
+    // page. The columns that are filled together are a band: they begin at
+    // `band_top`, at the top of a page or where the section before ended on
+    // it, and their notes stand on `band_floor`. Each column is an area of
+    // its own for text and notes: `page_notes` and `areas` have an entry
+    // for each column opened, and `left` is where the text of the one
+    // being filled begins. `band_low` is how far down the columns left
+    // behind were filled, `band_sum` how tall their text is together.
+    // `reach` is as far down as the band's text may go: to its floor,
+    // unless its columns are being made equally tall (see `Limits`).
+    // `sheet_floor` is how far down text may go on the page for all the
+    // notes that stand on it, and `sheet_is_empty` whether anything stands
+    // on the page at all, in whatever column.
+    let mut cols: Vec<(f32, f32)> = Vec::new();
+    let mut column = 0usize;
+    let mut areas: Vec<Area> = Vec::new();
+    let (mut band_top, mut band_floor, mut band_low, mut band_sum) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    let (mut left, mut reach, mut sheet_floor): (f32, f32, f32);
+    let mut sheet_is_empty: bool;
+    let mut bands: Vec<BandEnd> = Vec::new();
+    // A column after the first of its page has been opened and nothing put in it yet.
+    let mut column_begins = false;
+    // Where the text of the band's section begins across the page, and
+    // whether a line is drawn between its columns.
+    let (mut band_left, mut band_ruled) = (0.0f32, false);
+    // Draws the lines between the columns of the band being left, as far
+    // down as its text goes. (The line's width is an assumption.)
+    macro_rules! close_band {
+        () => {{
+            let low = band_low.max(y);
+            if let Some(page) = pages.last_mut().filter(|_| band_ruled && cols.len() > 1 && low > band_top + 0.01) {
+                for pair in cols.windows(2) {
+                    let x = band_left + (pair[0].0 + pair[0].1 + pair[1].0) / 2.0;
+                    let rule = Item::Rule {
+                        x1: x,
+                        y1: band_top,
+                        x2: x,
+                        y2: low,
+                        width: 0.5,
+                        color: [0, 0, 0],
+                        dash: [0.0, 0.0],
+                    };
+                    page.items.push(rule);
+                }
+            }
+        }};
+    }
     // Word 2010 and later make the space after a paragraph fit on a page
     // with footnotes; a document in the mode of an earlier Word is
     // paginated without that. (`stress018.docx` of the corpus, saved by
@@ -2831,34 +2990,34 @@ fn layout_pass(
     // it. `stress008.docx`, in the mode of Word 2010: 13 of 117 with the
     // rule, 5 without it; weak, since it drifts from Word for other reasons.)
     let spaced = docx.settings.compatibility_mode >= 14;
-    // Opens a page of the section with the given index; `$first` says that
-    // the section begins on it.
-    macro_rules! turn_page {
-        ($section:expr, $first:expr) => {{
+    // Opens the column `column` of the band being filled, of the section
+    // with the given index: text goes on at the band's top.
+    macro_rules! open_area {
+        ($section:expr) => {{
             let index = ($section).min(setups.len() - 1);
             let section = setups[index];
-            number = section.page_number_start.filter(|_| $first).unwrap_or(number + 1);
-            let frame = builder.frame(section, index, &stories[index], number, $first, &mut heights);
-            (top, bottom) = (frame.top, frame.bottom);
-            pages.push(Page {
-                width: section.page_width as f32 * TWIP,
-                height: section.page_height as f32 * TWIP,
-                body: (top, bottom),
-                ..Page::default()
-            });
-            frames.push(frame);
-            y = top;
-            floor = bottom;
+            let (offset, width) = cols[column.min(cols.len() - 1)];
+            left = (section.margin_left + section.gutter) as f32 * TWIP + offset;
+            y = band_top;
+            floor = band_floor;
+            // Where the columns of the section are to be equally tall on
+            // this page, the text may go no further down than that.
+            reach = match limits.get(&index) {
+                Some(&(page, height)) if page + 1 == pages.len() => floor.min(band_top + height),
+                _ => floor,
+            };
+            bottom = reach;
+            areas.push(Area { page: pages.len() - 1, left, width, floor });
             page_notes.push((Vec::new(), false));
-            // What did not fit at the foot of the page before goes on at the
-            // foot of this one, under a line across the whole text.
+            // What did not fit at the foot of the column before goes on at
+            // the foot of this one, under a line across the whole of it.
             if !carried.is_empty() {
                 let rule = builder.separator(section, true);
                 let mut parts: Vec<NotePart> = Vec::new();
                 for (note, from) in std::mem::take(&mut carried) {
                     let laid = &laid_notes[&note];
                     // In their order: once one runs on again, so do those after it.
-                    let room = floor - top - LEAST_TEXT - rule - stacked(&parts, &laid_notes, false);
+                    let room = floor - band_top - LEAST_TEXT - rule - stacked(&parts, &laid_notes, false);
                     let to = if carried.is_empty() { laid.take(from, room, parts.is_empty()) } else { from };
                     if to > from {
                         parts.push((note, from, to));
@@ -2867,8 +3026,90 @@ fn layout_pass(
                         carried.push((note, to));
                     }
                 }
-                bottom = floor - rule - stacked(&parts, &laid_notes, true);
+                let under = floor - rule - stacked(&parts, &laid_notes, true);
+                sheet_floor = sheet_floor.min(under);
+                bottom = under.min(reach);
                 *page_notes.last_mut().expect("just pushed") = (parts, true);
+            }
+        }};
+    }
+    // Opens a page of the section with the given index, and the first of
+    // the section's columns on it; `$first` says that the section begins
+    // on the page.
+    macro_rules! turn_page {
+        ($section:expr, $first:expr) => {{
+            let index = ($section).min(setups.len() - 1);
+            let section = setups[index];
+            number = section.page_number_start.filter(|_| $first).unwrap_or(number + 1);
+            let frame = builder.frame(section, index, &stories[index], number, $first, &mut heights);
+            if !pages.is_empty() {
+                close_band!();
+            }
+            (top, bottom) = (frame.top, frame.bottom);
+            pages.push(Page {
+                width: section.page_width as f32 * TWIP,
+                height: section.page_height as f32 * TWIP,
+                body: (top, bottom),
+                ..Page::default()
+            });
+            frames.push(frame);
+            cols = columns_of(section);
+            column = 0;
+            (band_left, band_ruled) = ((section.margin_left + section.gutter) as f32 * TWIP, section.column_separator);
+            (band_top, band_floor, band_low, band_sum) = (top, bottom, top, 0.0);
+            sheet_floor = bottom;
+            sheet_is_empty = true;
+            open_area!($section);
+        }};
+    }
+    // Goes on where the column being filled is full: in the next column
+    // of the band, or on a new page where that was the last.
+    macro_rules! advance {
+        () => {{
+            if column + 1 < cols.len() {
+                band_low = band_low.max(y);
+                band_sum += y - band_top;
+                column += 1;
+                column_begins = true;
+                open_area!(section_index);
+            } else {
+                turn_page!(section_index, false);
+            }
+        }};
+    }
+    // Begins the section with the index `section_index` in the page being
+    // filled, the section before it having ended there.
+    macro_rules! go_on_in_page {
+        () => {{
+            let next = setups[section_index.min(setups.len() - 1)];
+            let next_cols = columns_of(next);
+            if next_cols != cols || cols.len() > 1 {
+                // Columns of its own: they begin under what the columns
+                // before them hold. Word records where they begin as it
+                // records where a column does, if the text was in several
+                // columns or is to be. (`unbalanced-columns.docx` of the
+                // corpus: it records the start of one column after two, and
+                // of two after one.)
+                close_band!();
+                column_begins = cols.len() > 1 || next_cols.len() > 1;
+                (band_left, band_ruled) = ((next.margin_left + next.gutter) as f32 * TWIP, next.column_separator);
+                band_low = band_low.max(y);
+                if cols.len() > 1 {
+                    bands.push(BandEnd {
+                        section: section_index - 1,
+                        page: pages.len() - 1,
+                        columns: cols.len(),
+                        sum: band_sum + (y - band_top),
+                        tallest: band_low - band_top,
+                    });
+                }
+                cols = next_cols;
+                column = 0;
+                (band_top, band_floor, band_sum) = (band_low, sheet_floor, 0.0);
+                open_area!(section_index);
+            } else {
+                // The same column, which may begin elsewhere across the page.
+                left = (next.margin_left + next.gutter) as f32 * TWIP + cols[0].0;
             }
         }};
     }
@@ -2921,7 +3162,6 @@ fn layout_pass(
     let mut floats_page = 0;
     for index in 0..units.len() {
         let section = setups[section_index.min(setups.len() - 1)];
-        let left = (section.margin_left + section.gutter) as f32 * TWIP;
         let unit = &units[index];
 
         // An empty paragraph that is there only to carry the break to a
@@ -2945,11 +3185,12 @@ fn layout_pass(
             if stays && empty {
                 section_ends[section_index] = pages.len();
                 section_index += 1;
+                go_on_in_page!();
                 section_starts[section_index] = pages.len() - 1;
                 continue;
             }
         }
-        if unit.page_break_before && !page_is_empty {
+        if unit.page_break_before && !sheet_is_empty {
             turn_page!(section_index, false);
             page_is_empty = true;
             after_break = true;
@@ -3016,12 +3257,14 @@ fn layout_pass(
             let fresh = fresh_notes(lines.flat_map(|line| &line.notes), &builder.notes, on_page, &[]);
             let section = setups[section_index.min(setups.len() - 1)];
             for &note in &fresh {
-                laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                laid_notes
+                    .entry(note)
+                    .or_insert_with(|| builder.note(note, section, cols[column.min(cols.len() - 1)].1));
             }
             let noted = !on_page.is_empty() || !fresh.is_empty();
             if !fresh.is_empty() {
                 let rule = builder.separator(section, *continued);
-                chain += bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes));
+                chain += (bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes))).max(0.0);
             }
             if noted && spaced && last.row.is_none() && together >= last.lines.len() {
                 chain += last.after;
@@ -3031,7 +3274,7 @@ fn layout_pass(
         // A page has been begun inside a table: its heading rows come first.
         let mut turned = false;
         if !page_is_empty && y + gap(false, false) + chain > bottom + 0.01 && chain <= page_height {
-            turn_page!(section_index, false);
+            advance!();
             page_is_empty = true;
             after_break = true;
             turned = true;
@@ -3117,13 +3360,15 @@ fn layout_pass(
                 });
                 let fresh = fresh_notes(rest, &builder.notes, on_page, &[]);
                 for &note in &fresh {
-                    laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                    laid_notes
+                        .entry(note)
+                        .or_insert_with(|| builder.note(note, section, cols[column.min(cols.len() - 1)].1));
                 }
                 let notes_height = match fresh.is_empty() {
                     true => 0.0,
                     false => {
                         let rule = builder.separator(section, *continued);
-                        bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes))
+                        (bottom - (floor - rule - least_with(on_page, &fresh, &laid_notes))).max(0.0)
                     }
                 };
                 let fits = y + height + notes_height <= bottom + 0.01;
@@ -3145,7 +3390,7 @@ fn layout_pass(
                         .zip(&takes)
                         .all(|((cell, cursor), take)| !own(cell, *cursor) || *take > 0);
                 if !fits && (!splits || notes_height > 0.0) && !page_is_empty {
-                    turn_page!(section_index, false);
+                    advance!();
                     page_is_empty = true;
                     after_break = true;
                     turned = true;
@@ -3158,6 +3403,7 @@ fn layout_pass(
                     started = number_of_pages;
                     page.start = None;
                 }
+                column_begins = false;
                 let ranges: Vec<(usize, usize)> = row
                     .cells
                     .iter()
@@ -3177,22 +3423,26 @@ fn layout_pass(
                 let placed = fresh_notes(within, &builder.notes, on_page, &[]);
                 if !placed.is_empty() {
                     for &note in &placed {
-                        laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                        laid_notes
+                            .entry(note)
+                            .or_insert_with(|| builder.note(note, section, cols[column.min(cols.len() - 1)].1));
                     }
                     let (parts, continued) = page_notes.last_mut().expect("a page is always open");
                     let rule = builder.separator(section, *continued);
                     put_notes(&placed, &laid_notes, parts, &mut carried, floor - rule - part_bottom);
-                    bottom = floor - rule - stacked(parts, &laid_notes, true);
+                    let under = floor - rule - stacked(parts, &laid_notes, true);
+                    sheet_floor = sheet_floor.min(under);
+                    bottom = under.min(reach);
                 }
                 for (cursor, (_, end)) in cursors.iter_mut().zip(&ranges) {
                     *cursor = *end;
                 }
-                page_is_empty = false;
+                (page_is_empty, sheet_is_empty) = (false, false);
                 if whole {
                     y = part_bottom;
                     break;
                 }
-                turn_page!(section_index, false);
+                advance!();
                 page_is_empty = true;
                 after_break = true;
                 turned = true;
@@ -3206,48 +3456,60 @@ fn layout_pass(
             floats.clear();
             floats_page = pages.len();
         }
-        let width = section.text_width() as f32 * TWIP;
-        let column = (left + unit.left, left + unit.left + width);
+        let width = cols[column.min(cols.len() - 1)].1;
+        let margins = {
+            let from = (section.margin_left + section.gutter) as f32 * TWIP;
+            (from, from + section.text_width() as f32 * TWIP)
+        };
+        // The bounds of the column being filled, which may be another by the time a line is placed.
+        macro_rules! bounds {
+            () => {
+                (left + unit.left, left + unit.left + cols[column.min(cols.len() - 1)].1)
+            };
+        }
         // Objects anchored in the paragraph go on the page its first line
         // goes on, and that line may have to begin below them: if it then
         // does not fit, paragraph and objects go to the next page together.
         if !unit.anchored.is_empty() {
-            let placed = |top_of_paragraph: f32, page: &Page, body: (f32, f32)| -> Vec<(f32, f32, Float)> {
-                let boxes = unit.anchored.iter().map(|object| {
-                    let (x, y) = anchored_at(object, (page.width, page.height), column, body, top_of_paragraph);
-                    let distance = object.anchor.distance.map(|emu| emu as f32 / oco_docx::EMU_PER_POINT as f32);
-                    let float = Float {
-                        left: x - distance[2],
-                        right: x + object.width + distance[3],
-                        top: y - distance[0],
-                        bottom: y + object.height + distance[1],
-                        across: object.anchor.wrap == Wrap::TopAndBottom,
-                        side: object.anchor.wrap_side,
-                    };
-                    (x, y, float)
-                });
-                boxes.collect()
-            };
+            let placed =
+                |top_of_paragraph: f32, page: &Page, body: (f32, f32), column: (f32, f32)| -> Vec<(f32, f32, Float)> {
+                    let boxes = unit.anchored.iter().map(|object| {
+                        let (x, y) =
+                            anchored_at(object, (page.width, page.height), margins, column, body, top_of_paragraph);
+                        let distance = object.anchor.distance.map(|emu| emu as f32 / oco_docx::EMU_PER_POINT as f32);
+                        let float = Float {
+                            left: x - distance[2],
+                            right: x + object.width + distance[3],
+                            top: y - distance[0],
+                            bottom: y + object.height + distance[1],
+                            across: object.anchor.wrap == Wrap::TopAndBottom,
+                            side: object.anchor.wrap_side,
+                        };
+                        (x, y, float)
+                    });
+                    boxes.collect()
+                };
             let first = unit.lines.first().map_or(0.0, |line| line.needed);
-            let mut own = placed(y, pages.last().expect("a page is always open"), (top, bottom));
+            let mut own = placed(y, pages.last().expect("a page is always open"), (top, bottom), bounds!());
             let wraps = |object: &paragraph::Anchored| object.anchor.wrap != Wrap::None;
             let mut all: Vec<Float> = std::mem::take(&mut floats);
             let before = all.len();
             all.extend(
                 own.drain(..).zip(&unit.anchored).filter(|(_, object)| wraps(object)).map(|(placed, _)| placed.2),
             );
-            let begins = among(&all, y, first, column).0;
+            let begins = among(&all, y, first, bounds!()).0;
             all.truncate(before);
             floats = all;
             if begins + first > bottom + 0.01 && !page_is_empty {
-                turn_page!(section_index, false);
+                advance!();
                 page_is_empty = true;
                 after_break = true;
                 floats.clear();
                 floats_page = pages.len();
             }
             let page = pages.last_mut().expect("a page is always open");
-            for ((x, y, float), object) in placed(y, page, (top, bottom)).into_iter().zip(&unit.anchored) {
+            let column = bounds!();
+            for ((x, y, float), object) in placed(y, page, (top, bottom), column).into_iter().zip(&unit.anchored) {
                 put_object(page, object, x, y);
                 if wraps(object) {
                     floats.push(float);
@@ -3259,6 +3521,8 @@ fn layout_pass(
         // again to keep to one side of it. Which lines those are depends on
         // how they break, so this is done until it settles.
         let mut lines = std::borrow::Cow::Borrowed(&unit.lines[..]);
+        // How wide the column is that the lines are broken for: the first of the section's.
+        let mut set_for = columns_of(section)[0].1;
         let beside = floats.iter().any(|float| !float.across);
         if let Some(source) = unit.paragraph.and_then(|index| sources.get(index)).filter(|_| beside) {
             const OPEN: (f32, f32) = (f32::MIN, f32::MAX);
@@ -3267,6 +3531,7 @@ fn layout_pass(
                 let mut next = Vec::new();
                 let mut at = y;
                 for line in lines.iter() {
+                    let column = bounds!();
                     let (settled, bounds) = among(&floats, at, line.height, column);
                     if settled + line.needed > bottom + 0.01 {
                         // The rest goes to the next page, clear of these objects.
@@ -3282,18 +3547,37 @@ fn layout_pass(
                     break;
                 }
                 shape = next;
-                lines = std::borrow::Cow::Owned(builder.again(source, unit, section, width, &shape));
+                lines = std::borrow::Cow::Owned(builder.again(source, unit, section, width, &shape, &[]));
+                set_for = width;
             }
         }
 
-        let count = lines.len();
-        for (number, line) in lines.iter().enumerate() {
+        // Lines are broken for a column of one width. Where the paragraph
+        // comes to stand, or goes on, in a column of another, the lines not
+        // placed yet are broken again for that one; `stood` is how wide the
+        // column of each line placed so far is.
+        let source = unit.paragraph.and_then(|index| sources.get(index));
+        let mut stood: Vec<f32> = Vec::new();
+        // The number of the line to place next.
+        let mut line_number = 0;
+        'lines: while line_number < lines.len() {
+            let number = line_number;
+            let here = cols[column.min(cols.len() - 1)].1;
+            if (here - set_for).abs() > 0.01 {
+                if let Some(source) = source {
+                    lines = std::borrow::Cow::Owned(builder.again(source, unit, section, here, &[], &stood));
+                }
+                set_for = here;
+                continue;
+            }
+            let count = lines.len();
+            let line = &lines[number];
             if floats_page != pages.len() {
                 floats.clear();
                 floats_page = pages.len();
             }
             if !floats.is_empty() {
-                y = among(&floats, y, line.height, column).0;
+                y = among(&floats, y, line.height, bounds!()).0;
             }
             // A line goes on the page where the footnotes it refers to
             // begin. They take room at the foot of the page, as does the
@@ -3309,8 +3593,8 @@ fn layout_pass(
             // footnotes. (Word, docx4j's probes `footnotes` and
             // `footnote-space-after`: a paragraph of three lines that would
             // just fit goes to the next page when its space after does not.)
-            let mut fresh;
-            loop {
+            let fresh;
+            {
                 let (on_page, continued) = page_notes.last().expect("a page is always open");
                 fresh = fresh_notes(line.notes.iter(), &builder.notes, on_page, &[]);
                 // The notes of the paragraph's last line, where this is the line before it.
@@ -3319,14 +3603,16 @@ fn layout_pass(
                     false => Vec::new(),
                 };
                 for &note in fresh.iter().chain(&last) {
-                    laid_notes.entry(note).or_insert_with(|| builder.note(note, section));
+                    laid_notes
+                        .entry(note)
+                        .or_insert_with(|| builder.note(note, section, cols[column.min(cols.len() - 1)].1));
                 }
                 let rule = builder.separator(section, *continued);
                 let after = |ends: bool, noted: bool| if ends && noted && spaced { unit.after } else { 0.0 };
                 // As far down as the text may go once the notes of this line have begun on the page.
                 let under = match fresh.is_empty() {
                     true => bottom,
-                    false => floor - rule - least_with(on_page, &fresh, &laid_notes),
+                    false => (floor - rule - least_with(on_page, &fresh, &laid_notes)).min(bottom),
                 };
                 let noted = !on_page.is_empty() || !fresh.is_empty();
                 let fits = y + line.needed + after(number + 1 == count, noted) <= under + 0.01;
@@ -3339,16 +3625,19 @@ fn layout_pass(
                     let mut whole = on_page.clone();
                     whole.extend(fresh.iter().map(|&note| (note, 0, laid_notes[&note].lines.len())));
                     let noted = !whole.is_empty() || !last.is_empty();
-                    let under = if noted { floor - rule - least_with(&whole, &last, &laid_notes) } else { bottom };
+                    let under = if noted {
+                        (floor - rule - least_with(&whole, &last, &laid_notes)).min(bottom)
+                    } else {
+                        bottom
+                    };
                     y + line.height + next.needed + after(true, noted) > under + 0.01
                 };
                 if (!fits || strands_last) && !page_is_empty {
-                    turn_page!(section_index, false);
+                    advance!();
                     after_break = true;
                     page_is_empty = true;
-                    continue;
+                    continue 'lines;
                 }
-                break;
             }
             let number_of_pages = pages.len();
             let page = pages.last_mut().expect("a page is always open");
@@ -3356,7 +3645,11 @@ fn layout_pass(
             if started < number_of_pages {
                 started = number_of_pages;
                 page.start = unit.paragraph.map(|paragraph| Position { paragraph, offset: line.offset });
+            } else if column_begins {
+                // ... and the first to land in a column is where the column begins.
+                page.column_starts.extend(unit.paragraph.map(|paragraph| Position { paragraph, offset: line.offset }));
             }
+            column_begins = false;
             for item in &line.items {
                 let mut item = item.clone();
                 item.translate(left + unit.left, y);
@@ -3364,15 +3657,26 @@ fn layout_pass(
             }
             record(line, left, y, &mut page.lines);
             y += line.height;
-            page_is_empty = false;
+            (page_is_empty, sheet_is_empty) = (false, false);
             if !fresh.is_empty() {
                 let (parts, continued) = page_notes.last_mut().expect("a page is always open");
                 let rule = builder.separator(section, *continued);
                 put_notes(&fresh, &laid_notes, parts, &mut carried, floor - rule - y);
-                bottom = floor - rule - stacked(parts, &laid_notes, true);
+                let under = floor - rule - stacked(parts, &laid_notes, true);
+                sheet_floor = sheet_floor.min(under);
+                bottom = under.min(reach);
             }
-            if line.page_break_after {
-                turn_page!(section_index, false);
+            // A column break sends what follows to the next column, or to
+            // the next page where the text is in one column.
+            let (page_break, column_break) = (line.page_break_after, line.column_break_after);
+            stood.push(here);
+            line_number += 1;
+            if page_break || column_break {
+                if page_break {
+                    turn_page!(section_index, false);
+                } else {
+                    advance!();
+                }
                 page_is_empty = true;
                 after_break = true;
             }
@@ -3390,7 +3694,19 @@ fn layout_pass(
             // page then. (Measured in Word, docx4j's probe
             // `page-blank-landscape`.)
             let same_paper = (next.page_width, next.page_height) == (section.page_width, section.page_height);
-            if next.start != SectionStart::Continuous || !same_paper {
+            let next_cols = columns_of(next);
+            // A section that begins in the next column goes on in the band,
+            // if it has the same columns and there is one left.
+            let next_column = next.start == SectionStart::NextColumn
+                && same_paper
+                && next_cols == cols
+                && column + 1 < cols.len()
+                && (next.margin_left, next.gutter) == (section.margin_left, section.gutter);
+            if next_column {
+                advance!();
+                page_is_empty = true;
+                after_break = true;
+            } else if next.start != SectionStart::Continuous || !same_paper {
                 // A section that is to begin on an odd page, or on an even
                 // one, has an empty page put before it where the next page
                 // is of the other kind. The empty page takes a number and
@@ -3420,6 +3736,7 @@ fn layout_pass(
                     });
                     let index = section_index.min(setups.len() - 1);
                     frames.push(Frame { top: 0.0, bottom: 0.0, header: None, footer: None, number, section: index });
+                    areas.push(Area { page: pages.len() - 1, left: 0.0, width: 0.0, floor: 0.0 });
                     page_notes.push((Vec::new(), false));
                     started = pages.len();
                 }
@@ -3428,16 +3745,19 @@ fn layout_pass(
                 // The first paragraph of a section keeps its space before,
                 // less the space after the paragraph that ended the last.
                 after_break = false;
+            } else {
+                go_on_in_page!();
             }
             // A continuous section starts on the existing page, so that
             // shared page belongs to both sections' SECTIONPAGES counts.
             section_starts[section_index] = pages.len() - 1;
         }
     }
+    close_band!();
     // Notes that run on past the last page of text get pages of their own.
     while !carried.is_empty() {
         let before = carried.clone();
-        turn_page!(section_index, false);
+        advance!();
         if carried == before {
             break;
         }
@@ -3453,16 +3773,17 @@ fn layout_pass(
     // `footnote-space-after`: the notes end at the bottom of the body; the
     // line is 144 pt long and 0.6 pt wide, in the middle of the line of the
     // paragraph that holds it.)
-    for ((page, frame), (parts, continued)) in pages.iter_mut().zip(&frames).zip(&page_notes) {
+    for (area, (parts, continued)) in areas.iter().zip(&page_notes) {
         if parts.is_empty() {
             continue;
         }
+        let (page, frame) = (&mut pages[area.page], &frames[area.page]);
         let section = setups[frame.section];
-        let left = (section.margin_left + section.gutter) as f32 * TWIP;
+        let left = area.left;
         let separator = builder.separator(section, *continued);
         let height = separator + stacked(parts, &laid_notes, true);
-        let mut y = frame.bottom - height;
-        let length = if *continued { section.text_width() as f32 * TWIP } else { 144.0 };
+        let mut y = area.floor - height;
+        let length = if *continued { area.width } else { area.width.min(144.0) };
         let middle = y + separator / 2.0;
         page.items.push(Item::Rule {
             x1: left,
@@ -3535,7 +3856,8 @@ fn layout_pass(
             // body; its text takes no notice of them.
             let column = (left, left + section.text_width() as f32 * TWIP);
             for (offset, object) in anchored {
-                let (x, y) = anchored_at(&object, (page.width, page.height), column, page.body, origin + offset);
+                let (x, y) =
+                    anchored_at(&object, (page.width, page.height), column, column, page.body, origin + offset);
                 put_object(page, &object, x, y);
             }
         }
@@ -3543,15 +3865,14 @@ fn layout_pass(
         page.lines.sort_by(|a, b| a.baseline.total_cmp(&b.baseline));
     }
     let mut began = vec![None; builder.notes.len()];
-    for (page, (parts, _)) in page_notes.iter().enumerate() {
+    for (area, (parts, _)) in areas.iter().zip(&page_notes) {
         for &(note, from, _) in parts {
             if from == 0 {
-                began[note] = Some(page);
+                began[note] = Some(area.page);
             }
         }
     }
-    let laid = Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced, undrawn: 0 };
-    (laid, began, placed)
+    Paged { pages, began, placed, bands }
 }
 
 /// What a page has around its body.
