@@ -74,9 +74,10 @@ pub struct TableProps {
     pub edges: Edges,
     /// `w:shd`: the fill of every cell that has none of its own.
     pub shade: Option<Color>,
-    /// `w:tblpPr`: the table floats, out of the flow of the text. Where it
-    /// floats is not read.
+    /// `w:tblpPr`: the table floats, out of the flow of the text.
     pub floating: bool,
+    /// Where a floating table stands and how far text keeps from it.
+    pub float: Option<TableFloat>,
     /// `w:tblCellSpacing`: the cells stand apart, each within rules of its
     /// own; this much blank, in twips, is on every side of each.
     pub cell_spacing: Option<i32>,
@@ -162,6 +163,62 @@ fn share(node: Node) -> Option<i32> {
     (share > 0).then_some(share)
 }
 
+/// Where a table that floats stands (`w:tblpPr`), and how far text keeps
+/// from it. Lengths are in twips.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct TableFloat {
+    /// What the table is placed against across the page and down it.
+    pub horizontal: FloatAnchor,
+    pub vertical: FloatAnchor,
+    /// How far from the left (top) of what it is placed against; or else
+    /// where against it: `left`, `center`, `right`, `inside`, `outside`
+    /// across, `top`, `center`, `bottom`, `inside`, `outside`, `inline` down.
+    pub x: i32,
+    pub y: i32,
+    pub x_spec: Option<String>,
+    pub y_spec: Option<String>,
+    /// The room text keeps from the table at its left, top, right and bottom.
+    pub distance: [i32; 4],
+}
+
+/// What a floating table is placed against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum FloatAnchor {
+    /// The text: across, the column the table's paragraph is in; down, the
+    /// top of the paragraph that follows the table.
+    Text,
+    /// The text area of the page, between its margins.
+    Margin,
+    Page,
+}
+
+impl TableFloat {
+    fn parse(node: Node) -> Self {
+        let anchor = |name: &str, default: FloatAnchor| match w_attr(node, name) {
+            Some("text") => FloatAnchor::Text,
+            Some("margin") => FloatAnchor::Margin,
+            Some("page") => FloatAnchor::Page,
+            _ => default,
+        };
+        let length = |name: &str| twips(w_attr(node, name)).unwrap_or(0);
+        TableFloat {
+            // What a table that does not say is placed against: the text
+            // across, the margin down.
+            horizontal: anchor("horzAnchor", FloatAnchor::Text),
+            vertical: anchor("vertAnchor", FloatAnchor::Margin),
+            x: length("tblpX"),
+            y: length("tblpY"),
+            x_spec: w_attr(node, "tblpXSpec").map(str::to_owned),
+            y_spec: w_attr(node, "tblpYSpec").map(str::to_owned),
+            distance: ["leftFromText", "topFromText", "rightFromText", "bottomFromText"]
+                .map(|side| length(side).max(0)),
+        }
+    }
+}
+
 impl TableProps {
     pub(crate) fn parse(node: Node, coverage: &mut Coverage) -> Self {
         let mut props = TableProps::default();
@@ -184,8 +241,7 @@ impl TableProps {
                 Some("tblCellSpacing") => props.cell_spacing = length(child).filter(|w| *w > 0),
                 Some("tblpPr") => {
                     props.floating = true;
-                    // Its position is not modelled.
-                    coverage.miss(Some("w:tblPr"), child);
+                    props.float = Some(TableFloat::parse(child));
                 }
                 // Which conditional formats of the style apply; none are read.
                 Some("tblLook" | "tblStyleRowBandSize" | "tblStyleColBandSize") => {}
@@ -211,6 +267,7 @@ impl TableProps {
         self.edges.apply(&over.edges);
         self.shade = over.shade.or(self.shade);
         self.floating |= over.floating;
+        self.float = over.float.clone().or(self.float.take());
         self.cell_spacing = over.cell_spacing.or(self.cell_spacing);
     }
 }

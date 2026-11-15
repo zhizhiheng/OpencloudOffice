@@ -379,7 +379,6 @@ fn not_shown(docx: &Docx) -> Vec<(&'static str, usize)> {
         ("embedded_objects", &["w:object"]),
         ("equations", &["m:oMath"]),
         ("frames", &["w:pPr/w:framePr"]),
-        ("floating_tables", &["w:tblPr/w:tblpPr"]),
         ("comments", &["commentReference"]),
         ("vertical_text", &["w:tcPr/w:textDirection", "w:pPr/w:textDirection", "w:sectPr/w:textDirection"]),
         ("page_borders", &["w:sectPr/w:pgBorders"]),
@@ -487,18 +486,18 @@ mod tests {
         // The handle of a closed document is given out again.
         assert_eq!(unsafe { oco_open(bytes.as_ptr(), bytes.len()) }, 1);
 
-        // What is known not to be shown is said, whatever the reader adds to
-        // its name: a table that floats is, text in columns no longer.
+        // What is known not to be shown is said: a paragraph in a frame is,
+        // text in columns and a table that floats no longer.
         let columns = format!(
             "<w:document xmlns:w=\"{w}\"><w:body><w:tbl><w:tblPr><w:tblpPr/></w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>\
-             <w:p/><w:sectPr><w:cols w:num=\"2\"/></w:sectPr></w:body></w:document>"
+             <w:p><w:pPr><w:framePr w:w=\"2000\"/></w:pPr></w:p><w:sectPr><w:cols w:num=\"2\"/></w:sectPr></w:body></w:document>"
         );
         let mut writer = oco_docx::zip::Writer::new();
         writer.add("word/document.xml", columns.as_bytes());
         let columns = writer.finish();
         let second = unsafe { oco_open(columns.as_ptr(), columns.len()) };
         assert_eq!(oco_info(second), 1);
-        assert!(result().contains("\"notShown\":[{\"kind\":\"floating_tables\",\"count\":1}]"), "{}", result());
+        assert!(result().contains("\"notShown\":[{\"kind\":\"frames\",\"count\":1}]"), "{}", result());
         oco_close(second);
 
         // Text set upright and a border around the page are said too; text

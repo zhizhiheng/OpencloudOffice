@@ -517,11 +517,11 @@ fn reads_what_decides_where_a_tables_text_goes() {
     // A width that is a percentage is not a length; a bare vMerge continues.
     assert_eq!((second.cells[0].props.width, second.cells[0].props.merge), (None, Some(VerticalMerge::Continue)));
     assert_eq!((second.cells[1].props.grid_span, second.cells[1].props.merge), (1, None));
-    // What is not read is said; so is where the table floats, which is not.
-    assert_eq!(
-        docx.coverage.ranked().into_iter().collect::<Vec<_>>(),
-        [("w:tblPr/w:tblOverlap", 1), ("w:tblPr/w:tblpPr", 1)]
-    );
+    // What is not read is said. Where the table floats is read.
+    assert_eq!(docx.coverage.ranked().into_iter().collect::<Vec<_>>(), [("w:tblPr/w:tblOverlap", 1)]);
+    let float = props.float.as_ref().expect("a floating table");
+    assert_eq!((float.horizontal, float.vertical), (oco_docx::FloatAnchor::Page, oco_docx::FloatAnchor::Page));
+    assert_eq!((float.x, float.y, float.distance), (1362, 1135, [0; 4]));
 }
 
 #[test]

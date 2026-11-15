@@ -8,7 +8,7 @@
 //!
 //! This is a research prototype. It covers body text, tables, headers and
 //! footers, page-number fields, pictures, DrawingML text boxes, footnotes and
-//! endnotes. Columns and floating tables still need layout support.
+//! endnotes, columns and floating tables.
 
 pub mod fonts;
 mod paragraph;
@@ -465,8 +465,10 @@ struct Unit {
     /// The unit is a table row; `lines` is then empty.
     row: Option<Row>,
     /// The row is of a floating table. In a header or footer such a table
-    /// takes no room; in the body it is laid out in line all the same.
+    /// takes no room; in a cell it is laid out in line all the same.
     floating: bool,
+    /// Where the floating table the row is of stands on its page.
+    float: Option<oco_docx::TableFloat>,
     /// The space before and the space after are "automatic": 14 pt, less
     /// where the paragraph stands (see [`Builder::blocks`]).
     automatic: (bool, bool),
@@ -1688,6 +1690,7 @@ impl Builder<'_> {
             paragraph: Some(index),
             row: None,
             floating: false,
+            float: None,
             automatic: (props.spacing.before_auto == Some(true), props.spacing.after_auto == Some(true)),
             list: self.resolver.list_level(&props).map(|(list, _, _)| list),
             header: None,
@@ -2513,6 +2516,7 @@ impl Builder<'_> {
                 paragraph: None,
                 row: Some(row),
                 floating: props.floating,
+                float: props.float.clone(),
                 automatic: (false, false),
                 list: None,
                 header: repeated.clone().filter(|_| number >= heading),
@@ -3160,9 +3164,124 @@ fn paginate(docx: &Docx, builder: &mut Builder<'_>, units: &[Unit], setups: &[&S
     // The objects on the page being filled that text keeps clear of.
     let mut floats: Vec<Float> = Vec::new();
     let mut floats_page = 0;
+    // The units before this one have been placed already: the rows of a
+    // floating table are placed together, at its first. And the rows
+    // before this one are of a floating table that is laid out in the
+    // flow of the text.
+    let (mut placed_until, mut in_line_until) = (0, 0);
     for index in 0..units.len() {
+        if index < placed_until {
+            continue;
+        }
         let section = setups[section_index.min(setups.len() - 1)];
         let unit = &units[index];
+
+        // A table that floats stands where it says, out of the flow of the
+        // text, which goes on where it was and keeps clear of the table.
+        // (Measured in Word, docx4j's probe `table-floating`: a table 225 pt
+        // from the margin and 72 pt down from the text has its edge at the
+        // margin plus 225 pt and its top 72 pt under the top of the
+        // paragraph that follows it in the document, however that
+        // paragraph's first lines stand above it; lines that meet it are
+        // set beside it, 9 pt from it as it asks.)
+        if let (Some(place), Some(_), true) = (&unit.float, &unit.row, index >= in_line_until) {
+            let end = (index..units.len())
+                .find(|&at| units[at].row.as_ref().is_none_or(|row| row.last))
+                .unwrap_or(units.len() - 1);
+            let rows: Vec<&Row> = units[index..=end].iter().filter_map(|unit| unit.row.as_ref()).collect();
+            let height: f32 = rows.iter().map(|row| row.height()).sum();
+            let edge = |row: &&Row, last: bool| if last { row.edges.last() } else { row.edges.first() }.copied();
+            let from = rows.iter().filter_map(|row| edge(row, false)).fold(f32::MAX, f32::min);
+            let to = rows.iter().filter_map(|row| edge(row, true)).fold(f32::MIN, f32::max);
+            let width = (to - from).max(0.0);
+            let points = |twips: i32| twips as f32 * TWIP;
+            // Where the paragraph after the table begins: under the space
+            // between it and what stands above.
+            let below = units.get(end + 1).map_or(0.0, |next| next.before);
+            let place_at = |y: f32, page_is_empty: bool, after_break: bool, column: (f32, f32), page: &Page| {
+                let text_top = y + match (page_is_empty, after_break) {
+                    (true, true) => 0.0,
+                    (true, false) => (below - previous_after).max(0.0),
+                    (false, _) => previous_after.max(below),
+                };
+                let margins = {
+                    let left = (section.margin_left + section.gutter) as f32 * TWIP;
+                    (left, left + section.text_width() as f32 * TWIP)
+                };
+                let across = match place.horizontal {
+                    oco_docx::FloatAnchor::Text => column,
+                    oco_docx::FloatAnchor::Margin => margins,
+                    oco_docx::FloatAnchor::Page => (0.0, page.width),
+                };
+                let x = match place.x_spec.as_deref() {
+                    Some("center") => (across.0 + across.1 - width) / 2.0,
+                    Some("right" | "outside") => across.1 - width,
+                    Some("left" | "inside") => across.0,
+                    _ => across.0 + points(place.x),
+                };
+                let down = match place.vertical {
+                    oco_docx::FloatAnchor::Text => (text_top, text_top),
+                    oco_docx::FloatAnchor::Margin => page.body,
+                    oco_docx::FloatAnchor::Page => (0.0, page.height),
+                };
+                let top = match place.y_spec.as_deref() {
+                    Some("center") => (down.0 + down.1 - height) / 2.0,
+                    Some("bottom" | "outside") => down.1 - height,
+                    Some("top" | "inside") => down.0,
+                    _ => down.0 + points(place.y),
+                };
+                (x, top)
+            };
+            let bounds =
+                |left: f32, cols: &[(f32, f32)], column: usize| (left, left + cols[column.min(cols.len() - 1)].1);
+            let page = pages.last().expect("a page is always open");
+            let (mut x, mut table_top) = place_at(y, page_is_empty, after_break, bounds(left, &cols, column), page);
+            // A table placed against the text goes on with it to the next
+            // column or page where it does not fit under it here.
+            let against_text = place.vertical == oco_docx::FloatAnchor::Text;
+            if against_text && table_top + height > bottom + 0.01 && !page_is_empty && height <= bottom - top {
+                advance!();
+                page_is_empty = true;
+                after_break = true;
+                let page = pages.last().expect("a page is always open");
+                (x, table_top) = place_at(y, page_is_empty, after_break, bounds(left, &cols, column), page);
+            }
+            if table_top + height > bottom + 0.01 || table_top < top - 0.01 {
+                // A table too tall to stand on the page whole goes on from
+                // page to page in Word. Here it is then laid out in the
+                // flow of the text, row by row, as every table was before
+                // tables floated: that gives the pages Word has. (The
+                // floating tables of the corpus that take more than a page:
+                // twelve documents have Word's page count so, and not with
+                // the table on one page.)
+                in_line_until = end + 1;
+            } else {
+                placed_until = end + 1;
+                if floats_page != pages.len() {
+                    floats.clear();
+                    floats_page = pages.len();
+                }
+                let page = pages.last_mut().expect("a page is always open");
+                let mut row_top = table_top;
+                for row in rows {
+                    let all: Vec<(usize, usize)> = row.cells.iter().map(|cell| (0, cell.lines.len())).collect();
+                    let row_height = row.height();
+                    row.place(&all, true, x - from, row_top, row_top + row_height, page);
+                    row_top += row_height;
+                }
+                let [before, above, after, under] = place.distance.map(points);
+                floats.push(Float {
+                    left: x - before,
+                    right: x + width + after,
+                    top: table_top - above,
+                    bottom: table_top + height + under,
+                    across: false,
+                    side: WrapSide::Both,
+                });
+                sheet_is_empty = false;
+                continue;
+            }
+        }
 
         // An empty paragraph that is there only to carry the break to a
         // section that goes on in the same page takes no room at all: what

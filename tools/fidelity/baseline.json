@@ -3995,7 +3995,7 @@
     },
     "corpus-word/docx4j/table-floating.docx": {
      "dx": 0.02,
-     "dy": 56.7,
+     "dy": 0.0,
      "lines": 46,
      "missing_fonts": [],
      "page_starts": 0,
@@ -4004,9 +4004,9 @@
       1,
       1
      ],
-     "placed": 2,
+     "placed": 46,
      "plain": false,
-     "same": 28
+     "same": 46
     },
     "corpus-word/docx4j/table-grid-overwide-auto.docx": {
      "dx": 0.02,
@@ -5285,11 +5285,11 @@
    "forced_page_starts": 407,
    "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 520,
+   "multipage_pages_equal": 521,
    "multipage_pages_within_one": 605,
    "page_starts": 2044,
-   "page_starts_equal": 735,
-   "page_starts_same_paragraph": 927
+   "page_starts_equal": 733,
+   "page_starts_same_paragraph": 930
   },
   "covered": {
    "documents": 534,
@@ -5333,8 +5333,8 @@
     "page_starts": 193,
     "page_starts_equal": 185,
     "pages_equal": 122,
-    "placed": 6014,
-    "same": 6642
+    "placed": 6058,
+    "same": 6660
    },
    "covered": {
     "documents": 28,

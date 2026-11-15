@@ -3387,3 +3387,53 @@ fn a_footnote_stands_at_the_foot_of_its_column_as_wide_as_the_column() {
     assert!(note.iter().all(|line| line.x0 >= left - 0.01 && line.x1 <= left + 207.65 + 0.5));
     assert!(close(note.last().unwrap().baseline, 769.9 - 13.8 * 10.0 / 12.0 + 11.2 * 10.0 / 12.0, 1.0));
 }
+
+#[test]
+fn a_floating_table_stands_where_it_says_and_text_keeps_clear_of_it() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `table-floating`, all 46 lines of
+    // which fall where Word has them): the table's edge is 225 pt from the
+    // margin, its top 72 pt under the top of the paragraph that follows it
+    // in the document. That paragraph's lines stand above the table at
+    // their full width; lines that meet the table end 9 pt before it.
+    let text = |text: &str| paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:after="160"/>"#, text);
+    let cell = paragraph(&font("Liberation Serif", 24), "", "cell");
+    let floating = |place: &str| {
+        table(&[2000, 2000], "", &[&[&cell, &cell], &[&cell, &cell]]).replace(
+            "<w:tblPr>",
+            &format!(r#"<w:tblPr><w:tblpPr w:leftFromText="180" w:rightFromText="180" {place}/>"#),
+        )
+    };
+    let place = r#"w:vertAnchor="text" w:horzAnchor="margin" w:tblpX="4500" w:tblpY="1440""#;
+    let body = text("before") + &floating(place) + &text(&LOREM.repeat(4)) + &text(&LOREM.repeat(2));
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let cells: Vec<&oco_layout::PlacedLine> = page.lines.iter().filter(|line| line.text == "cell").collect();
+    assert_eq!(cells.len(), 4);
+    // The paragraph after "before" begins 13.8 + 8 pt under the page's top.
+    let anchor_top = 72.0 + 13.8 + 8.0;
+    assert!(close(cells[0].x0, 72.0 + 225.0 + 5.4 + 0.25, 0.01), "{}", cells[0].x0);
+    assert!(close(cells[0].baseline, anchor_top + 72.0 + 0.5 + 11.2, 0.05), "{}", cells[0].baseline);
+    // The table is 72 pt down and 2 × 14.3 + 0.5 pt tall; text keeps 9 pt from its left edge.
+    let (table_top, table_bottom) = (anchor_top + 72.0, anchor_top + 72.0 + 29.1);
+    let beside: Vec<&oco_layout::PlacedLine> = page
+        .lines
+        .iter()
+        .filter(|line| line.text != "cell" && line.baseline - 11.2 < table_bottom && line.baseline + 2.6 > table_top)
+        .collect();
+    assert!(beside.len() >= 2, "{}", beside.len());
+    assert!(beside.iter().all(|line| line.x1 <= 72.0 + 225.0 - 9.0 + 0.5), "lines beside the table end before it");
+    let above = page.lines.iter().filter(|line| line.text != "cell" && line.baseline + 2.6 <= table_top);
+    assert!(above.clone().count() >= 4 && above.clone().any(|line| line.x1 > 400.0), "lines above it are whole");
+    // The text goes on as if the table were not there: the first line after "before" is where it would be.
+    assert!(close(page.lines[1].baseline, anchor_top + 11.2, 0.05));
+
+    // A table too tall for the page is laid out in the flow of the text, and goes on to the next page.
+    let tall: Vec<String> = (0..60).map(|_| cell.clone()).collect();
+    let rows: Vec<[&str; 1]> = tall.iter().map(|cell| [cell.as_str()]).collect();
+    let rows: Vec<&[&str]> = rows.iter().map(|row| row.as_slice()).collect();
+    let long = table(&[2000], "", &rows).replace("<w:tblPr>", &format!("<w:tblPr><w:tblpPr {place}/>"));
+    let pages =
+        pages(&Source { body: &(text("before") + &long + &text("after")), ..Source::default() }, &fonts, Model::Word);
+    assert_eq!(pages.len(), 2);
+    assert!(pages[1].lines.iter().any(|line| line.text == "after"));
+}
