@@ -47,7 +47,7 @@ fn n(value: f32) -> String {
 
 /// What kind of image a file is, if it is a kind that viewers of SVG draw.
 /// Windows metafiles (EMF, WMF) and TIFF are not.
-fn media_type(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn media_type(bytes: &[u8]) -> Option<&'static str> {
     match bytes {
         [0x89, b'P', b'N', b'G', ..] => Some("image/png"),
         [0xFF, 0xD8, ..] => Some("image/jpeg"),
@@ -82,9 +82,11 @@ fn base64(bytes: &[u8]) -> String {
 pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> String {
     let mut definitions: BTreeMap<(usize, u16), String> = BTreeMap::new();
     let mut body = String::new();
+    // How many clips are open.
+    let mut clips = 0;
     for item in &page.items {
         match *item {
-            Item::Glyph { font, glyph, x, y, size, x_scale, color, fake_bold, fake_italic } => {
+            Item::Glyph { font, glyph, x, y, size, x_scale, color, fake_bold, fake_italic, hollow } => {
                 let face = fonts.get(font);
                 definitions.entry((font.0, glyph)).or_insert_with(|| {
                     let mut path = PathData(String::new());
@@ -94,12 +96,22 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                 let scale = size / face.units_per_em;
                 let slant = if fake_italic { " skewX(-12)" } else { "" };
                 // A bold face that does not exist is imitated by thickening the outline.
-                let stroke = if fake_bold {
+                // A hollow letter is its outline alone, in the letter's colour.
+                let stroke = if hollow {
+                    let width = face.units_per_em * if fake_bold { 0.045 } else { 0.025 };
+                    format!(r#" stroke="{}" stroke-width="{}""#, hex(color), n(width))
+                } else if fake_bold {
                     format!(r#" stroke="{}" stroke-width="{}""#, hex(color), n(face.units_per_em * 0.035))
                 } else {
                     String::new()
                 };
-                let fill = if color == [0, 0, 0] { String::new() } else { format!(r#" fill="{}""#, hex(color)) };
+                let fill = if hollow {
+                    r#" fill="none""#.to_owned()
+                } else if color == [0, 0, 0] {
+                    String::new()
+                } else {
+                    format!(r#" fill="{}""#, hex(color))
+                };
                 let _ = writeln!(
                     body,
                     r##"<use href="#g{}_{}" transform="translate({} {}){slant} scale({} {})"{fill}{stroke}/>"##,
@@ -165,7 +177,7 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                 };
                 let _ = writeln!(body, r#"<circle cx="{}" cy="{}" r="{}" {paint}/>"#, n(cx), n(cy), n(r));
             }
-            Item::Image { x, y, width, height, ref part, crop, flip } => {
+            Item::Image { x, y, width, height, ref part, crop, flip, rotation } => {
                 let file = part.as_ref().and_then(|part| media.get(part)).and_then(|file| file.bytes().ok());
                 let Some((kind, file)) = file.as_deref().and_then(|bytes| Some((media_type(bytes)?, bytes))) else {
                     // Nothing to show: a frame with a cross marks the room the object takes.
@@ -179,6 +191,12 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                     continue;
                 };
                 let [left, top, right, bottom] = crop;
+                // Turned about the centre of its box, after it is reflected.
+                let turned = rotation.rem_euclid(360.0) != 0.0;
+                if turned {
+                    let (cx, cy) = (x + width / 2.0, y + height / 2.0);
+                    let _ = writeln!(body, r#"<g transform="rotate({} {} {})">"#, n(rotation), n(cx), n(cy));
+                }
                 if flip != [false; 2] {
                     // Reflect the viewport and its content together: cropping
                     // happens in image coordinates, before the picture flips.
@@ -217,8 +235,36 @@ pub fn render(page: &Page, fonts: &FontDb, media: &BTreeMap<String, Media>) -> S
                 if flip != [false; 2] {
                     body.push_str("</g>\n");
                 }
+                if turned {
+                    body.push_str("</g>\n");
+                }
+            }
+            // An inner viewport cuts off what lies outside it and needs no
+            // name, so pages put into one web page cannot take each
+            // other's; what is inside is moved back to where the page has it.
+            Item::ClipStart { x, y, width, height } => {
+                clips += 1;
+                let _ = writeln!(
+                    body,
+                    r#"<svg x="{0}" y="{1}" width="{2}" height="{3}" overflow="hidden"><g transform="translate({4} {5})">"#,
+                    n(x),
+                    n(y),
+                    n(width),
+                    n(height),
+                    n(0.0 - x),
+                    n(0.0 - y)
+                );
+            }
+            Item::ClipEnd => {
+                if clips > 0 {
+                    clips -= 1;
+                    body.push_str("</g></svg>\n");
+                }
             }
         }
+    }
+    for _ in 0..clips {
+        body.push_str("</g></svg>\n");
     }
 
     let mut out = String::new();
@@ -309,6 +355,20 @@ mod tests {
     }
 
     #[test]
+    fn what_is_cut_off_is_drawn_in_a_viewport_of_its_own() {
+        let rect = |y: f32| Item::Rect { x: 10.0, y, width: 5.0, height: 5.0, color: [1, 2, 3] };
+        let items = vec![rect(0.0), Item::ClipStart { x: 10.0, y: 20.0, width: 30.0, height: 40.0 }, rect(25.0)];
+        let page = Page { width: 100.0, height: 100.0, items, ..Page::default() };
+        let drawn = render(&page, &FontDb::default(), &BTreeMap::new());
+        let inside =
+            r#"<svg x="10" y="20" width="30" height="40" overflow="hidden"><g transform="translate(-10 -20)">"#;
+        let (before, after) = drawn.split_once(inside).expect(&drawn);
+        assert!(before.contains(r#"<rect x="10" y="0""#) && after.contains(r#"<rect x="10" y="25""#), "{drawn}");
+        // A cut that is not ended ends with the page.
+        assert!(after.contains("</g></svg>\n</svg>"), "{drawn}");
+    }
+
+    #[test]
     fn tells_the_images_a_viewer_can_draw() {
         assert_eq!(media_type(b"\x89PNG\r\n\x1a\n...."), Some("image/png"));
         assert_eq!(media_type(b"\xFF\xD8\xFF\xE0"), Some("image/jpeg"));
@@ -354,6 +414,7 @@ mod tests {
             part: part.map(str::to_owned),
             crop,
             flip: [false; 2],
+            rotation: 0.0,
         };
         let draw = |item| {
             let page = Page { width: 100.0, height: 100.0, items: vec![item], ..Page::default() };
@@ -376,11 +437,16 @@ mod tests {
         let missing = draw(picture(None, [0.0; 4]));
         assert!(!missing.contains("<image") && missing.contains(r#"<path d="M10 20H40V60H10Z"#), "{missing}");
         let mut reflected = picture(Some("word/media/image1.png"), [0.25, 0.0, 0.0, 0.5]);
-        if let Item::Image { flip, .. } = &mut reflected {
+        if let Item::Image { flip, rotation, .. } = &mut reflected {
             *flip = [true, true];
+            *rotation = 90.0;
         }
         let reflected = draw(reflected);
-        assert!(reflected.contains(r#"<g transform="matrix(-1 0 0 -1 50 80)">"#), "{reflected}");
+        // Turned about the centre of its box, and reflected inside the turn.
+        assert!(
+            reflected.contains("<g transform=\"rotate(90 25 40)\">\n<g transform=\"matrix(-1 0 0 -1 50 80)\">"),
+            "{reflected}"
+        );
         assert!(
             reflected.contains(r#"<image x="-10" y="0" width="40" height="80""#),
             "crop stays in source coordinates"

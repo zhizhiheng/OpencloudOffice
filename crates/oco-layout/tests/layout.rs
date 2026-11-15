@@ -2866,3 +2866,269 @@ fn font_selection_prefers_regular_width_and_weight_over_file_order() {
         oco_layout::FontId(1)
     );
 }
+
+#[test]
+fn a_row_of_exact_height_shows_only_what_fits_in_it() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 shows the probe `exact-row-clipping` of the display audit of
+    // 2026-11-14: four paragraphs in a row of exactly 12 pt, of which the
+    // first is seen and the text after the table follows a row's height on.
+    let cell: String = (1..=4).map(|n| paragraph(&font("Liberation Serif", 24), "", &format!("cell {n}"))).collect();
+    let body = table(&[5000], r#"<w:trHeight w:val="240" w:hRule="exact"/>"#, &[&[&cell]])
+        + &paragraph(&font("Liberation Serif", 24), "", "after");
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let texts: Vec<&str> = page.lines.iter().map(|line| line.text.as_str()).collect();
+    assert_eq!(texts, ["cell 1", "after"]);
+    // What is cut off is kept apart, where it would stand: Word's PDF of
+    // docx4j's probe `table-rowheight` has such lines in its text.
+    let cut: Vec<&str> = page.cut.iter().map(|line| line.text.as_str()).collect();
+    assert_eq!(cut, ["cell 2", "cell 3", "cell 4"]);
+    assert!(close(page.cut[0].baseline - page.lines[0].baseline, 13.8, 0.01));
+    // What is drawn of the row's content lies in a box that ends where the
+    // row does, 12 pt under its top; the table's bottom rule is outside it.
+    let clip = page.items.iter().position(|item| matches!(item, Item::ClipStart { .. })).expect("the row is cut off");
+    let end = page.items.iter().position(|item| matches!(item, Item::ClipEnd)).expect("the cut ends");
+    let Item::ClipStart { y, height, .. } = page.items[clip] else { unreachable!() };
+    assert!(close(y, 72.0, 0.01) && close(height, 12.0, 0.01), "{y} {height}");
+    let glyphs_inside = page.items[clip..end].iter().filter(|item| matches!(item, Item::Glyph { .. })).count();
+    assert_eq!(glyphs_inside, "cell1".len(), "only the first line is drawn");
+    assert!(page.items[end..].iter().any(|item| matches!(item, Item::Rule { .. })), "rules are not cut off");
+    // A row that is tall enough is not cut off at all.
+    let body = table(&[5000], r#"<w:trHeight w:val="2000" w:hRule="exact"/>"#, &[&[&cell]]);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    assert_eq!(page.lines.len(), 4);
+}
+
+#[test]
+fn a_text_box_that_keeps_its_size_cuts_off_what_does_not_fit() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 shows the probe `textbox-overflow` of the same audit: a box
+    // 20 pt tall with four lines of 13.8 pt in it, of which the first is
+    // whole and the second is cut off at the box's foot.
+    let lines: String = (1..=4).map(|n| paragraph(&font("Liberation Serif", 24), "", &format!("box {n}"))).collect();
+    let boxed = |fit: &str| {
+        let drawing = inline_text_box(200, 20, &lines).replace(
+            r#"lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"/>"#,
+            &format!(r#"lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">{fit}</wps:bodyPr>"#),
+        );
+        let body = format!("<w:p><w:r>{drawing}</w:r></w:p>") + &paragraph(&font("Liberation Serif", 24), "", "after");
+        pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0)
+    };
+    let page = boxed("<a:noAutofit/>");
+    let texts: Vec<&str> = page.lines.iter().map(|line| line.text.as_str()).collect();
+    assert_eq!(texts, ["box 1", "box 2", "after"], "a line is text of the page if any of it is seen");
+    let clip = page.items.iter().find_map(|item| match item {
+        Item::ClipStart { x, y, width, height } => Some((*x, *y, *width, *height)),
+        _ => None,
+    });
+    let (x, y, width, height) = clip.expect("the box is cut off");
+    assert!(close(x, 72.0, 0.01) && close(width, 200.0, 0.01) && close(height, 20.0, 0.01), "{clip:?}");
+    assert!(close(y, 72.0, 0.01), "{y}");
+    // The second line is drawn, to be seen as far as the box reaches; the others are not.
+    let drawn = page.items.iter().filter(|item| matches!(item, Item::Glyph { .. })).count();
+    assert_eq!(drawn, "box1box2after".len());
+    // A box made to fit its text is left as it is: all of its text is seen.
+    let page = boxed("<a:spAutoFit/>");
+    assert_eq!(page.lines.len(), 5);
+    assert!(!page.items.iter().any(|item| matches!(item, Item::ClipStart { .. })));
+}
+
+#[test]
+fn page_fields_in_the_text_show_the_page_they_stand_on() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 shows the probe `body-page-fields` of the display audit of
+    // 2026-11-14: a `PAGE` field whose stored result is 99 shows the number
+    // of its page, in the text as in a header.
+    let field = |code: &str| format!(r#"<w:fldSimple w:instr="{code}"><w:r><w:t>99</w:t></w:r></w:fldSimple>"#);
+    let line = |text: &str, code: &str, props: &str| {
+        format!(
+            r#"<w:p><w:pPr>{props}</w:pPr><w:r><w:rPr>{}</w:rPr><w:t xml:space="preserve">{text}</w:t></w:r>{}</w:p>"#,
+            font("Liberation Serif", 24),
+            field(code)
+        )
+    };
+    let cell = line("in a cell ", "PAGE", "");
+    let body = line("page ", "PAGE", "")
+        + &line("of ", "NUMPAGES", "")
+        + &line("page ", r"PAGE \* ROMAN", "<w:pageBreakBefore/>")
+        + &table(&[4000], "", &[&[&cell]])
+        + &line("page ", "PAGE", "<w:pageBreakBefore/>")
+        + &line("in this section ", "SECTIONPAGES", "");
+    // Pages are numbered from 5, in small letters.
+    let section = Source::default().section.to_owned() + r#"<w:pgNumType w:start="5" w:fmt="lowerLetter"/>"#;
+    let source = Source { body: &body, section: &section, ..Source::default() };
+    let pages = pages(&source, &fonts, Model::Word);
+    let texts: Vec<Vec<&str>> =
+        pages.iter().map(|page| page.lines.iter().map(|line| line.text.as_str()).collect()).collect();
+    assert_eq!(
+        texts,
+        [vec!["page e", "of 3"], vec!["page VI", "in a cell f"], vec!["page g", "in this section 3"]],
+        "the page's number in its section's format or the field's own; counts in figures"
+    );
+    // A field counts for as many places as the text stored for it, whatever
+    // it shows: where a page begins is told as `content` counts it. Here the
+    // field shows "1", is stored as "99", and a page break follows it.
+    let body = format!(r#"<w:p>{}<w:r><w:br w:type="page"/></w:r><w:r><w:t>rest</w:t></w:r></w:p>"#, field("PAGE"));
+    let document = docx(&Source { body: &body, ..Source::default() });
+    let laid = layout(&document, &fonts, &Options { model: Model::Word });
+    assert_eq!(laid.pages[0].lines[0].text, "1");
+    let mut places = Vec::new();
+    content(&document, document.document.paragraphs()[0], |piece| places.push(piece));
+    let break_at = places.iter().position(|piece| matches!(piece, Content::Break(_))).unwrap();
+    assert_eq!(laid.pages[1].start, Some(Position { paragraph: 0, offset: break_at + 1 }));
+}
+
+#[test]
+fn a_section_for_odd_or_even_pages_begins_after_an_empty_page_where_it_must() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 lays out the probes `section-oddPage` and `section-evenPage`
+    // of the display audit of 2026-11-14: after one page, a section that is
+    // to begin on an odd page begins on the third, the second being empty;
+    // one that is to begin on an even page begins on the second.
+    let footer = r#"<w:p><w:fldSimple w:instr="PAGE"><w:r><w:t>9</w:t></w:r></w:fldSimple></w:p>"#;
+    let stories = [("f", "footer", footer)];
+    let lay = |kind: &str, numbering: &str| {
+        let setup = format!(r#"<w:footerReference w:type="default" r:id="f"/>{A4_WITH_STORIES}"#);
+        let body = format!(
+            r#"<w:p><w:pPr><w:sectPr>{setup}</w:sectPr></w:pPr><w:r><w:t>before</w:t></w:r></w:p>{}"#,
+            paragraph("", "", "after")
+        );
+        let section = format!(r#"{setup}<w:type w:val="{kind}"/>{numbering}"#);
+        let source = Source { body: &body, section: &section, stories: &stories, ..Source::default() };
+        let pages = pages(&source, &fonts, Model::Word);
+        pages.iter().map(|page| page.lines.iter().map(|line| line.text.clone()).collect::<Vec<_>>()).collect::<Vec<_>>()
+    };
+    // The empty page has nothing on it, not even the footer, and takes a number.
+    assert_eq!(lay("oddPage", ""), [vec!["before", "1"], vec![], vec!["after", "3"]]);
+    assert_eq!(lay("evenPage", ""), [vec!["before", "1"], vec!["after", "2"]]);
+    assert_eq!(lay("nextPage", ""), [vec!["before", "1"], vec!["after", "2"]]);
+    // A section that numbers its pages afresh from 1 begins on a right-hand
+    // page all the same: after page 1 an empty page comes first. (Not measured.)
+    let afresh = r#"<w:pgNumType w:start="1"/>"#;
+    assert_eq!(lay("oddPage", afresh), [vec!["before", "1"], vec![], vec!["after", "1"]]);
+}
+
+#[test]
+fn pictures_that_cannot_be_drawn_are_counted_and_none_is_lost_without_fonts() {
+    // A Windows metafile is shown as a frame with a cross, and the layout says so.
+    let picture = r#"<w:p><w:r><w:drawing><wp:inline xmlns:wp="urn:wp"><wp:extent cx="127000" cy="127000"/><a:graphic xmlns:a="urn:a">
+           <a:graphicData><pic:pic xmlns:pic="urn:pic"><pic:blipFill><a:blip r:embed="rId9"/></pic:blipFill>
+           </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#;
+    let relationships = format!(
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+           <Relationship Id="rId9" Type="{RELS}/image" Target="media/image1.emf"/></Relationships>"#
+    );
+    let mut writer = oco_docx::zip::Writer::new();
+    let document = format!(r#"<w:document {W} xmlns:r="{RELS}"><w:body>{picture}</w:body></w:document>"#);
+    writer.add("word/document.xml", document.as_bytes());
+    writer.add("word/_rels/document.xml.rels", relationships.as_bytes());
+    writer.add("word/media/image1.emf", b"\x01\x00\x00\x00\x6c\x00\x00\x00");
+    let document = Docx::from_bytes(&writer.finish()).unwrap();
+    // With no font at all there is no line to stand the picture in: nothing
+    // is laid out, and nothing breaks.
+    let bare = layout(&document, &FontDb::default(), &Options { model: Model::Word });
+    assert_eq!((bare.pages.len(), bare.undrawn), (1, 0));
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    let laid = layout(&document, &fonts, &Options { model: Model::Word });
+    assert_eq!(laid.undrawn, 1);
+    assert!(laid.pages[0].items.iter().any(|item| matches!(item, Item::Image { .. })));
+}
+
+#[test]
+fn a_double_border_is_two_lines_and_takes_the_room_of_both() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 draws the probe `paragraph-border-double` of the display
+    // audit of 2026-11-14: a double border of 2 pt under a paragraph is two
+    // lines of 2 pt with 2 pt between them, the upper one where a single
+    // border would be. That it takes the room of all three is assumed.
+    let lay = |style: &str| {
+        let border = format!(r#"<w:bottom w:val="{style}" w:sz="16" w:space="4"/>"#);
+        let body = boxed_paragraph(&border, "", "", "bordered") + &boxed_paragraph("", "", "", "after");
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        let rules: Vec<f32> = page
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Rule { y1, y2, .. } if y1 == y2 => Some(*y1),
+                _ => None,
+            })
+            .collect();
+        (rules, page.lines[1].baseline)
+    };
+    let (single, after_single) = lay("single");
+    let (double, after_double) = lay("double");
+    let (triple, after_triple) = lay("triple");
+    assert_eq!((single.len(), double.len(), triple.len()), (1, 2, 3));
+    assert!(close(double[0], single[0], 0.01) && close(double[1] - double[0], 4.0, 0.01), "{single:?} {double:?}");
+    assert!(close(triple[2] - triple[0], 8.0, 0.01), "{triple:?}");
+    assert!(close(after_double - after_single, 4.0, 0.01) && close(after_triple - after_single, 8.0, 0.01));
+    // The lines between the cells of a table likewise.
+    let cell = paragraph(&font("Liberation Serif", 24), "", "cell");
+    let body = table(&[2000, 2000], "", &[&[&cell, &cell]])
+        .replace(r#"<w:insideV w:val="single""#, r#"<w:insideV w:val="double""#);
+    let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+    let upright = page.items.iter().filter(|item| matches!(item, Item::Rule { x1, x2, .. } if x1 == x2)).count();
+    assert_eq!(upright, 2 + 2 * 2, "the outer lines once, the line between the cells twice from either cell");
+}
+
+#[test]
+fn hollow_shadowed_raised_and_sunk_letters_are_drawn_apart_from_plain_ones() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // WPS 12 shows the probes `text-effect-outline` and `text-effect-shadow`
+    // of the display audit of 2026-11-14 otherwise than plain text. How far
+    // a shadow stands off is not measured.
+    let glyphs = |effect: &str| {
+        let body = paragraph(&(font("Liberation Serif", 24) + effect), "", "ab");
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        page.items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Glyph { x, y, color, hollow, .. } => Some((*x, *y, *color, *hollow)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let plain = glyphs("");
+    assert_eq!(plain.len(), 2);
+    assert!(plain.iter().all(|(.., color, hollow)| *color == [0, 0, 0] && !hollow));
+    let hollow = glyphs("<w:outline/>");
+    assert!(hollow.len() == 2 && hollow.iter().all(|(.., hollow)| *hollow));
+    // A shadow is a grey copy under each letter, to the right and down.
+    let shadowed = glyphs("<w:shadow/>");
+    assert_eq!(shadowed.len(), 4);
+    let (copy, letter) = (shadowed[0], shadowed[1]);
+    assert!(copy.0 > letter.0 && copy.1 > letter.1 && copy.2 == [128, 128, 128] && letter.2 == [0, 0, 0]);
+    assert!(close(letter.0, plain[0].0, 0.001) && close(letter.1, plain[0].1, 0.001));
+    // Raised and sunk letters are of the paper's colour over a dark edge.
+    let raised = glyphs("<w:emboss/>");
+    let sunk = glyphs("<w:imprint/>");
+    assert!(raised[1].2 == [255, 255, 255] && raised[0].0 > raised[1].0);
+    assert!(sunk[1].2 == [255, 255, 255] && sunk[0].0 < sunk[1].0);
+}
+
+#[test]
+fn a_picture_is_turned_about_the_centre_of_its_box() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As WPS 12 draws the probe `picture-rotation-5400000` of the display
+    // audit of 2026-11-14: the box keeps its place and size in the line,
+    // and the picture is turned in it.
+    let picture = |rotation: &str| {
+        let body = format!(
+            r#"<w:p><w:r><w:drawing><wp:inline xmlns:wp="urn:wp"><wp:extent cx="1270000" cy="762000"/><a:graphic xmlns:a="urn:a">
+               <a:graphicData><pic:pic xmlns:pic="urn:pic"><pic:blipFill><a:blip/></pic:blipFill><pic:spPr><a:xfrm {rotation}/></pic:spPr>
+               </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#
+        );
+        let page = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0);
+        page.items
+            .iter()
+            .find_map(|item| match item {
+                Item::Image { x, y, width, height, rotation, .. } => Some((*x, *y, *width, *height, *rotation)),
+                _ => None,
+            })
+            .expect("a picture")
+    };
+    let (upright, turned) = (picture(""), picture(r#"rot="5400000""#));
+    assert_eq!(upright.4, 0.0);
+    assert_eq!(turned.4, 90.0);
+    assert_eq!((turned.0, turned.1, turned.2, turned.3), (upright.0, upright.1, upright.2, upright.3));
+}

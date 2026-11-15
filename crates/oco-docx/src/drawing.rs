@@ -40,6 +40,9 @@ pub struct TextBox {
     pub fill: Option<[u8; 3]>,
     /// The colour and the width of the line around the box.
     pub outline: Option<([u8; 3], i64)>,
+    /// The box is made as tall as its text needs (`a:spAutoFit`). Any other
+    /// keeps its size, and text that does not fit in it is not shown.
+    pub auto_fit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +56,9 @@ pub struct Picture {
     pub crop: [i32; 4],
     /// Horizontal and vertical reflection about the picture's centre.
     pub flip: [bool; 2],
+    /// How far the picture is turned clockwise about its centre, in
+    /// 60,000ths of a degree. It is reflected first, then turned.
+    pub rotation: i32,
 }
 
 /// How an object that is not in the line is placed, and how text meets it.
@@ -182,7 +188,8 @@ pub(crate) fn read(drawing: Node) -> Option<Drawing> {
             // The relationship id for now; `resolve` turns it into the part's name.
             let transform = child(picture, "spPr").and_then(|props| child(props, "xfrm"));
             let flip = ["flipH", "flipV"].map(|side| transform.is_some_and(|node| flag(node, side)));
-            Some(Picture { part: embedded, crop, flip })
+            let rotation = transform.and_then(|node| node.attribute("rot")).and_then(|v| v.trim().parse().ok());
+            Some(Picture { part: embedded, crop, flip, rotation: rotation.unwrap_or(0) })
         });
     Some(Drawing {
         width: emu(extent.and_then(|e| e.attribute("cx"))),
@@ -227,6 +234,7 @@ pub(crate) fn text_box<'a, 'i>(drawing: Node<'a, 'i>) -> Option<(Node<'a, 'i>, T
             },
             fill: properties.and_then(colour),
             outline: line.and_then(|line| Some((colour(line)?, line.attribute("w").map_or(9525, |w| emu(Some(w)))))),
+            auto_fit: body.is_some_and(|body| child(body, "spAutoFit").is_some()),
         },
     ))
 }

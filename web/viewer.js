@@ -12,7 +12,8 @@ const SEARCH_LIMIT = 1000;
 const NOT_SHOWN = {
   pictures: "图片", text_boxes: "文本框和形状", embedded_objects: "嵌入对象",
   notes: "脚注和尾注", equations: "公式", columns: "分栏", frames: "图文框",
-  floating_tables: "浮动表格", comments: "批注",
+  floating_tables: "浮动表格", comments: "批注", vertical_text: "竖排文字",
+  page_borders: "页面边框", line_numbers: "行号", ruby: "拼音指南",
 };
 
 let current = null;

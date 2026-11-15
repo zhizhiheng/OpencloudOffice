@@ -95,10 +95,10 @@ fn page_fields_keep_section_counts_and_explicit_number_formats() {
 
 #[test]
 fn reads_picture_reflections_with_cropping() {
-    for (attributes, expected) in [
-        ("", [false, false]),
-        (r#"flipH="true" flipV="1""#, [true, true]),
-        (r#"flipH="0" flipV="false""#, [false, false]),
+    for (attributes, expected, turned) in [
+        ("", [false, false], 0),
+        (r#"flipH="true" flipV="1""#, [true, true], 0),
+        (r#"flipH="0" flipV="false" rot="5400000""#, [false, false], 5_400_000),
     ] {
         let body = format!(
             r#"<w:p><w:r><w:drawing>
@@ -113,6 +113,7 @@ fn reads_picture_reflections_with_cropping() {
         };
         let picture = drawing.picture.as_ref().unwrap();
         assert_eq!(picture.flip, expected);
+        assert_eq!(picture.rotation, turned, "in 60,000ths of a degree");
         assert_eq!(picture.crop, [25000, 0, 0, 10000]);
     }
 }

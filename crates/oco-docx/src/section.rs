@@ -233,6 +233,8 @@ impl Section {
                 Some("endnotePr") => section.endnotes = NoteProps::parse(child),
                 // Editing aids with no effect on layout.
                 Some("formProt" | "rsid" | "noEndnote" | "bidi" | "rtlGutter") => {}
+                // Text that runs from left to right, line under line, is what there is anyway.
+                Some("textDirection") if matches!(val(child), Some("lrTb" | "lrTbV")) => {}
                 _ => coverage.miss(Some("w:sectPr"), child),
             }
         }

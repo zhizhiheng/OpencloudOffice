@@ -43,6 +43,8 @@ pub enum Item {
         color: Rgb,
         fake_bold: bool,
         fake_italic: bool,
+        /// Only the outline of the glyph is drawn (`w:outline`).
+        hollow: bool,
     },
     Rect {
         x: f32,
@@ -89,16 +91,43 @@ pub enum Item {
         crop: [f32; 4],
         /// Reflect the visible (already cropped) image horizontally and vertically.
         flip: [bool; 2],
+        /// Degrees the picture is turned clockwise about the centre of its
+        /// box, after it is reflected.
+        rotation: f32,
     },
+    /// What follows, as far as the [`Item::ClipEnd`] that answers it, is
+    /// shown only where it falls inside this box: the content of a table
+    /// row of exact height, or of a text box.
+    ClipStart {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
+    ClipEnd,
 }
 
+/// How far to either side a box that cuts off only what is above or below
+/// it reaches: further than any page.
+const CLIP_REACH: f32 = 20_000.0;
+
 impl Item {
+    /// A box that shows what lies between `top` and `bottom`, however far
+    /// to the left or right.
+    fn clip_between(top: f32, bottom: f32) -> Item {
+        Item::ClipStart { x: -CLIP_REACH, y: top, width: 2.0 * CLIP_REACH, height: (bottom - top).max(0.0) }
+    }
+
     fn translate(&mut self, dx: f32, dy: f32) {
         match self {
-            Item::Glyph { x, y, .. } | Item::Rect { x, y, .. } | Item::Image { x, y, .. } => {
+            Item::Glyph { x, y, .. }
+            | Item::Rect { x, y, .. }
+            | Item::Image { x, y, .. }
+            | Item::ClipStart { x, y, .. } => {
                 *x += dx;
                 *y += dy;
             }
+            Item::ClipEnd => {}
             Item::Rule { x1, y1, x2, y2, .. } => {
                 *x1 += dx;
                 *x2 += dx;
@@ -133,6 +162,11 @@ pub struct PlacedLine {
     /// The size of the largest text on the line, in points.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub size: f32,
+    /// The fields on the line that show a page number or a count of pages:
+    /// each by what the layout knows its paragraph by and its number among
+    /// that paragraph's page fields.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub fields: Vec<(usize, usize)>,
 }
 
 impl PlacedLine {
@@ -145,6 +179,7 @@ impl PlacedLine {
             text: self.text.clone(),
             xs: self.xs.iter().map(|x| x + dx).collect(),
             size: self.size,
+            fields: self.fields.clone(),
         }
     }
 }
@@ -172,6 +207,11 @@ pub struct Page {
     /// The top and the bottom of the area the body text is set in: the page
     /// between its top and bottom margins. Headers and footers lie outside.
     pub body: (f32, f32),
+    /// Lines of text that are on the page but cut off from view: what a
+    /// table row of exact height has no room for. They are not text to
+    /// read, select or find. A PDF that Word makes of the page still holds
+    /// them, though, so a comparison with one has to know of them.
+    pub cut: Vec<PlacedLine>,
 }
 
 /// The result of laying a document out.
@@ -185,6 +225,9 @@ pub struct Layout {
     /// How many anchored objects were left out because the place they are
     /// anchored in is not handled yet: a table cell.
     pub unplaced: usize,
+    /// How many pictures on the pages are of a kind that cannot be drawn,
+    /// such as a Windows metafile: each is shown as a frame with a cross.
+    pub undrawn: usize,
 }
 
 /// One piece of a paragraph's content, as [`content`] reports it.
@@ -435,20 +478,53 @@ struct Row {
 /// it is drawn with, the width it is given, its colour and its dashes.
 #[derive(Clone, Copy, PartialEq)]
 struct Stroke {
+    /// The width of the line, or of each line of a double or triple one.
     width: f32,
     room: f32,
     color: Rgb,
     dash: [f32; 2],
+    /// How many lines it is drawn with, and how far apart their middles are.
+    lines: usize,
+    pitch: f32,
 }
 
 impl Stroke {
     fn of(border: &oco_docx::Border) -> Self {
         let width = rule_width(border);
-        Stroke { width, room: rule_room(border), color: rule_colour(border), dash: rule_dash(border, width) }
+        let (lines, pitch) = rule_lines(border);
+        Stroke {
+            width,
+            room: rule_room(border),
+            color: rule_colour(border),
+            dash: rule_dash(border, width),
+            lines,
+            pitch,
+        }
     }
 
-    fn rule(self, x1: f32, y1: f32, x2: f32, y2: f32) -> Item {
-        Item::Rule { x1, y1, x2, y2, width: self.width, color: self.color, dash: self.dash }
+    /// How wide the stroke is from the outer edge of its first line to
+    /// that of its last.
+    fn span(self) -> f32 {
+        self.width + (self.lines - 1) as f32 * self.pitch
+    }
+
+    /// The stroke along the line from (`x1`, `y1`) to (`x2`, `y2`), which
+    /// runs across or upright: its lines side by side about that line.
+    fn rules(self, x1: f32, y1: f32, x2: f32, y2: f32) -> impl Iterator<Item = Item> {
+        let upright = (x2 - x1).abs() < (y2 - y1).abs();
+        (0..self.lines).map(move |line| {
+            let aside = (line as f32 - (self.lines - 1) as f32 / 2.0) * self.pitch;
+            let (dx, dy) = if upright { (aside, 0.0) } else { (0.0, aside) };
+            Item::Rule {
+                x1: x1 + dx,
+                y1: y1 + dy,
+                x2: x2 + dx,
+                y2: y2 + dy,
+                width: self.width,
+                color: self.color,
+                dash: self.dash,
+            }
+        })
     }
 }
 
@@ -572,6 +648,19 @@ impl Row {
             + if self.last { self.under + self.gap() } else { 0.0 }
     }
 
+    /// Where what a row of exact height shows ends, the row ending at
+    /// `bottom`: at the bottom of the row itself, above
+    /// the room the last row keeps for the table's rule. What is in such a
+    /// row beyond its height is not shown. (Word, docx4j's probe
+    /// `table-rowheight`: of the three lines in a row of exactly 10 pt the
+    /// first is seen as far down as the row reaches, and the others are
+    /// not; all three are in the text of Word's PDF, and where it has them
+    /// is where the lines would stand if nothing were cut off. WPS 12
+    /// shows the same of a probe made for the display audit of 2026-11-14.)
+    fn floor(&self, bottom: f32) -> Option<f32> {
+        self.exact_height.map(|_| bottom - if self.last { self.under + self.gap() } else { 0.0 })
+    }
+
     /// Puts the lines `ranges` names of each cell on `page`, the row's top
     /// at `top`, with the rules around the part of the row that ends at
     /// `bottom`. A row put down `whole` has its content where its cells'
@@ -581,20 +670,28 @@ impl Row {
             item.translate(left, 0.0);
             page.items.push(item);
         }
+        let floor = self.floor(bottom);
+        page.items.extend(floor.map(|floor| Item::clip_between(top, floor)));
         for (cell, (from, to)) in self.cells.iter().zip(ranges) {
             let lowered = if whole { self.lowered(cell, bottom - top) } else { 0.0 };
             let mut y = top + self.head() + lowered;
             for part in &cell.lines[*from..*to] {
                 y += part.gap;
-                for item in &part.line.items {
-                    let mut item = item.clone();
-                    item.translate(left + part.x, y);
-                    page.items.push(item);
+                // A line is seen if any of it is above where the row ends.
+                if floor.is_none_or(|floor| y < floor) {
+                    for item in &part.line.items {
+                        let mut item = item.clone();
+                        item.translate(left + part.x, y);
+                        page.items.push(item);
+                    }
+                    record(&part.line, left + part.x, y, &mut page.lines);
+                } else {
+                    record(&part.line, left + part.x, y, &mut page.cut);
                 }
-                record(&part.line, left + part.x, y, &mut page.lines);
                 y += part.line.height;
             }
         }
+        page.items.extend(floor.map(|_| Item::ClipEnd));
         for mut item in self.rules(top, bottom, whole) {
             item.translate(left, 0.0);
             page.items.push(item);
@@ -617,17 +714,17 @@ impl Row {
             for (cell, sides) in self.cells.iter().zip(self.edges.windows(2)) {
                 let [over, left, under, right] = cell.strokes;
                 let (x1, x2) = (sides[0], sides[1]);
-                let half = |stroke: Option<Stroke>| stroke.map_or(0.0, |stroke| stroke.width / 2.0);
+                let half = |stroke: Option<Stroke>| stroke.map_or(0.0, |stroke| stroke.span() / 2.0);
                 let (from, to) = (x1 - half(left), x2 + half(right));
                 let (under_at, end) = self.under_line(cell, bottom, whole);
-                items.extend(left.map(|stroke| stroke.rule(x1, top, x1, end)));
-                items.extend(right.map(|stroke| stroke.rule(x2, top, x2, end)));
+                items.extend(left.into_iter().flat_map(|stroke| stroke.rules(x1, top, x1, end)));
+                items.extend(right.into_iter().flat_map(|stroke| stroke.rules(x2, top, x2, end)));
                 if let Some(stroke) = over.filter(|_| !cell.open.0) {
-                    let y = top + stroke.width / 2.0;
-                    items.push(stroke.rule(from, y, to, y));
+                    let y = top + stroke.span() / 2.0;
+                    items.extend(stroke.rules(from, y, to, y));
                 }
                 if let Some(stroke) = under.filter(|_| !cell.open.1) {
-                    items.push(stroke.rule(from, under_at, to, under_at));
+                    items.extend(stroke.rules(from, under_at, to, under_at));
                 }
             }
             return items;
@@ -663,7 +760,7 @@ impl Row {
     /// line lying in the top of the next row as that row's line over it;
     /// at the foot of a page, just above the page's part's bottom.
     fn under_line(&self, cell: &RowCell, bottom: f32, whole: bool) -> (f32, f32) {
-        let width = cell.strokes[2].filter(|_| !cell.open.1).map_or(0.0, |stroke| stroke.width);
+        let width = cell.strokes[2].filter(|_| !cell.open.1).map_or(0.0, |stroke| stroke.span());
         match (whole, self.last) {
             (true, true) => (bottom - self.under + width / 2.0, bottom - self.under + width),
             (true, false) => (bottom + width / 2.0, bottom),
@@ -699,11 +796,17 @@ impl Row {
         let mut texts = Vec::new();
         let lowered: Vec<f32> = self.cells.iter().map(|cell| self.lowered(cell, height)).collect();
         let (rules, head) = (self.rules(0.0, height, true), self.head());
+        let floor = self.floor(height);
         line.items = self.fills(0.0, height, true);
+        line.items.extend(floor.map(|floor| Item::clip_between(0.0, floor)));
         for (cell, lowered) in self.cells.into_iter().zip(lowered) {
             let mut y = head + lowered;
             for mut part in cell.lines {
                 y += part.gap;
+                if floor.is_some_and(|floor| y >= floor) {
+                    y += part.line.height;
+                    continue;
+                }
                 for item in &mut part.line.items {
                     item.translate(part.x, y);
                 }
@@ -724,6 +827,7 @@ impl Row {
                 y += part.line.height;
             }
         }
+        line.items.extend(floor.map(|_| Item::ClipEnd));
         line.items.extend(rules);
         line.text = texts.join(" ");
         line
@@ -780,6 +884,24 @@ struct Builder<'a> {
     /// The numbering of list items in footnotes and in endnotes, each kind
     /// numbered apart from the body and on from one note to the next.
     note_counters: [Counters; 2],
+    /// Where the page fields of the text came to stand in the layout
+    /// before this one: what each of them is to show.
+    fields: Fields,
+}
+
+/// What the page fields outside headers and footers show, each named by
+/// the address of its paragraph in the document and its number among that
+/// paragraph's page fields.
+type Fields = HashMap<(usize, usize), FieldPlace>;
+
+/// The page a field stands on, as far as a field may ask.
+#[derive(Debug, Clone, PartialEq)]
+struct FieldPlace {
+    page: i32,
+    pages: i32,
+    section_pages: i32,
+    /// How the page's section writes page numbers.
+    format: String,
 }
 
 /// A note the document refers to, as the layout numbers it.
@@ -1020,6 +1142,7 @@ fn put_object(page: &mut Page, object: &paragraph::Anchored, x: f32, y: f32) {
             part: object.part.clone(),
             crop: object.crop,
             flip: object.flip,
+            rotation: object.rotation,
         }]
     };
     items.iter_mut().for_each(|item| item.translate(x, y));
@@ -1056,9 +1179,28 @@ fn rule_width(border: &oco_docx::Border) -> f32 {
 
 /// The room a border takes in the layout: its size as written. (Measured in
 /// WPS: a border of 3 pt kept 6 pt from the text moves what follows down by
-/// 9 pt.) The line is drawn in the middle of that room.
+/// 9 pt.) The line is drawn in the middle of that room. A double border is
+/// two lines of that size a line's width apart, a triple one three, and
+/// takes the room of them all. (WPS 12, the probe `paragraph-border-double`
+/// of the display audit of 2026-11-14: a double border of 2 pt is two
+/// lines of 2 pt with 2 pt between them, the first where a single one
+/// would be. That what follows moves down by the whole is an assumption.)
 fn rule_room(border: &oco_docx::Border) -> f32 {
-    border.size as f32 / 8.0
+    let (lines, _) = rule_lines(border);
+    (2 * lines - 1) as f32 * border.size as f32 / 8.0
+}
+
+/// How many lines a border is drawn with, and how far apart the middles of
+/// two of them are. The styles of a thin and a thick line together are
+/// drawn as two lines alike.
+fn rule_lines(border: &oco_docx::Border) -> (usize, f32) {
+    let lines = match border.style.as_str() {
+        "double" | "doubleWave" => 2,
+        style if style.starts_with("thinThick") || style.starts_with("thickThin") => 2,
+        "triple" => 3,
+        _ => 1,
+    };
+    (lines, 2.0 * border.size as f32 / 8.0)
 }
 
 fn rule_colour(border: &oco_docx::Border) -> Rgb {
@@ -1143,17 +1285,26 @@ fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (boo
     // Where the fill begins and ends, and the outer edges of the box.
     let fill = (text_left - left.as_ref().map_or(0.0, space), text_right + right.as_ref().map_or(0.0, space));
     let outer = (fill.0 - left.as_ref().map_or(0.0, rule_room), fill.1 + right.as_ref().map_or(0.0, rule_room));
+    // Where the middle of each line of a border lies, from the middle of the border's room.
+    let asides = |border: &oco_docx::Border| {
+        let (lines, pitch) = rule_lines(border);
+        (0..lines).map(move |line| (line as f32 - (lines - 1) as f32 / 2.0) * pitch)
+    };
     let side = |border: &oco_docx::Border, inner: f32, outward: f32| {
         let width = rule_width(border);
-        (inner + outward * rule_room(border) / 2.0, width, rule_colour(border), rule_dash(border, width))
+        let middle = inner + outward * rule_room(border) / 2.0;
+        let (color, dash) = (rule_colour(border), rule_dash(border, width));
+        asides(border).map(move |aside| (middle + aside, width, color, dash)).collect::<Vec<_>>()
     };
     let mut sides = Vec::new();
-    sides.extend(left.as_ref().map(|border| side(border, fill.0, -1.0)));
-    sides.extend(right.as_ref().map(|border| side(border, fill.1, 1.0)));
+    sides.extend(left.as_ref().into_iter().flat_map(|border| side(border, fill.0, -1.0)));
+    sides.extend(right.as_ref().into_iter().flat_map(|border| side(border, fill.1, 1.0)));
     let across = |border: &oco_docx::Border, y: f32| {
         let width = rule_width(border);
         let (color, dash) = (rule_colour(border), rule_dash(border, width));
-        Item::Rule { x1: outer.0, y1: y, x2: outer.1, y2: y, width, color, dash }
+        asides(border)
+            .map(move |aside| Item::Rule { x1: outer.0, y1: y + aside, x2: outer.1, y2: y + aside, width, color, dash })
+            .collect::<Vec<_>>()
     };
 
     let count = laid.lines.len();
@@ -1173,7 +1324,7 @@ fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (boo
                 line.baseline += room;
                 line.height += room;
                 line.needed += room;
-                rules.push(across(border, above + rule_room(border) / 2.0));
+                rules.extend(across(border, above + rule_room(border) / 2.0));
                 // The fill begins under a rule that closes the box, and goes on under one inside it.
                 from = if top.is_some() { rule_room(border) } else { 0.0 };
                 to = line.height;
@@ -1182,7 +1333,7 @@ fn boxed(laid: &mut paragraph::Laid, props: &ParaProps, width: f32, joined: (boo
         if number + 1 == count {
             if let Some(border) = &bottom {
                 let under = line.height + space(border);
-                rules.push(across(border, under + rule_room(border) / 2.0));
+                rules.extend(across(border, under + rule_room(border) / 2.0));
                 to = under;
                 line.height = under + rule_room(border);
                 line.needed = line.height;
@@ -1249,7 +1400,24 @@ impl Builder<'_> {
             })
             .collect();
         let note_mark = self.note_mark.clone();
-        (props, paragraph::Paragraph { props: placeholder, runs, mark, label, notes, note_mark })
+        // What the paragraph's page fields show: the numbers of the pages
+        // the layout before this one put them on.
+        let key = source as *const oco_docx::Paragraph as usize;
+        let live = runs.iter().flat_map(|(_, content)| content.iter()).filter(|piece| is_page_field(piece));
+        let fields = live
+            .enumerate()
+            .map(|(number, piece)| {
+                let place = self.fields.get(&(key, number))?;
+                let numbers = PageNumbers {
+                    page: place.page,
+                    pages: place.pages,
+                    section_pages: place.section_pages,
+                    format: &place.format,
+                };
+                field_text(piece, &numbers)
+            })
+            .collect();
+        (props, paragraph::Paragraph { props: placeholder, runs, mark, label, notes, note_mark, fields, key })
     }
 
     /// The least and the most room these blocks need across, each laid out
@@ -1411,13 +1579,30 @@ impl Builder<'_> {
                 Alignment::End => spare,
                 _ => 0.0,
             };
+        // A box that keeps its size shows only what is inside it; one that
+        // is made to fit its text (`a:spAutoFit`) is as tall as Word last
+        // made it, and text that needs more here is left to be seen. (WPS
+        // 12, a probe made for the display audit of 2026-11-14: of four
+        // lines in a box 20 pt tall the first is whole, the second cut off
+        // at the box's edge, the others not seen. Word is known to cut the
+        // text of its boxes off likewise; that has not been measured here.)
+        let cut = !text_box.auto_fit && down + content > height + 0.01;
+        if cut {
+            items.push(Item::ClipStart { x: 0.0, y: 0.0, width, height });
+        }
         let mut lines = Vec::new();
         for (offset, mut line) in placed {
+            if cut && down + offset >= height {
+                continue;
+            }
             for mut item in std::mem::take(&mut line.items) {
                 item.translate(left, down + offset);
                 items.push(item);
             }
             record(&line, left, down + offset, &mut lines);
+        }
+        if cut {
+            items.push(Item::ClipEnd);
         }
         (items, lines)
     }
@@ -2315,23 +2500,48 @@ fn column_count(table: &oco_docx::Table) -> usize {
 
 pub fn layout(docx: &Docx, fonts: &FontDb, options: &Options) -> Layout {
     let mut notes = number_notes(docx);
-    let (mut laid, mut began) = layout_pass(docx, fonts, options, notes.clone());
+    let mut fields = Fields::new();
+    let (mut laid, mut began, mut placed) = layout_pass(docx, fonts, options, notes.clone(), &fields);
     // Footnotes numbered afresh on each page take their numbers from the
     // pages they come to stand on, and the widths of the numbers may in
     // turn move a line to another page: lay out again until the two agree,
-    // which they nearly always do the first time.
+    // which they nearly always do the first time. The same goes for the
+    // fields in the text that show the number of their page or a count of
+    // pages: they show what the layout before found, until a layout finds
+    // what it was given. (WPS 12, the probe `body-page-fields` of the
+    // display audit of 2026-11-14: a `PAGE` field stored as 99 on each of
+    // two pages shows 1 and 2. Word works such fields out when it prints;
+    // docx4j's Word PDFs have none to measure.)
     for _ in 0..3 {
-        if !renumber(&mut notes, &began) {
+        let renumbered = renumber(&mut notes, &began);
+        if !renumbered && placed == fields {
             break;
         }
-        (laid, began) = layout_pass(docx, fonts, options, notes.clone());
+        fields = placed;
+        (laid, began, placed) = layout_pass(docx, fonts, options, notes.clone(), &fields);
     }
+    let drawable = |part: &String| {
+        docx.media.get(part).and_then(|file| file.bytes().ok()).is_some_and(|bytes| svg::media_type(&bytes).is_some())
+    };
+    laid.undrawn = laid
+        .pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter(|item| matches!(item, Item::Image { part: Some(part), .. } if !drawable(part)))
+        .count();
     laid
 }
 
-/// Lays the document out with its notes numbered as given. Returns the
-/// pages and, for each note, the page its footnote begins on.
-fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEntry>) -> (Layout, Vec<Option<usize>>) {
+/// Lays the document out with its notes numbered as given and its page
+/// fields showing what `fields` says. Returns the pages; for each note, the
+/// page its footnote begins on; and where the page fields came to stand.
+fn layout_pass(
+    docx: &Docx,
+    fonts: &FontDb,
+    options: &Options,
+    notes: Vec<NoteEntry>,
+    fields: &Fields,
+) -> (Layout, Vec<Option<usize>>, Fields) {
     // Section properties sit on the last paragraph of each section, so the
     // page setup of a paragraph is that of the next section break at or
     // after it. Collect them in order first.
@@ -2356,6 +2566,7 @@ fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEn
         notes,
         note_mark: None,
         note_counters: [Counters::default(), Counters::default()],
+        fields: fields.clone(),
     };
     let mut units = Vec::new();
     // Each section is laid out at its own text width. A section ends with
@@ -2962,6 +3173,38 @@ fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEn
             // `page-blank-landscape`.)
             let same_paper = (next.page_width, next.page_height) == (section.page_width, section.page_height);
             if next.start != SectionStart::Continuous || !same_paper {
+                // A section that is to begin on an odd page, or on an even
+                // one, has an empty page put before it where the next page
+                // is of the other kind. The empty page takes a number and
+                // has no header or footer. (WPS 12, the probes
+                // `section-oddPage` and `section-evenPage` of the display
+                // audit of 2026-11-14: after one page, a section for odd
+                // pages begins on the third, one for even pages on the
+                // second.) Where the section numbers its pages afresh from
+                // a number of the right kind, the empty page comes if the
+                // page before is of that kind too: two right-hand pages do
+                // not follow each other. (Not measured.)
+                let wanted = match next.start {
+                    SectionStart::OddPage => Some(1),
+                    SectionStart::EvenPage => Some(0),
+                    _ => None,
+                };
+                let empty_first = wanted.is_some_and(|wanted| match next.page_number_start {
+                    None => (number + 1).rem_euclid(2) != wanted,
+                    Some(first) => first.rem_euclid(2) == wanted && number.rem_euclid(2) == wanted,
+                });
+                if empty_first {
+                    number += 1;
+                    pages.push(Page {
+                        width: next.page_width as f32 * TWIP,
+                        height: next.page_height as f32 * TWIP,
+                        ..Page::default()
+                    });
+                    let index = section_index.min(setups.len() - 1);
+                    frames.push(Frame { top: 0.0, bottom: 0.0, header: None, footer: None, number, section: index });
+                    page_notes.push((Vec::new(), false));
+                    started = pages.len();
+                }
                 turn_page!(section_index, true);
                 page_is_empty = true;
                 // The first paragraph of a section keeps its space before.
@@ -3030,6 +3273,8 @@ fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEn
 
     // Headers and footers go on last, when the number of pages is known.
     let count = pages.len();
+    // Where the page fields of the text have come to stand.
+    let mut placed = Fields::new();
     for (page, frame) in pages.iter_mut().zip(&frames) {
         let section = setups[frame.section];
         let left = (section.margin_left + section.gutter) as f32 * TWIP;
@@ -3045,6 +3290,15 @@ fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEn
                 .min(i32::MAX as usize) as i32,
             format: section.page_number_format.as_deref().unwrap_or("decimal"),
         };
+        // A field that is parted between two pages is of the first.
+        for field in page.lines.iter().flat_map(|line| &line.fields) {
+            placed.entry(*field).or_insert_with(|| FieldPlace {
+                page: numbers.page,
+                pages: numbers.pages,
+                section_pages: numbers.section_pages,
+                format: numbers.format.to_owned(),
+            });
+        }
         let mut lines = Vec::new();
         builder.story_counters = Counters::default();
         for (story, footer) in [(&frame.header, false), (&frame.footer, true)] {
@@ -3078,7 +3332,8 @@ fn layout_pass(docx: &Docx, fonts: &FontDb, options: &Options, notes: Vec<NoteEn
             }
         }
     }
-    (Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced }, began)
+    let laid = Layout { pages, missing_fonts: builder.missing_fonts, unplaced: builder.unplaced, undrawn: 0 };
+    (laid, began, placed)
 }
 
 /// What a page has around its body.
@@ -3217,6 +3472,44 @@ struct PageNumbers<'a> {
     format: &'a str,
 }
 
+/// Whether a piece of a run is a field that shows a page number or a count of pages.
+fn is_page_field(piece: &RunContent) -> bool {
+    matches!(
+        piece,
+        RunContent::PageNumber(_)
+            | RunContent::PageCount(_)
+            | RunContent::SectionPageCount(_)
+            | RunContent::FormattedPageNumber { .. }
+    )
+}
+
+/// What a page field shows on a page with these numbers; `None` for
+/// anything that is not a page field.
+fn field_text(piece: &RunContent, numbers: &PageNumbers) -> Option<String> {
+    Some(match piece {
+        RunContent::PageNumber(_) => format_number(numbers.format, numbers.page),
+        RunContent::PageCount(_) => numbers.pages.to_string(),
+        RunContent::SectionPageCount(_) => numbers.section_pages.to_string(),
+        RunContent::FormattedPageNumber { kind, format, .. } => {
+            let value = match kind {
+                oco_docx::PageFieldKind::Page => numbers.page,
+                oco_docx::PageFieldKind::Pages => numbers.pages,
+                oco_docx::PageFieldKind::SectionPages => numbers.section_pages,
+            };
+            if format == "arabicDash" {
+                format!("- {value} -")
+            } else if matches!(format.as_str(), "cardinalText" | "ordinalText") {
+                // The field switches default to lowercase; list
+                // numbering uses initial capitals for these formats.
+                format_number(format, value).to_lowercase()
+            } else {
+                format_number(format, value)
+            }
+        }
+        _ => return None,
+    })
+}
+
 fn with_numbers(blocks: &[Block], numbers: &PageNumbers) -> Vec<Block> {
     let mut blocks = blocks.to_vec();
     fn fill(blocks: &mut [Block], numbers: &PageNumbers) {
@@ -3227,32 +3520,8 @@ fn with_numbers(blocks: &[Block], numbers: &PageNumbers) -> Vec<Block> {
                         fill(&mut text_box.blocks, numbers);
                     }
                     for piece in paragraph.runs.iter_mut().flat_map(|run| &mut run.content) {
-                        match piece {
-                            RunContent::PageNumber(_) => {
-                                *piece = RunContent::Text(format_number(numbers.format, numbers.page))
-                            }
-                            RunContent::PageCount(_) => *piece = RunContent::Text(numbers.pages.to_string()),
-                            RunContent::SectionPageCount(_) => {
-                                *piece = RunContent::Text(numbers.section_pages.to_string())
-                            }
-                            RunContent::FormattedPageNumber { kind, format, .. } => {
-                                let value = match kind {
-                                    oco_docx::PageFieldKind::Page => numbers.page,
-                                    oco_docx::PageFieldKind::Pages => numbers.pages,
-                                    oco_docx::PageFieldKind::SectionPages => numbers.section_pages,
-                                };
-                                let text = if format == "arabicDash" {
-                                    format!("- {value} -")
-                                } else if matches!(format.as_str(), "cardinalText" | "ordinalText") {
-                                    // The field switches default to lowercase; list
-                                    // numbering uses initial capitals for these formats.
-                                    format_number(format, value).to_lowercase()
-                                } else {
-                                    format_number(format, value)
-                                };
-                                *piece = RunContent::Text(text);
-                            }
-                            _ => {}
+                        if let Some(text) = field_text(piece, numbers) {
+                            *piece = RunContent::Text(text);
                         }
                     }
                 }

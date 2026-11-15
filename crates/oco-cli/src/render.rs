@@ -101,12 +101,17 @@ fn write(
     let summary: Vec<_> = pages
         .iter()
         .map(|page| {
-            serde_json::json!({
+            let mut page_json = serde_json::json!({
                 "width": page.width,
                 "height": page.height,
                 "body": [page.body.0, page.body.1],
                 "lines": page.lines,
-            })
+            });
+            // What is cut off from view; a reference PDF's text has it all the same.
+            if !page.cut.is_empty() {
+                page_json["cut"] = serde_json::json!(page.cut);
+            }
+            page_json
         })
         .collect();
     fs::write(out.join("lines.json"), serde_json::to_string_pretty(&summary).expect("plain data serialises"))

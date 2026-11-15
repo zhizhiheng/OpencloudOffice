@@ -334,6 +334,8 @@ impl CellProps {
                 Some("hideMark") => props.hide_mark = on_off(child),
                 Some("tcBorders") => props.borders = Edges::parse(child),
                 Some("shd") => props.shade = Color::read(child, "fill"),
+                // Text that runs from left to right, line under line, is what there is anyway.
+                Some("textDirection") if matches!(val(child), Some("lrTb" | "lrTbV")) => {}
                 _ => coverage.miss(Some("w:tcPr"), child),
             }
         }

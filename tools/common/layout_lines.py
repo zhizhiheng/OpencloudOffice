@@ -133,10 +133,20 @@ def write_lines_file(pdf: Path):
 
 
 def our_lines(docx: Path, out: Path, model: str = "word"):
-    """Lays the document out with our engine into `out` and returns its lines."""
+    """Lays the document out with our engine into `out` and returns its lines.
+
+    The lines of a page that are cut off from view (what a table row of
+    exact height has no room for) are returned with the others: the text of
+    a PDF holds what the application cut off as it holds what it shows, so
+    that is what a reference has to be compared with."""
     subprocess.run([str(OCO), "render", str(docx), "--out", str(out), "--model", model],
                    check=True, capture_output=True, cwd=ROOT)
-    return json.loads((out / "lines.json").read_text(encoding="utf-8"))
+    pages = json.loads((out / "lines.json").read_text(encoding="utf-8"))
+    for page in pages:
+        cut = page.pop("cut", [])
+        if cut:
+            page["lines"] = sorted(page["lines"] + cut, key=lambda line: line["baseline"])
+    return pages
 
 
 def our_summary(out: Path):

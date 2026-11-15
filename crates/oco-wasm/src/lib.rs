@@ -217,11 +217,13 @@ pub extern "C" fn oco_info(handle: u32) -> u32 {
         list(&mut json, layout.missing_fonts.iter(), |json, font| string(json, font));
         json.push_str("],\"notShown\":[");
         let mut kinds = not_shown(docx);
-        if layout.unplaced > 0 {
-            // Pictures anchored in table cells are read but not placed yet.
+        // Pictures anchored in table cells are read but not placed yet, and
+        // pictures of a kind that cannot be drawn are shown as empty frames.
+        let more = layout.unplaced + layout.undrawn;
+        if more > 0 {
             match kinds.iter_mut().find(|(kind, _)| *kind == "pictures") {
-                Some((_, count)) => *count += layout.unplaced,
-                None => kinds.insert(0, ("pictures", layout.unplaced)),
+                Some((_, count)) => *count += more,
+                None => kinds.insert(0, ("pictures", more)),
             }
         }
         list(&mut json, kinds.into_iter(), |json, (kind, count)| {
@@ -375,6 +377,10 @@ fn not_shown(docx: &Docx) -> Vec<(&'static str, usize)> {
         ("frames", &["w:pPr/w:framePr"]),
         ("floating_tables", &["w:tblPr/w:tblpPr"]),
         ("comments", &["commentReference"]),
+        ("vertical_text", &["w:tcPr/w:textDirection", "w:pPr/w:textDirection", "w:sectPr/w:textDirection"]),
+        ("page_borders", &["w:sectPr/w:pgBorders"]),
+        ("line_numbers", &["w:sectPr/w:lnNumType"]),
+        ("ruby", &["w:r/w:ruby"]),
     ];
     let count = |needles: &[&str]| -> usize {
         docx.coverage
@@ -428,6 +434,7 @@ mod tests {
             text: text.to_owned(),
             xs: (0..text.chars().count()).map(|at| 72.0 + 6.0 * at as f32).collect(),
             size: 12.0,
+            fields: Vec::new(),
         };
         let page =
             oco_layout::Page { lines: vec![line(100.0, "Hello wor"), line(114.0, "ld, 世界")], ..Default::default() };
@@ -487,6 +494,26 @@ mod tests {
         assert_eq!(oco_info(second), 1);
         assert!(result().contains("\"notShown\":[{\"kind\":\"columns\",\"count\":1}]"), "{}", result());
         oco_close(second);
+
+        // Text set upright and a border around the page are said too; text
+        // that runs the usual way is not.
+        let cell =
+            |direction: &str| format!(r#"<w:tc><w:tcPr><w:textDirection w:val="{direction}"/></w:tcPr><w:p/></w:tc>"#);
+        let unusual = format!(
+            r#"<w:document xmlns:w="{w}"><w:body><w:tbl><w:tr>{}{}</w:tr></w:tbl><w:p/>
+               <w:sectPr><w:pgBorders/><w:textDirection w:val="lrTb"/></w:sectPr></w:body></w:document>"#,
+            cell("tbRl"),
+            cell("lrTb")
+        );
+        let mut writer = oco_docx::zip::Writer::new();
+        writer.add("word/document.xml", unusual.as_bytes());
+        let unusual = writer.finish();
+        let third = unsafe { oco_open(unusual.as_ptr(), unusual.len()) };
+        assert_eq!(oco_info(third), 1);
+        let said = result();
+        let kinds = r#""notShown":[{"kind":"vertical_text","count":1},{"kind":"page_borders","count":1}]"#;
+        assert!(said.contains(kinds), "{said}");
+        oco_close(third);
 
         // Bytes that are no kind of document, and text that is called a Word document.
         assert_eq!(unsafe { oco_open(b"\0junk".as_ptr(), 5) }, 0);

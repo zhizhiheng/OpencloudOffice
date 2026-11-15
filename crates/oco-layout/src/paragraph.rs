@@ -56,6 +56,13 @@ pub struct Paragraph<'a> {
     pub notes: Vec<(usize, Option<String>)>,
     /// In a note, what its own mark (`w:footnoteRef`) shows.
     pub note_mark: Option<String>,
+    /// For each field in the runs that shows a page number or a count of
+    /// pages, in order: what it shows where that is known; where it is
+    /// not, the field shows what the file has stored for it.
+    pub fields: Vec<Option<String>>,
+    /// What the caller knows the paragraph by; the lines name their page
+    /// fields with it (see [`Line::fields`]).
+    pub key: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -90,6 +97,9 @@ pub struct Line {
     pub inner: Vec<PlacedLine>,
     /// The notes the line refers to, as the caller numbers them.
     pub notes: Vec<usize>,
+    /// The page fields on the line: each by its paragraph's key and its
+    /// number among the paragraph's page fields.
+    pub fields: Vec<(usize, usize)>,
 }
 
 impl Line {
@@ -102,6 +112,7 @@ impl Line {
             text: self.text.clone(),
             xs: self.xs.clone(),
             size: self.size,
+            fields: self.fields.clone(),
         }
     }
 }
@@ -145,6 +156,8 @@ pub struct Anchored {
     pub part: Option<String>,
     pub crop: [f32; 4],
     pub flip: [bool; 2],
+    /// Degrees the picture is turned clockwise about its centre.
+    pub rotation: f32,
     pub anchor: oco_docx::Anchor,
     /// Which text box it is, if it is one (see [`InlineBox::source`]).
     pub source: Option<(usize, usize)>,
@@ -180,6 +193,12 @@ struct Style {
     /// The run's text is not marked as of a language other than an East
     /// Asian one: a gap opens between its ideographs and Western text.
     east_asian: bool,
+    /// Only the outlines of the letters are drawn.
+    hollow: bool,
+    /// A copy of each letter lies under it, moved by this much across and
+    /// down, in this colour: a shadow, or the dark edge of letters that
+    /// look raised or sunk.
+    under: Option<(f32, f32, Rgb)>,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +225,13 @@ struct Atom {
     /// The atom carries on the piece of content before it, as the second
     /// figure of a note number does: it does not count as a place of its own.
     extra: bool,
+    /// The page field the atom is a character of, by its number among the
+    /// paragraph's page fields.
+    field: Option<usize>,
+    /// How many more places the atom counts for than its own: a page field
+    /// counts as many as the text the file has stored for it, whatever it
+    /// shows, so that places are counted as [`crate::content`] counts them.
+    more: usize,
 }
 
 /// A picture or another object in the line: its box, and what to draw in it.
@@ -216,6 +242,7 @@ struct Object {
     part: Option<String>,
     crop: [f32; 4],
     flip: [bool; 2],
+    rotation: f32,
     source: Option<(usize, usize)>,
 }
 
@@ -276,6 +303,10 @@ struct Builder<'a> {
     /// number of atoms before its reference: it belongs to the line of the
     /// mark that follows it.
     marked: Vec<(usize, usize)>,
+    /// What the page fields still to come show, where that is known, and
+    /// how many of them have been met.
+    fields: std::collections::VecDeque<Option<String>>,
+    fields_met: usize,
 }
 
 impl Builder<'_> {
@@ -290,8 +321,28 @@ impl Builder<'_> {
             Some(VertAlign::Subscript) => (0.65, -0.16 * base),
             _ => (1.0, 0.0),
         };
-        let color = rgb(props.color);
+        let mut color = rgb(props.color);
         let chinese = props.fonts.hint.as_deref() == Some("eastAsia");
+        // Letters with a shadow have a grey copy under them, a little to the
+        // right and down. Letters that look raised (`w:emboss`) or sunk
+        // (`w:imprint`) are of the paper's colour and are seen by a dark
+        // edge, at the lower right or at the upper left. (WPS 12, the
+        // probes `text-effect-*` of the display audit of 2026-11-14, show
+        // hollow and shadowed letters apart from plain ones; how far the
+        // copies stand off is not measured.)
+        let off = (0.04 * base).max(0.4);
+        let grey = [128, 128, 128];
+        let under = if props.emboss == Some(true) {
+            color = [255, 255, 255];
+            Some((off / 2.0, off / 2.0, grey))
+        } else if props.imprint == Some(true) {
+            color = [255, 255, 255];
+            Some((-off / 2.0, -off / 2.0, grey))
+        } else if props.shadow == Some(true) {
+            Some((off, off, grey))
+        } else {
+            None
+        };
         let style = Style {
             color,
             underline: props
@@ -314,6 +365,8 @@ impl Builder<'_> {
                 let lang = lang.to_ascii_lowercase();
                 ["zh", "ja", "ko"].iter().any(|prefix| lang.starts_with(prefix))
             }),
+            hollow: props.outline == Some(true),
+            under,
         };
         self.styles.push(style);
         let style = self.styles.len() - 1;
@@ -390,6 +443,8 @@ impl Builder<'_> {
                 object: None,
                 note: None,
                 extra: false,
+                field: None,
+                more: 0,
             });
         };
         for piece in content {
@@ -405,6 +460,14 @@ impl Builder<'_> {
                     let emu = |length: i64| length as f32 / EMU_PER_POINT as f32;
                     let crop = picture.map_or([0.0; 4], |p| p.crop.map(|share| share as f32 / 100_000.0));
                     let flip = picture.map_or([false; 2], |p| p.flip);
+                    // A picture is turned about the centre of its box, which
+                    // stays the size the file gives it. (WPS 12, the probe
+                    // `picture-rotation-5400000` of the display audit of
+                    // 2026-11-14: a picture of 100 by 60 pt turned a quarter
+                    // stands 60 wide and 100 tall about the same centre, over
+                    // the line above. Word writes the box of a picture it has
+                    // turned with the room the turn needs.)
+                    let rotation = picture.map_or(0.0, |p| p.rotation as f32 / 60_000.0);
                     let source = drawing.text_box.filter(|_| !label).map(|index| (self.run, index));
                     if let Some(anchor) = &drawing.anchor {
                         self.anchored.push(Anchored {
@@ -413,6 +476,7 @@ impl Builder<'_> {
                             part: picture.and_then(|p| p.part.clone()),
                             crop,
                             flip,
+                            rotation,
                             anchor: anchor.clone(),
                             source,
                             content: Vec::new(),
@@ -431,10 +495,18 @@ impl Builder<'_> {
                         part: picture.and_then(|p| p.part.clone()),
                         crop,
                         flip,
+                        rotation,
                         source,
                     });
                     // The font is chosen as for a space, which every font has.
+                    let before = self.atoms.len();
                     push(self, ' ', Kind::Char, None);
+                    if self.atoms.len() == before {
+                        // There is no font at all to set a line with: the
+                        // object is left out, as the text around it is.
+                        self.objects.pop();
+                        continue;
+                    }
                     let object = &self.objects[self.objects.len() - 1];
                     let atom = self.atoms.last_mut().expect("an atom was pushed");
                     atom.ch = text::OBJECT;
@@ -442,13 +514,32 @@ impl Builder<'_> {
                     (atom.x_scale, atom.shift) = (1.0, 0.0);
                     atom.object = Some(self.objects.len() - 1);
                 }
-                // What Word last showed; a header or footer has the real
-                // number put in before it is laid out.
+                // The number of the page the field comes to stand on, once a
+                // layout has shown which that is; until then, what Word last
+                // showed. (A header or footer has the number put in before
+                // it is laid out.) Whatever it shows, the field counts for
+                // as many places as the text stored for it.
                 RunContent::PageNumber(shown)
                 | RunContent::PageCount(shown)
                 | RunContent::SectionPageCount(shown)
                 | RunContent::FormattedPageNumber { shown, .. } => {
-                    shown.chars().for_each(|ch| push(self, ch, Kind::Char, None));
+                    let number = self.fields_met;
+                    self.fields_met += 1;
+                    let stored = shown.chars().count();
+                    let text = self.fields.pop_front().flatten();
+                    // A field with nothing stored shows a figure all the
+                    // same, so that its line is seen to be on a page.
+                    let text = text.unwrap_or_else(|| if stored == 0 { "1".to_owned() } else { shown.clone() });
+                    let first = self.atoms.len();
+                    text.chars().for_each(|ch| push(self, ch, Kind::Char, None));
+                    let count = self.atoms.len() - first;
+                    for (at, atom) in self.atoms.iter_mut().enumerate().skip(first) {
+                        atom.field = Some(number);
+                        atom.extra = at - first >= stored;
+                    }
+                    if let Some(last) = self.atoms.last_mut().filter(|_| count > 0 && count < stored) {
+                        last.more = stored - count;
+                    }
                 }
                 // A reference shows the number of its note in the run's own
                 // format, which the reference style makes superscript.
@@ -696,6 +787,8 @@ fn prepare<'a>(paragraph: &Paragraph, fonts: &'a FontDb, context: &'a Context) -
         notes: paragraph.notes.iter().cloned().collect(),
         note_mark: paragraph.note_mark.clone(),
         marked: Vec::new(),
+        fields: paragraph.fields.iter().cloned().collect(),
+        fields_met: 0,
     };
 
     if let Some(label) = &paragraph.label {
@@ -1146,7 +1239,12 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
         };
 
         let mut line = Line { height, baseline, needed, page_break_after: br.page_break, ..Line::default() };
-        line.offset = atoms[..br.start].iter().filter(|a| !a.label && !a.extra).count();
+        line.offset = atoms[..br.start].iter().filter(|a| !a.label && !a.extra).map(|a| 1 + a.more).sum();
+        for field in range.iter().filter_map(|atom| atom.field) {
+            if !line.fields.contains(&(paragraph.key, field)) {
+                line.fields.push((paragraph.key, field));
+            }
+        }
         // A note whose reference brings a mark of its own goes with the
         // line of what follows the reference: the mark.
         let marked = marked
@@ -1214,22 +1312,26 @@ pub fn layout_within(paragraph: &Paragraph, fonts: &FontDb, context: &Context, s
                                 part: object.part.clone(),
                                 crop: object.crop,
                                 flip: object.flip,
+                                rotation: object.rotation,
                             }),
                         }
                         first_ink.get_or_insert(x);
                         last_ink = x + atom.advance;
                     } else if atom.ch != ' ' && atom.ch != '\u{3000}' {
-                        line.items.push(Item::Glyph {
+                        let glyph = |dx: f32, dy: f32, color: Rgb, hollow: bool| Item::Glyph {
                             font: atom.choice.font,
                             glyph: atom.glyph,
-                            x: x + atom.shift,
-                            y: baseline - style.rise,
+                            x: x + atom.shift + dx,
+                            y: baseline - style.rise + dy,
                             size: atom.size,
                             x_scale: atom.x_scale,
-                            color: style.color,
+                            color,
                             fake_bold: atom.choice.fake_bold,
                             fake_italic: atom.choice.fake_italic,
-                        });
+                            hollow,
+                        };
+                        line.items.extend(style.under.map(|(dx, dy, color)| glyph(dx, dy, color, false)));
+                        line.items.push(glyph(0.0, 0.0, style.color, style.hollow));
                         first_ink.get_or_insert(x);
                         last_ink = x + atom.advance;
                         if let Some((mark, below)) = style.emphasis {
