@@ -3170,3 +3170,52 @@ fn text_is_set_on_its_own_as_in_the_body_of_a_document() {
     assert_eq!((story.lines[0].text.as_str(), story.lines[0].size), ("Title", 20.0));
     assert!(story.missing_fonts.is_empty() && story.height > 20.0);
 }
+
+#[test]
+fn a_section_begins_with_its_space_before_less_the_space_after_the_one_before() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `spacing-section-start`): the
+    // first paragraph of a section on a page of its own has 36 pt before
+    // it. After a section that ends with 10 pt after, 26 pt of it are left
+    // at the top of the page; after 20 pt, 16 pt; and of 6 pt before after
+    // 20 pt, nothing.
+    let first_baseline = |after: u32, before: u32| {
+        let setup = Source::default().section;
+        let body = format!(
+            r#"<w:p><w:pPr><w:spacing w:after="{after}"/><w:sectPr>{setup}</w:sectPr></w:pPr><w:r><w:t>end</w:t></w:r></w:p>{}"#,
+            paragraph(&font("Liberation Serif", 24), &format!(r#"<w:spacing w:before="{before}"/>"#), "begins")
+        );
+        let pages = pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word);
+        assert_eq!(pages.len(), 2);
+        pages[1].lines[0].baseline
+    };
+    let plain = first_baseline(0, 0);
+    assert!(close(first_baseline(0, 720) - plain, 36.0, 0.01));
+    assert!(close(first_baseline(200, 720) - plain, 26.0, 0.01));
+    assert!(close(first_baseline(400, 720) - plain, 16.0, 0.01));
+    assert!(close(first_baseline(400, 120) - plain, 0.0, 0.01));
+}
+
+#[test]
+fn an_empty_paragraph_that_only_carries_a_continuous_section_break_takes_no_room() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (docx4j's probe `section-continuous-geometry`):
+    // the first paragraph of a section that goes on in the same page follows
+    // the last of the section before as any paragraph follows another.
+    let text = |text: &str| paragraph(&font("Liberation Serif", 24), r#"<w:spacing w:after="160"/>"#, text);
+    let setup = Source::default().section;
+    let lay = |between: &str| {
+        let body = text("one") + between + &text("two");
+        let section = format!(r#"{setup}<w:type w:val="continuous"/>"#);
+        let pages = pages(&Source { body: &body, section: &section, ..Source::default() }, &fonts, Model::Word);
+        assert_eq!(pages.len(), 1);
+        pages[0].lines.iter().map(|line| line.baseline).collect::<Vec<_>>()
+    };
+    let together = lay("");
+    let parted = lay(&format!("<w:p><w:pPr><w:sectPr>{setup}</w:sectPr></w:pPr></w:p>"));
+    assert_eq!(parted.len(), 2);
+    assert!(close(parted[1], together[1], 0.01), "{parted:?} {together:?}");
+    // A paragraph with text in it is a paragraph like any other.
+    let written = lay(&format!("<w:p><w:pPr><w:sectPr>{setup}</w:sectPr></w:pPr><w:r><w:t>x</w:t></w:r></w:p>"));
+    assert_eq!(written.len(), 3);
+}

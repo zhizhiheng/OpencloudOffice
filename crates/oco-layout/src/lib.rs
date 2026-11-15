@@ -2924,6 +2924,31 @@ fn layout_pass(
         let left = (section.margin_left + section.gutter) as f32 * TWIP;
         let unit = &units[index];
 
+        // An empty paragraph that is there only to carry the break to a
+        // section that goes on in the same page takes no room at all: what
+        // follows stands as if it were not there. (Measured in Word,
+        // docx4j's probe `section-continuous-geometry`: at each of three
+        // such breaks the first paragraph of the new section follows the
+        // last of the old at the distance of any two paragraphs.)
+        if unit.ends_section.is_some() && !unit.page_break_before {
+            let next = setups[(section_index + 1).min(setups.len() - 1)];
+            let stays = next.start == SectionStart::Continuous
+                && (next.page_width, next.page_height) == (section.page_width, section.page_height);
+            let bare = |line: &paragraph::Line| {
+                line.text.is_empty() && line.items.is_empty() && line.notes.is_empty() && !line.page_break_after
+            };
+            let empty = unit.row.is_none()
+                && unit.anchored.is_empty()
+                && unit.boxes.is_empty()
+                && unit.frame.is_none()
+                && matches!(unit.lines.as_slice(), [only] if bare(only));
+            if stays && empty {
+                section_ends[section_index] = pages.len();
+                section_index += 1;
+                section_starts[section_index] = pages.len() - 1;
+                continue;
+            }
+        }
         if unit.page_break_before && !page_is_empty {
             turn_page!(section_index, false);
             page_is_empty = true;
@@ -2932,11 +2957,20 @@ fn layout_pass(
         let gap = |page_is_empty: bool, after_break: bool| -> f32 {
             if page_is_empty {
                 // Top of a page: nothing above to keep away from. Word still
-                // honours space before at the very start of the document.
+                // honours space before at the very start of the document,
+                // and at the start of a section on a page of its own, where
+                // the space after the paragraph that ended the section
+                // before is taken off it: the space between the two is the
+                // larger of the two, and that much of it has been given at
+                // the foot of the page before. (Measured in Word, docx4j's
+                // probe `spacing-section-start`: 36 pt before, after a
+                // section that ends with 10 pt after, is 26 pt at the top of
+                // the page; after 20 pt it is 16 pt; and 6 pt before after
+                // 20 pt is nothing.)
                 if after_break {
                     0.0
                 } else {
-                    unit.before
+                    (unit.before - previous_after).max(0.0)
                 }
             } else {
                 let same_style = previous_style
@@ -3391,9 +3425,9 @@ fn layout_pass(
                 }
                 turn_page!(section_index, true);
                 page_is_empty = true;
-                // The first paragraph of a section keeps its space before.
+                // The first paragraph of a section keeps its space before,
+                // less the space after the paragraph that ended the last.
                 after_break = false;
-                previous_after = 0.0;
             }
             // A continuous section starts on the existing page, so that
             // shared page belongs to both sections' SECTIONPAGES counts.
