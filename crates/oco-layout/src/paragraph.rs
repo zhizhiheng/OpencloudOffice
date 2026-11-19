@@ -822,10 +822,17 @@ pub fn layout(paragraph: &Paragraph, fonts: &FontDb, context: &Context) -> Laid 
     layout_within(paragraph, fonts, context, &[], &[])
 }
 
+/// A stretch of a line: the left and right bounds text keeps between in
+/// it, measured as the paragraph's own indents are, and whether it goes on
+/// in the line of the stretch before it, on the far side of something that
+/// stands in the line's way.
+pub type Stretch = (f32, f32, bool);
+
 /// Lays the paragraph out where something stands in the way of its lines.
-/// `shape` gives, line by line from the first, the left and right bounds the
-/// line is to keep between, measured as the paragraph's own indents are; a
-/// line past the end of `shape` has the full width. `widths` gives, line by
+/// `shape` gives, from the first line on, the stretches the lines are set
+/// in: one for a line that keeps to one side of what is in its way, more
+/// for a line that goes on beyond it; a line past the end of `shape` has
+/// the full width. `widths` gives, line by
 /// line from the first, how wide the column is that the line stands in,
 /// where the paragraph begins in columns of another width than the one it
 /// goes on in; a line past the end of `widths` is in a column as wide as
@@ -834,7 +841,7 @@ pub fn layout_within(
     paragraph: &Paragraph,
     fonts: &FontDb,
     context: &Context,
-    shape: &[(f32, f32)],
+    shape: &[Stretch],
     widths: &[f32],
 ) -> Laid {
     let props = paragraph.props;
@@ -901,9 +908,12 @@ pub fn layout_within(
     while start < atoms.len() {
         let origin = if is_first { left + first } else { left };
         let bounds = shape.get(breaks.len()).copied();
-        let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let origin = bounds.map_or(origin, |(from, ..)| origin.max(from));
         let limit = limit_of(breaks.len());
-        let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
+        let limit = bounds.map_or(limit, |(_, to, _)| limit.min(to));
+        // The line goes on in another stretch after this one: what does
+        // not fit here whole goes there, and this stretch may stay empty.
+        let goes_on = shape.get(breaks.len() + 1).is_some_and(|(.., joins)| *joins);
         // A right-aligned label ends at the origin, so it starts before it;
         // the tab after it must be measured from where the label really ends.
         let mut x = origin;
@@ -1066,8 +1076,21 @@ pub fn layout_within(
         if end == atoms.len() {
             forced = true;
         }
-        // Never loop without progress, whatever the widths were.
-        let end = end.max(start + 1);
+        // A word is not parted to fill a stretch the line goes on from:
+        // it goes to the next stretch whole. (Word, docx4j's probe
+        // `image-anchored`: a line whose first word is wider than the room
+        // to the left of a picture begins to the picture's right.)
+        if goes_on && !forced {
+            let whole = atoms[start..end].last().zip(atoms.get(end)).is_none_or(|(last, next)| {
+                last.kind != Kind::Char || next.kind != Kind::Char || text::can_break_between(last.ch, next.ch, kinsoku)
+            });
+            if !whole {
+                end = start;
+            }
+        }
+        // Never loop without progress, whatever the widths were: but a
+        // stretch that the line goes on from may hold nothing.
+        let end = if goes_on { end } else { end.max(start + 1) };
         breaks.push(Break { start, end, forced, page_break, column_break, shrink, squeeze });
         start = end;
         is_first = false;
@@ -1096,9 +1119,9 @@ pub fn layout_within(
         let range = &atoms[br.start..br.end];
         let origin = if number == 0 { left + first } else { left };
         let bounds = shape.get(number).copied();
-        let origin = bounds.map_or(origin, |(from, _)| origin.max(from));
+        let origin = bounds.map_or(origin, |(from, ..)| origin.max(from));
         let limit = limit_of(number);
-        let limit = bounds.map_or(limit, |(_, to)| limit.min(to));
+        let limit = bounds.map_or(limit, |(_, to, _)| limit.min(to));
         // Trailing spaces and the break itself take no part in alignment.
         // ... unless they are underlined blanks to be filled in ("编号：____"),
         // which are part of the text when the document says to draw them.
@@ -1573,6 +1596,74 @@ pub fn layout_within(
         line.x0 = first_ink.unwrap_or(origin + offset);
         line.x1 = last_ink;
         lines.push(line);
+    }
+
+    // The stretches of one line are one line: as tall as the tallest of
+    // them, all on one baseline, its text read from the left stretch on.
+    if shape.iter().any(|(.., joins)| *joins) {
+        let mut joined: Vec<Line> = Vec::with_capacity(lines.len());
+        // For each stretch, the line it has become part of.
+        let mut line_of = Vec::with_capacity(lines.len());
+        for (number, mut line) in lines.into_iter().enumerate() {
+            let joins = number > 0 && shape.get(number).is_some_and(|(.., joins)| *joins);
+            let so_far = joined.len();
+            let Some(whole) = joined.last_mut().filter(|_| joins) else {
+                line_of.push(so_far);
+                joined.push(line);
+                continue;
+            };
+            line_of.push(so_far - 1);
+            // An empty stretch has the height of the paragraph mark; it does not make the line taller.
+            let (first_empty, empty) = (whole.text.is_empty() && whole.items.is_empty(), line.text.is_empty());
+            let baseline = match (first_empty, empty) {
+                (true, false) => line.baseline,
+                (false, true) => whole.baseline,
+                _ => whole.baseline.max(line.baseline),
+            };
+            let lower = |line: &mut Line, by: f32| {
+                line.items.iter_mut().for_each(|item| item.translate(0.0, by));
+                line.baseline += by;
+            };
+            let (below_whole, below_line) = (whole.height - whole.baseline, line.height - line.baseline);
+            let (needed_whole, needed_line) = (whole.needed - whole.baseline, line.needed - line.baseline);
+            let by = baseline - whole.baseline;
+            lower(whole, by);
+            let by = baseline - line.baseline;
+            lower(&mut line, by);
+            let pick = |of_whole: f32, of_line: f32| match (first_empty, empty) {
+                (true, false) => of_line,
+                (false, true) => of_whole,
+                _ => of_whole.max(of_line),
+            };
+            whole.height = baseline + pick(below_whole, below_line);
+            whole.needed = baseline + pick(needed_whole, needed_line);
+            if first_empty {
+                (whole.x0, whole.offset) = (line.x0, line.offset);
+            }
+            if !empty {
+                whole.x1 = line.x1;
+            }
+            whole.items.append(&mut line.items);
+            whole.text.push_str(&line.text);
+            whole.xs.append(&mut line.xs);
+            whole.size = whole.size.max(line.size);
+            whole.page_break_after |= line.page_break_after;
+            whole.column_break_after |= line.column_break_after;
+            for note in line.notes {
+                if !whole.notes.contains(&note) {
+                    whole.notes.push(note);
+                }
+            }
+            for field in line.fields {
+                if !whole.fields.contains(&field) {
+                    whole.fields.push(field);
+                }
+            }
+        }
+        for inline in &mut boxes {
+            inline.line = line_of.get(inline.line).copied().unwrap_or(0);
+        }
+        lines = joined;
     }
 
     // Spacing in "lines" is counted in grid rows when there is a grid.

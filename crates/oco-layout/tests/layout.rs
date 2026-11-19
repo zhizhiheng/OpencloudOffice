@@ -3437,3 +3437,56 @@ fn a_floating_table_stands_where_it_says_and_text_keeps_clear_of_it() {
     assert_eq!(pages.len(), 2);
     assert!(pages[1].lines.iter().any(|line| line.text == "after"));
 }
+
+#[test]
+fn a_line_is_set_on_both_sides_of_an_object_that_has_an_inch_on_each() {
+    let Some(fonts) = fonts(&[("Liberation Serif", 'a')]) else { return };
+    // As measured in Word (page 2 of docx4j's probe `image-anchored`, all of
+    // whose lines now fall where Word has them): a picture an inch from the
+    // left margin, with text on both sides and 9 pt kept from it, has the
+    // first words of each line in the 63 pt to its left and the rest to its
+    // right; a line whose next word is too long for the left begins at the right.
+    let serif = font("Liberation Serif", 24);
+    let lay = |from_margin: u32, text: &str| {
+        let picture = anchored_picture(
+            (85, 85),
+            &format!(r#"relativeFrom="margin"><wp:posOffset>{}</wp:posOffset>"#, from_margin * 12700),
+            r#"relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset>"#,
+            r#"<wp:wrapSquare wrapText="bothSides"/>"#,
+            "",
+        );
+        let body =
+            format!(r#"<w:p><w:r><w:rPr>{serif}</w:rPr>{picture}<w:t xml:space="preserve">{text}</w:t></w:r></w:p>"#);
+        pages(&Source { body: &body, ..Source::default() }, &fonts, Model::Word).remove(0)
+    };
+    let page = lay(72, &LOREM.repeat(3));
+    let (left_end, right_start) = (72.0 + 72.0 - 9.0, 72.0 + 72.0 + 85.0 + 9.0);
+    let beside: Vec<&oco_layout::PlacedLine> =
+        page.lines.iter().filter(|line| line.baseline - 11.2 < 72.0 + 85.0).collect();
+    assert!(beside.len() >= 5);
+    for line in &beside {
+        // One line of text across the picture: its characters keep clear of the picture's room.
+        let inside = line
+            .xs
+            .iter()
+            .zip(line.text.chars())
+            .filter(|(x, ch)| !ch.is_whitespace() && **x > left_end && **x < right_start - 0.01);
+        assert_eq!(inside.count(), 0, "{:?}", line.text);
+        assert!(line.x1 > right_start, "the line goes on to the right of the picture: {:?}", line.text);
+    }
+    assert!(beside.iter().filter(|line| line.x0 < left_end).count() >= 3, "most lines begin to the left of it");
+    // The text reads on through both sides, with nothing lost.
+    let text: String = page.lines.iter().map(|line| line.text.as_str()).collect();
+    assert_eq!(text.split_whitespace().collect::<Vec<_>>(), LOREM.repeat(3).split_whitespace().collect::<Vec<_>>());
+    // A word that does not fit to the left goes to the right whole.
+    let page = lay(72, &"extraordinarily ".repeat(8));
+    assert!(page.lines.iter().filter(|line| line.baseline - 11.2 < 72.0 + 85.0).all(|line| close(
+        line.x0,
+        right_start,
+        0.01
+    )));
+    // With less than an inch between the margin and the picture, nothing is set to its left.
+    let page = lay(60, &LOREM.repeat(3));
+    let beside = page.lines.iter().filter(|line| line.baseline - 11.2 < 72.0 + 85.0);
+    assert!(beside.clone().count() >= 5 && beside.clone().all(|line| line.x0 >= 72.0 + 60.0 + 85.0 + 9.0 - 0.01));
+}

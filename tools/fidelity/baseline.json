@@ -2885,9 +2885,9 @@
       2,
       2
      ],
-     "placed": 50,
+     "placed": 66,
      "plain": false,
-     "same": 59
+     "same": 66
     },
     "corpus-word/docx4j/image-inline.docx": {
      "dx": 0.02,
@@ -5285,11 +5285,11 @@
    "forced_page_starts": 407,
    "forced_page_starts_equal": 383,
    "multipage": 655,
-   "multipage_pages_equal": 521,
+   "multipage_pages_equal": 524,
    "multipage_pages_within_one": 605,
    "page_starts": 2044,
-   "page_starts_equal": 733,
-   "page_starts_same_paragraph": 930
+   "page_starts_equal": 735,
+   "page_starts_same_paragraph": 931
   },
   "covered": {
    "documents": 534,
@@ -5333,8 +5333,8 @@
     "page_starts": 193,
     "page_starts_equal": 185,
     "pages_equal": 122,
-    "placed": 6058,
-    "same": 6660
+    "placed": 6074,
+    "same": 6667
    },
    "covered": {
     "documents": 28,

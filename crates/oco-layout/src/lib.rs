@@ -509,44 +509,76 @@ struct Float {
     /// Text stops above the object and goes on below it, rather than passing beside it.
     across: bool,
     side: WrapSide,
+    /// The left and right edges of the object itself.
+    edges: (f32, f32),
 }
 
 /// A line beside an object needs at least this much room; with less it goes below.
 const LEAST_BESIDE: f32 = 12.0;
 
+/// Text stands on a side of an object only where the object's own edge is
+/// at least this far from what bounds the text there. (Word, docx4j's
+/// probes: on page 2 of `image-anchored` a picture whose edge is 72 pt from
+/// the margin has words in the 63 pt its distance leaves there; beside the
+/// table of `table-floating`, whose edge is 26 pt from the margin, the 17 pt
+/// that are left stay empty, though a word of the text would fit. Word's
+/// help says text is not wrapped on a side with less than an inch.)
+const LEAST_ROOM: f32 = 72.0;
+
 /// Where a line of `height` whose top would be at `y` can stand among the
-/// objects on the page: its top, at `y` or lower, and the bounds it keeps
-/// between if an object is beside it. (Measured in Word, docx4j's probes
-/// `image-anchored` and `anchor-side-by-side`: a line is kept clear of an
-/// object when any part of its height meets the object's, from the object's
-/// top less its distance to its bottom plus its distance; under an object
-/// that text does not pass, the next line begins right at that bottom.)
-fn among(floats: &[Float], mut y: f32, height: f32, column: (f32, f32)) -> (f32, Option<(f32, f32)>) {
+/// objects on the page: its top, at `y` or lower, and, if an object is
+/// beside it, the stretches of the column it is set in, from left to
+/// right. (Measured in Word, docx4j's probes `image-anchored` and
+/// `anchor-side-by-side`: a line is kept clear of an object when any part
+/// of its height meets the object's, from the object's top less its
+/// distance to its bottom plus its distance; under an object that text
+/// does not pass, the next line begins right at that bottom. Where text
+/// may stand on both sides of an object and there is room on both, the
+/// line is set on both: first to the left of the object, then on to its
+/// right. On page 2 of `image-anchored` lines beside a picture have a word
+/// or two in the 63 pt to its left and go on in the 285 pt to its right.)
+fn among(floats: &[Float], mut y: f32, height: f32, column: (f32, f32)) -> (f32, Option<Vec<(f32, f32)>>) {
     loop {
         let meets = |float: &&Float| y < float.bottom - 0.01 && y + height > float.top + 0.01;
         if let Some(float) = floats.iter().filter(meets).find(|float| float.across) {
             y = float.bottom;
             continue;
         }
-        let mut bounds = column;
+        // The stretches of the column that are free, each object taking its own out of them.
+        let mut free = vec![column];
         let mut beside: Option<f32> = None;
         for float in floats.iter().filter(meets) {
-            if float.right <= bounds.0 || float.left >= bounds.1 {
+            if float.right <= column.0 || float.left >= column.1 {
                 continue;
             }
-            let (before, after) = ((bounds.0, float.left.max(bounds.0)), (float.right.min(bounds.1), bounds.1));
-            bounds = match float.side {
-                WrapSide::Left => before,
-                WrapSide::Right => after,
-                // On both sides Word sets text on both; here it goes on the wider one.
-                _ if before.1 - before.0 >= after.1 - after.0 => before,
-                _ => after,
-            };
             beside = Some(beside.map_or(float.bottom, |lowest: f32| lowest.min(float.bottom)));
+            let mut left = Vec::new();
+            for (from, to) in free {
+                if float.right <= from || float.left >= to {
+                    left.push((from, to));
+                    continue;
+                }
+                let (before, after) = ((from, float.left.max(from)), (float.right.min(to), to));
+                let (wide_before, wide_after) = (before.1 - before.0, after.1 - after.0);
+                // A side with too little room between the object and what bounds it is none.
+                let (roomy_before, roomy_after) =
+                    (float.edges.0 - from >= LEAST_ROOM - 0.01, to - float.edges.1 >= LEAST_ROOM - 0.01);
+                let (takes_before, takes_after) = match float.side {
+                    WrapSide::Left => (true, false),
+                    WrapSide::Right => (false, true),
+                    WrapSide::Largest => (wide_before >= wide_after, wide_before < wide_after),
+                    WrapSide::Both => (true, true),
+                };
+                left.extend((takes_before && roomy_before).then_some(before));
+                left.extend((takes_after && roomy_after).then_some(after));
+            }
+            free = left;
         }
+        // A stretch too narrow for a line to stand in is none.
+        free.retain(|(from, to)| to - from >= LEAST_BESIDE);
         match beside {
-            Some(lowest) if bounds.1 - bounds.0 < LEAST_BESIDE => y = lowest,
-            Some(_) => return (y, Some(bounds)),
+            Some(lowest) if free.is_empty() => y = lowest,
+            Some(_) => return (y, Some(free)),
             None => return (y, None),
         }
     }
@@ -1860,7 +1892,7 @@ impl Builder<'_> {
         unit: &Unit,
         section: &Section,
         width: f32,
-        shape: &[(f32, f32)],
+        shape: &[paragraph::Stretch],
         widths: &[f32],
     ) -> Vec<paragraph::Line> {
         let (props, input) = self.resolve(source, Some(unit.label.clone()));
@@ -3277,6 +3309,7 @@ fn paginate(docx: &Docx, builder: &mut Builder<'_>, units: &[Unit], setups: &[&S
                     bottom: table_top + height + under,
                     across: false,
                     side: WrapSide::Both,
+                    edges: (x, x + width),
                 });
                 sheet_is_empty = false;
                 continue;
@@ -3603,6 +3636,7 @@ fn paginate(docx: &Docx, builder: &mut Builder<'_>, units: &[Unit], setups: &[&S
                             bottom: y + object.height + distance[1],
                             across: object.anchor.wrap == Wrap::TopAndBottom,
                             side: object.anchor.wrap_side,
+                            edges: (x, x + object.width),
                         };
                         (x, y, float)
                     });
@@ -3644,19 +3678,25 @@ fn paginate(docx: &Docx, builder: &mut Builder<'_>, units: &[Unit], setups: &[&S
         let mut set_for = columns_of(section)[0].1;
         let beside = floats.iter().any(|float| !float.across);
         if let Some(source) = unit.paragraph.and_then(|index| sources.get(index)).filter(|_| beside) {
-            const OPEN: (f32, f32) = (f32::MIN, f32::MAX);
-            let mut shape: Vec<(f32, f32)> = Vec::new();
+            const OPEN: paragraph::Stretch = (f32::MIN, f32::MAX, false);
+            let mut shape: Vec<paragraph::Stretch> = Vec::new();
             for _ in 0..6 {
                 let mut next = Vec::new();
                 let mut at = y;
                 for line in lines.iter() {
                     let column = bounds!();
-                    let (settled, bounds) = among(&floats, at, line.height, column);
+                    let (settled, free) = among(&floats, at, line.height, column);
                     if settled + line.needed > bottom + 0.01 {
                         // The rest goes to the next page, clear of these objects.
                         break;
                     }
-                    next.push(bounds.map_or(OPEN, |(from, to)| (from - column.0, to - column.0)));
+                    match free {
+                        // Each stretch after the first goes on in the same line.
+                        Some(free) => next.extend(
+                            free.iter().enumerate().map(|(nth, (from, to))| (from - column.0, to - column.0, nth > 0)),
+                        ),
+                        None => next.push(OPEN),
+                    }
                     at = settled + line.height;
                 }
                 while next.last() == Some(&OPEN) {
